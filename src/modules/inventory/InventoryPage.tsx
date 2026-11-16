@@ -1874,20 +1874,30 @@ function PoLineAdder({
     (item) => item.is_active && !usedItemIds.has(item.id),
   )
 
+  // NOTE: this is intentionally NOT a <form> — PoLineAdder renders inside
+  // the purchase-order <form>, and nested forms are invalid HTML: the
+  // browser drops the inner form and the "Add line" button submits the
+  // outer form instead (which used to navigate away to /inventory?).
+  const handleAdd = () => {
+    if (!itemId || quantity <= 0 || unitCost < 0) return
+    onAdd({
+      key: crypto.randomUUID(),
+      inventoryItemId: itemId,
+      quantity,
+      unitCost,
+    })
+    setItemId('')
+    setQuantity(0)
+    setUnitCost(0)
+  }
+
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (!itemId || quantity <= 0 || unitCost < 0) return
-        onAdd({
-          key: crypto.randomUUID(),
-          inventoryItemId: itemId,
-          quantity,
-          unitCost,
-        })
-        setItemId('')
-        setQuantity(0)
-        setUnitCost(0)
+    <div
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          handleAdd()
+        }
       }}
       className="grid gap-2 sm:grid-cols-[1fr_120px_140px_auto]"
     >
@@ -1925,9 +1935,9 @@ function PoLineAdder({
         aria-label={t('inventory.unitCost')}
         required
       />
-      <Button type="submit" size="sm">
+      <Button type="button" size="sm" onClick={handleAdd}>
         {t('inventory.addLine')}
       </Button>
-    </form>
+    </div>
   )
 }
