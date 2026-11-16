@@ -262,17 +262,17 @@ missed on a deployment.
 
 | Topic | Current state | Planned |
 | --- | --- | --- |
-| Orders / POS flow | Nothing | Phase 2 |
-| Menu, products, tables | Nothing (permissions keys exist, tables do not) | Phase 3 |
-| Inventory, purchases, expenses | Nothing | Phase 4 |
-| Staff management, role editing, permission enforcement | Read-only Roles page; `role_permissions` empty; no enforcement | Phase 5 |
-| Reports / analytics | Nothing; recharts installed but unused | Phase 6 |
-| Customers, loyalty | Nothing | Phase 7 |
-| Online ordering, delivery | Nothing; `feature_flags` keys reserved (`online_ordering`, `delivery`, `loyalty`, `accounting`, `nfc`, `multi_branch`) | Phase 8 |
+| Orders / POS flow | Built in Phase 2: POS, orders, state machine, payments, KDS | — |
+| Menu, products, tables | Built in Phase 2: categories, products, variants, modifiers, kitchen stations, tables | — |
+| Inventory, purchases, expenses | Nothing | Phase 3 |
+| Staff management, role editing, permission enforcement | Read-only Roles page; `role_permissions` empty; no enforcement | Phase 7 (Business) |
+| Reports / analytics | Nothing; recharts installed but unused | Phase 7 (Business) |
+| Customers, loyalty | Nothing | Phase 4 |
+| Online ordering, delivery | Nothing; `feature_flags` keys reserved (`online_ordering`, `delivery`, `loyalty`, `accounting`, `nfc`, `multi_branch`) | Phases 5–6 |
 | Offline-first / LAN / sync, Docker, production hardening | Manifest-only PWA; no Docker files | Phase 9 |
-| Developer Panel (separate from Restaurant Admin) | Nothing | Later phase (not in the 9-phase list's Phase 1 scope) |
-| Branch management UI | `branches` table exists; no UI/service | With multi-branch work |
-| Audit logging | `audit_logs` table exists (insert-only); nothing writes to it | When the first audited action lands — write the log call with the action, not after |
+| Developer Panel (separate from Restaurant Admin) | Nothing | Phase 8 |
+| Branch management UI | `branches` table exists; no UI/service | Phase 7 (Business), with multi-branch work |
+| Audit logging | `audit_logs` table exists (insert-only); nothing writes to it yet. Order status changes are audited in `order_status_history` (Phase 2) instead | When the first audited action lands — write the log call with the action, not after; decide the `audit_logs` vs `order_status_history` vocabulary first |
 | Feature flags | Table exists; nothing reads/writes it | When the first gated feature lands |
 | Global state store | `src/stores/` placeholder | When a second consumer needs shared state |
 | Generated DB types | Hand-written mirror in `src/types/index.ts` | Optional improvement |

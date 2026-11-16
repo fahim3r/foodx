@@ -1,6 +1,7 @@
 // FoodX — App router.
 // Public: /login, /reset-password, /update-password.
-// Protected (inside <AppLayout>): / (dashboard), /settings, /roles.
+// Protected (inside <AppLayout>): / (dashboard), /pos, /orders,
+// /orders/:id, /kds, /menu, /tables, /settings, /roles.
 // Unknown routes redirect to /.
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './AuthProvider'
@@ -9,8 +10,14 @@ import LoginPage from '@/modules/auth/LoginPage'
 import ResetPasswordPage from '@/modules/auth/ResetPasswordPage'
 import UpdatePasswordPage from '@/modules/auth/UpdatePasswordPage'
 import DashboardPage from '@/modules/dashboard/DashboardPage'
+import KdsPage from '@/modules/kds/KdsPage'
+import MenuPage from '@/modules/menu/MenuPage'
+import OrderDetailPage from '@/modules/orders/OrderDetailPage'
+import OrdersPage from '@/modules/orders/OrdersPage'
+import PosPage from '@/modules/pos/PosPage'
 import RolesPage from '@/modules/roles/RolesPage'
 import SettingsPage from '@/modules/settings/SettingsPage'
+import TablesPage from '@/modules/tables/TablesPage'
 
 export default function App() {
   return (
@@ -22,6 +29,12 @@ export default function App() {
           <Route path="/update-password" element={<UpdatePasswordPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/pos" element={<PosPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/orders/:id" element={<OrderDetailPage />} />
+            <Route path="/kds" element={<KdsPage />} />
+            <Route path="/menu" element={<MenuPage />} />
+            <Route path="/tables" element={<TablesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/roles" element={<RolesPage />} />
           </Route>

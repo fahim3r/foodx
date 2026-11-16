@@ -43,6 +43,33 @@ export async function fetchSettings(
   return data as RestaurantSettings | null
 }
 
+export interface Branch {
+  id: string
+  restaurant_id: string
+  name: string
+  code: string | null
+  address: string | null
+  phone: string | null
+  is_main: boolean
+  status: string
+}
+
+/** Branches of a restaurant, main branch first. Phase 2 has no branch
+ * management UI — the POS uses the main (or first) branch as the default
+ * branch for new orders. */
+export async function fetchBranches(
+  restaurantId: string,
+): Promise<Branch[]> {
+  const { data, error } = await supabase
+    .from('branches')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .order('is_main', { ascending: false })
+    .order('name', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as Branch[]
+}
+
 /**
  * Create the caller's first restaurant and return its id.
  *

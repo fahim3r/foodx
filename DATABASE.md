@@ -1,8 +1,9 @@
 # FoodX — Database
 
-Phase 1 (Foundation). Schema source of truth:
-`supabase/migrations/0001_foundation.sql`. A shorter guide also lives in
-[`supabase/README.md`](supabase/README.md). If this document and the
+Phase 1 (Foundation) + Phase 2 (Core Restaurant). Schema source of
+truth: `supabase/migrations/0001_foundation.sql` and
+`supabase/migrations/0002_core.sql`. A shorter guide also lives in
+[`supabase/README.md`](supabase/README.md). If this document and a
 migration disagree, the migration wins.
 
 One master codebase, **one separate database per restaurant** — not
@@ -10,17 +11,19 @@ multi-tenant SaaS. Each restaurant gets its own Supabase project; Row
 Level Security below is a second layer of defence *inside* one
 restaurant's database. See [ARCHITECTURE.md](ARCHITECTURE.md#1-deployment-model-one-database-per-restaurant).
 
-> **Current state:** the migration has **not yet been applied** to the
-> live Supabase project (`foodx`, Singapore). Until it is, the app shows
-> "Database setup is pending" notices and the tables below do not exist
-> there. Apply it with `supabase db push` or via the Dashboard SQL editor
-> (see [README.md](README.md#database-setup)).
+> **Current state:** migration `0001_foundation.sql` **has been applied**
+> to the live Supabase project (`foodx`, Singapore). Migration
+> `0002_core.sql` has **not yet been applied** — until it is, the menu /
+> tables / POS / orders / kitchen pages show "Database setup is pending"
+> notices and their tables do not exist there. Apply it via the Dashboard
+> SQL editor (see [README.md](README.md#database-setup)).
 
 ## Schema overview
 
-10 tables. All ids are `uuid` (`gen_random_uuid()`), all tables have
+22 tables. All ids are `uuid` (`gen_random_uuid()`), all tables have
 `created_at timestamptz not null default now()`, and every table except
-`permissions`, `role_permissions`, `user_roles`, and `audit_logs` has an
+`permissions`, `role_permissions`, `user_roles`, `audit_logs`,
+`product_modifiers`, `order_payments`, and `order_status_history` has an
 `updated_at` maintained by the `set_updated_at()` trigger.
 
 ```
@@ -34,6 +37,14 @@ profiles    1──* user_roles *──1 roles
 roles       1──* role_permissions *──1 permissions (global lookup)
 profiles    *──1 branches (branch_id, optional)
 user_roles  *──1 branches (branch_id, optional, per-assignment scope)
+restaurants 1──* kitchen_stations
+restaurants 1──* categories 1──* products
+restaurants 1──* modifiers *──* products (product_modifiers)
+products    1──* product_variants
+restaurants 1──* tables
+restaurants 1──* orders 1──* order_items 1──* order_item_modifiers
+orders      1──* order_payments
+orders      1──* order_status_history
 ```
 
 ### `restaurants`
@@ -210,9 +221,221 @@ No UPDATE or DELETE policy exists: audit rows cannot be altered through
 RLS. There is intentionally **no trigger-based auditing** in Phase 1;
 audit entries are written explicitly by application code.
 
+## Phase 2 tables (Core Restaurant)
+
+Source of truth: `supabase/migrations/0002_core.sql`.
+
+### `kitchen_stations`
+
+Where an order item is prepared (e.g. "Main Kitchen", "Drinks Station").
+Products point at a station; the KDS groups live orders by station.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `name` | `text` NOT NULL | |
+| `sort_order` | `integer` NOT NULL DEFAULT `0` | KDS shows stations in this order |
+| `is_active` | `boolean` NOT NULL DEFAULT `true` | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### `categories`
+
+Menu categories (e.g. Starters, Main Course, Drinks).
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `name` | `text` NOT NULL | |
+| `name_bn` | `text` NULL | Bangla name, shown when the UI language is Bangla |
+| `sort_order` | `integer` NOT NULL DEFAULT `0` | |
+| `is_active` | `boolean` NOT NULL DEFAULT `true` | Inactive categories are hidden from the POS |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### `modifiers`
+
+Paid or free add-ons offered on products (e.g. Extra Cheese ৳40).
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `name` | `text` NOT NULL | |
+| `name_bn` | `text` NULL | |
+| `price` | `numeric(12,2)` NOT NULL DEFAULT `0`, CHECK `price >= 0` | Added per unit on the order line |
+| `is_active` | `boolean` NOT NULL DEFAULT `true` | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### `products`
+
+Sellable items. Prices are the source the POS re-reads at order time —
+the client never decides what an order costs.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `category_id` | `uuid` NULL → `categories(id)` ON DELETE SET NULL | NULL = uncategorised |
+| `kitchen_station_id` | `uuid` NULL → `kitchen_stations(id)` ON DELETE SET NULL | NULL = unassigned on the KDS |
+| `name` | `text` NOT NULL | |
+| `name_bn` | `text` NULL | |
+| `description` | `text` NULL | |
+| `price` | `numeric(12,2)` NOT NULL DEFAULT `0`, CHECK `price >= 0` | Base price, before variant adjustment |
+| `image_url` | `text` NULL | |
+| `is_available` | `boolean` NOT NULL DEFAULT `true` | Unavailable products cannot be ordered (the POS refuses them) |
+| `sort_order` | `integer` NOT NULL DEFAULT `0` | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### `product_variants`
+
+Size/option variants of a product (e.g. Grilled Chicken Quarter/Half/
+Full). `price_adjustment` is added to the product price, per unit.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `product_id` | `uuid` NOT NULL → `products(id)` ON DELETE CASCADE | |
+| `name` | `text` NOT NULL | |
+| `price_adjustment` | `numeric(12,2)` NOT NULL DEFAULT `0` | May be negative (a smaller size) |
+| `sort_order` | `integer` NOT NULL DEFAULT `0` | |
+| `is_active` | `boolean` NOT NULL DEFAULT `true` | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### `product_modifiers`
+
+Junction: which modifiers a product offers. PK `(product_id, modifier_id)`.
+
+### `tables`
+
+Dine-in tables. `status` is kept in sync by the order flow: occupied
+when an order is placed for the table, available again when the order
+reaches a terminal status and no other active order uses the table.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `branch_id` | `uuid` NULL → `branches(id)` ON DELETE SET NULL | |
+| `name` | `text` NOT NULL | UNIQUE per restaurant — e.g. `T1` |
+| `seats` | `integer` NOT NULL DEFAULT `4`, CHECK `seats > 0` | |
+| `status` | `text` NOT NULL DEFAULT `'available'`, CHECK in `available / occupied / reserved / cleaning` | |
+| `qr_code` | `text` NULL | The table's QR value (e.g. `addabuzz-t1`); a QR *image* is not generated yet |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+A table cannot be deleted while it has an active order — the service
+refuses it (`table_has_active_orders`); the database does not enforce
+this, the service does.
+
+### `orders`
+
+One row per order. Money columns are `numeric(12,2)`; totals are
+computed by the service from database prices, never from client values.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | Client-generated (idempotency — see below) |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `branch_id` | `uuid` NULL → `branches(id)` ON DELETE SET NULL | Default branch = the main branch |
+| `table_id` | `uuid` NULL → `tables(id)` ON DELETE SET NULL | NULL for takeaway/delivery |
+| `order_number` | `integer` NOT NULL | Sequential per restaurant; UNIQUE `(restaurant_id, order_number)` |
+| `type` | `text` NOT NULL DEFAULT `'dine_in'`, CHECK in `dine_in / takeaway / delivery` | |
+| `status` | `text` NOT NULL DEFAULT `'DRAFT'`, CHECK in the 9 valid statuses (see state machine) | |
+| `subtotal` | `numeric(12,2)` NOT NULL DEFAULT `0` | Sum of line totals, before discount |
+| `discount_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | Flat discount, capped at the subtotal |
+| `tax_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | On (subtotal − discount), at the settings tax rate |
+| `service_charge_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | On (subtotal − discount), at the settings service-charge rate |
+| `total_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | (subtotal − discount) + tax + service charge |
+| `notes` | `text` NULL | Kitchen notes from the POS |
+| `created_by` | `uuid` NULL | Actor; no FK (the user may be deleted) |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### Order state machine
+
+```
+DRAFT → CONFIRMED → SENT_TO_KITCHEN → PREPARING → READY → SERVED → COMPLETED
+CANCELLED from any non-terminal status (DRAFT … SERVED)
+REFUNDED from COMPLETED only
+```
+
+- The `status` CHECK constraint restricts the column to the 9 valid
+  values. Allowed *transitions* are enforced in the service layer
+  (`ORDER_TRANSITIONS` in `src/types/index.ts`, checked by
+  `advanceOrderStatus` in `src/services/orders.ts`) — the database does
+  not have a transition trigger.
+- Every transition writes an `order_status_history` row.
+- The POS places an order directly as CONFIRMED with a history row
+  `DRAFT → CONFIRMED` ("Order placed").
+
+### `order_items`
+
+One row per product line on an order. Prices are **snapshots**: the
+order stays correct and readable even if the product is later renamed,
+repriced, or deleted (`product_id` is then SET NULL, the snapshot stays).
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | Client-generated (idempotency) |
+| `order_id` | `uuid` NOT NULL → `orders(id)` ON DELETE CASCADE | |
+| `product_id` | `uuid` NULL → `products(id)` ON DELETE SET NULL | |
+| `variant_id` | `uuid` NULL → `product_variants(id)` ON DELETE SET NULL | |
+| `product_name` | `text` NOT NULL | Snapshot of the product name |
+| `variant_name` | `text` NULL | Snapshot of the variant name |
+| `quantity` | `integer` NOT NULL DEFAULT `1`, CHECK `quantity > 0` | |
+| `unit_price` | `numeric(12,2)` NOT NULL | Snapshot: product price + variant adjustment + modifier prices, per unit |
+| `total_price` | `numeric(12,2)` NOT NULL | `unit_price × quantity` |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+UPDATE is allowed only while the parent order is `DRAFT` (RLS). There
+is no DELETE policy — placed order items are history.
+
+### `order_item_modifiers`
+
+Modifiers chosen on one order item, with price snapshots. No
+`updated_at`; no UPDATE/DELETE policy (history).
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `order_item_id` | `uuid` NOT NULL → `order_items(id)` ON DELETE CASCADE | |
+| `modifier_id` | `uuid` NULL → `modifiers(id)` ON DELETE SET NULL | |
+| `modifier_name` | `text` NOT NULL | Snapshot |
+| `price` | `numeric(12,2)` NOT NULL | Snapshot, per unit |
+| `created_at` | `timestamptz` | |
+
+### `order_payments`
+
+Money received against an order. Split payments are allowed (several
+rows per order). Append-only: SELECT + INSERT policies only.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | Client-generated (idempotency) |
+| `order_id` | `uuid` NOT NULL → `orders(id)` ON DELETE CASCADE | |
+| `method` | `text` NOT NULL, CHECK in `cash / card / bkash / nagad / bank / due` | `due` = put on tab / pay later; it counts as "due", not "paid" |
+| `amount` | `numeric(12,2)` NOT NULL, CHECK `amount > 0` | Must not exceed the order's remaining balance (enforced by the service) |
+| `reference` | `text` NULL | e.g. a bKash TrxID |
+| `received_by` | `uuid` NULL | Actor; no FK |
+| `created_at` | `timestamptz` | No `updated_at` |
+
+### `order_status_history`
+
+Audit trail of every order status change. Append-only: SELECT + INSERT
+policies only.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `order_id` | `uuid` NOT NULL → `orders(id)` ON DELETE CASCADE | |
+| `from_status` | `text` NULL | Previous status; the app always sets it (the placement row is `DRAFT → CONFIRMED`) |
+| `to_status` | `text` NOT NULL | |
+| `changed_by` | `uuid` NULL | Actor; no FK |
+| `note` | `text` NULL | Cancel/refund reason, or "Order placed" |
+| `created_at` | `timestamptz` | No `updated_at` |
+
 ## Row Level Security
 
-RLS is enabled on **all 10 tables**. Every policy is `TO authenticated`
+RLS is enabled on **all 22 tables**. Every policy is `TO authenticated`
 — the `anon` role has no direct table access at all; it can only
 authenticate. All policies are defined in `0001_foundation.sql`; the
 summary below is not a substitute for reading them.
@@ -245,6 +468,18 @@ evaluates to deny.
 | `restaurant_settings` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `feature_flags` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `audit_logs` | Own restaurant | Own restaurant, or `restaurant_id IS NULL` for system events | — (insert-only) | — (insert-only) |
+| `kitchen_stations` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
+| `categories` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
+| `modifiers` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
+| `products` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
+| `product_variants` | Scoped through the parent product's restaurant | Same | Same | Same |
+| `product_modifiers` | Scoped through the parent product's restaurant | Same | — (no policy) | Same |
+| `tables` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
+| `orders` | Own restaurant | Own restaurant | Own restaurant | — (**no DELETE policy**: financial history is never hard-deleted) |
+| `order_items` | Scoped through the parent order's restaurant | Same | Only while the parent order is `DRAFT` | — (no DELETE policy) |
+| `order_item_modifiers` | Scoped through the order item's order | Same | — (append-only) | — (append-only) |
+| `order_payments` | Scoped through the parent order's restaurant | Same | — (append-only) | — (append-only) |
+| `order_status_history` | Scoped through the parent order's restaurant | Same | — (append-only) | — (append-only) |
 
 Notes and sharp edges:
 
@@ -384,22 +619,45 @@ delete from public.restaurants
  where id = '11111111-1111-1111-1111-111111111111';
 ```
 
+### Phase 2 demo seed (`supabase/seed_phase2.sql`)
+
+Development only, never production. Adds, for the demo restaurant only
+(fixed UUIDs, `ON CONFLICT DO NOTHING`):
+
+| Rows | Ids |
+| --- | --- |
+| 2 kitchen stations (Main Kitchen, Drinks Station) | `44444444-…-444444444441/2` |
+| 3 categories (Starters, Main Course, Drinks) | `55555555-…-555555555551/2/3` |
+| 8 products (BDT prices, station + category mapping) | `66666666-…-666666666661…8` |
+| 5 product variants (Grilled Chicken sizes, Beef Biryani sizes) | `77777777-…-777777777771…5` |
+| 3 modifiers (Extra Cheese 40, Extra Chicken 80, No Onion 0) | `88888888-…-888888888881/2/3` |
+| 6 tables (T1–T6, seats 2–8, all available) | `99999999-…-999999999991…6` |
+
+It creates **no orders, payments, or financial history**. Run it after
+`seed.sql`, as `postgres` / service role. Removal SQL is in the file
+header; deleting the demo restaurant cascades everything.
+
 ## Sync and data-integrity notes
 
 These rules apply now and constrain the Phase 9 offline/sync design —
 record them here so a later phase does not accidentally break them.
 
-- **No hard delete of financial history.** No financial tables exist yet
-  (orders, payments, expenses, purchases are all future), but the rule
-  is set now: when they land, corrections go through void/refund/cancel
-  records, never `DELETE`. `audit_logs` is already insert-only for the
-  same reason, and `user_roles` changes by INSERT/DELETE only because
-  assignments are not history.
+- **No hard delete of financial history.** `orders`, `order_items`,
+  `order_payments`, and `order_status_history` have **no DELETE policy**
+  at all; `order_payments` and `order_status_history` have no UPDATE
+  policy either. Corrections go through void/refund/cancel records
+  (status changes), never `DELETE`. `audit_logs` is already insert-only
+  for the same reason, and `user_roles` changes by INSERT/DELETE only
+  because assignments are not history.
 - **Audit everything that moves money.** Every order, payment, refund,
   void, stock adjustment, and purchase must write an `audit_logs` row
   with `before_data` / `after_data` at the same time as the change —
   ideally in the same transaction. The table and the insert-only policy
-  already exist; the writers do not yet.
+  already exist; the writers do not yet. **Exception (Phase 2):** order
+  status changes are audited in `order_status_history` instead — that
+  table is the order's own audit trail, and it is written by every
+  status change today. A future `audit_logs` writer for orders must not
+  duplicate it silently; decide the vocabulary first.
 - **Idempotency for future sync.** Phase 9 (offline-first / LAN +
   cloud sync) will need idempotency keys on every client-created
   mutation (e.g. a client-generated UUID per order/payment, stored on the

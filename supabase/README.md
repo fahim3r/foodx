@@ -1,16 +1,18 @@
 # FoodX — Supabase
 
-Database layer for FoodX (Phase 1: Foundation). One master codebase, one
-separate database per restaurant — **not** multi-tenant SaaS. Row Level
-Security below is a second layer of defence inside a single restaurant's
-database.
+Database layer for FoodX (Phase 1: Foundation; Phase 2: Core Restaurant).
+One master codebase, one separate database per restaurant — **not**
+multi-tenant SaaS. Row Level Security below is a second layer of defence
+inside a single restaurant's database.
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
 | `migrations/0001_foundation.sql` | Core tables, RLS, indexes, system roles + permissions seed |
+| `migrations/0002_core.sql` | Menu, tables, orders, payments, kitchen display |
 | `seed.sql` | Demo data only — never run against production |
+| `seed_phase2.sql` | Demo menu + tables for the demo restaurant only — never run against production |
 
 ## Applying the migration
 
@@ -32,8 +34,9 @@ to a shared database — add a new migration instead.
 
 Open the Supabase Dashboard → SQL Editor → New query, paste the full
 contents of `migrations/0001_foundation.sql`, and run it. Repeat for each
-later migration, in order. (The SQL editor runs as `postgres`, which
-bypasses RLS, so the seed inserts in the migration succeed.)
+later migration, in order — `migrations/0002_core.sql` is applied the
+same way. (The SQL editor runs as `postgres`, which bypasses RLS, so the
+seed inserts in the migration succeed.)
 
 ## RLS isolation model
 
@@ -62,6 +65,16 @@ bypasses RLS, so the seed inserts in the migration succeed.)
   `INSERT` (own restaurant, or `NULL` restaurant for system events) and
   `SELECT` their own restaurant's rows. There is no `UPDATE`/`DELETE`
   policy, so audit rows cannot be altered.
+- Phase 2 child rows are scoped through their parent: `product_variants`
+  and `product_modifiers` through the product's restaurant;
+  `order_items`, `order_payments`, and `order_status_history` through
+  the order's restaurant; `order_item_modifiers` through the order
+  item's order.
+- Financial history is never hard-deleted: there is **no DELETE policy**
+  on `orders`, `order_items`, `order_payments`, or
+  `order_status_history`. `order_items` may only be UPDATED while the
+  parent order is `DRAFT`. `order_payments` and `order_status_history`
+  are append-only (no `UPDATE` policy either).
 - `restaurants.INSERT` is open to any authenticated user (`WITH CHECK
   true`) as a bootstrap exception: a restaurant must be created *before*
   its creator has a profile pointing at it. `UPDATE`/`DELETE` require the
@@ -107,6 +120,15 @@ delete from public.branches
 delete from public.restaurants
  where id = '11111111-1111-1111-1111-111111111111';
 ```
+
+## Demo seed — Phase 2 (`seed_phase2.sql`)
+
+Adds a demo menu and tables for the demo restaurant only (fixed UUIDs,
+repeat-safe): 2 kitchen stations, 3 categories, 8 products, 5 variants,
+3 modifiers, 6 tables (T1–T6). It creates **no orders or payments**.
+Run it only against a local/development project, as `postgres` /
+`service_role`, after `seed.sql`. Removal SQL is in the file header;
+deleting the demo restaurant cascades everything.
 
 ## Feature flags
 

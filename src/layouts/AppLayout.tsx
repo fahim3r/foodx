@@ -6,11 +6,15 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
+  ChefHat,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   Menu,
   Settings,
   ShieldCheck,
+  ShoppingCart,
+  Table2,
   UtensilsCrossed,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -19,6 +23,11 @@ import { Button } from '@/components/ui/button'
 
 const NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard, end: true },
+  { to: '/pos', key: 'nav.pos', icon: ShoppingCart, end: false },
+  { to: '/orders', key: 'nav.orders', icon: ClipboardList, end: false },
+  { to: '/kds', key: 'nav.kds', icon: ChefHat, end: false },
+  { to: '/menu', key: 'nav.menu', icon: UtensilsCrossed, end: false },
+  { to: '/tables', key: 'nav.tables', icon: Table2, end: false },
   { to: '/settings', key: 'nav.settings', icon: Settings, end: false },
   { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false },
 ] as const

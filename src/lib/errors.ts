@@ -31,6 +31,17 @@ export function isSlugTakenError(error: unknown): boolean {
 }
 
 /**
+ * True when a PostgREST error is a unique-violation (code 23505), e.g. a
+ * duplicate table name or a raced order number. Callers map it to a
+ * specific friendly message instead of a generic save error.
+ */
+export function isUniqueViolationError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { code?: unknown }
+  return e.code === '23505'
+}
+
+/**
  * True when a PostgREST error means the Phase 1 tables have not been
  * created in the live database yet (migrations not applied). The app
  * degrades gracefully in that case instead of showing raw errors.

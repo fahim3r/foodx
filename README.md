@@ -6,10 +6,13 @@ self-contained deployment model, **not multi-tenant SaaS**: each restaurant
 runs its own app instance against its own Supabase project, and no
 restaurant's data ever shares a database with another's.
 
-> **Status: Phase 1 — Foundation.** This repository currently contains the
-> app shell, authentication, restaurant setup, branding settings, and a
-> read-only roles & permissions view. There is no ordering, menu, table,
-> inventory, billing, kitchen, or reporting functionality yet — see
+> **Status: Phase 2 — Core Restaurant.** This repository contains the
+> app shell, authentication, restaurant setup, branding settings, a
+> read-only roles & permissions view, and the full core restaurant flow:
+> menu (categories, products, variants, modifiers, kitchen stations),
+> tables, POS ordering with payments, order list + detail with the order
+> state machine, and a live kitchen display. See
+> [What Phase 2 adds](#what-phase-2-adds) and
 > [What is not built yet](#what-is-not-built-yet).
 
 ## Tech stack
@@ -20,7 +23,7 @@ restaurant's data ever shares a database with another's.
 | Styling | Tailwind CSS v4 (via `@tailwindcss/vite`), shadcn-style UI components (Radix primitives, `class-variance-authority`, `clsx`, `tailwind-merge`) |
 | Routing | react-router-dom 7 |
 | Backend / database | Supabase (Postgres + Auth + PostgREST), `@supabase/supabase-js` v2 |
-| i18n | i18next + react-i18next — English (`en`) and Bangla (`bn`), 150 keys each |
+| i18n | i18next + react-i18next — English (`en`) and Bangla (`bn`), 361 keys each |
 | Icons | lucide-react |
 | PWA | vite-plugin-pwa — **manifest only** in Phase 1 (see below) |
 | Lint | oxlint (`npm run lint`) |
@@ -65,12 +68,13 @@ or shipped to the client.
 
 ## Database setup
 
-The schema lives in `supabase/migrations/0001_foundation.sql`. **The
-migrations have not yet been applied to the live Supabase project**, so
-until they are, the app starts, lets you sign in, and shows a friendly
-"Database setup is pending" notice instead of crashing — pages that need
-the tables (Dashboard, Settings, Roles) degrade gracefully. Apply the
-migration to make the app fully functional.
+The schema lives in `supabase/migrations/0001_foundation.sql` (Phase 1)
+and `supabase/migrations/0002_core.sql` (Phase 2). **Migration 0001 has
+been applied to the live Supabase project; migration 0002 has not yet
+been applied**, so until it is, the menu / tables / POS / orders /
+kitchen pages show a friendly "Database setup is pending" notice instead
+of crashing — pages that need the tables degrade gracefully. Apply
+migration 0002 to make the app fully functional.
 
 ### Option A — Supabase CLI (recommended)
 
@@ -79,11 +83,14 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
+Apply migrations in filename order. For a new restaurant, apply both
+`0001_foundation.sql` and `0002_core.sql`.
+
 ### Option B — Dashboard SQL editor
 
 Supabase Dashboard → SQL Editor → New query, paste the full contents of
 `supabase/migrations/0001_foundation.sql`, and run it. Repeat in filename
-order for each later migration. The SQL editor runs as `postgres`, which
+order for each later migration (`0002_core.sql` next). The SQL editor runs as `postgres`, which
 bypasses RLS, so the seed inserts inside the migration succeed.
 
 > **Never edit `0001_foundation.sql` after it has been applied to a shared
@@ -106,6 +113,15 @@ restaurant (branches, settings, feature flags and audit logs cascade from
 it) — exact SQL is in [DATABASE.md](DATABASE.md#demo-seed-data) and in the
 seed file itself.
 
+### Demo seed data, Phase 2 (development only)
+
+`supabase/seed_phase2.sql` adds a demo menu and tables for the demo
+restaurant only: 2 kitchen stations, 3 categories, 8 products, 5
+variants, 3 modifiers, 6 tables (T1–T6). It creates **no orders or
+payments**. Run it after `seed.sql`, only against a local/development
+project. **Never run it against production.** Removal SQL is in the file
+header.
+
 ## Deploy
 
 ### Vercel (frontend)
@@ -125,7 +141,8 @@ database). To provision a new restaurant:
 
 1. Create a new Supabase project (region: Singapore for Bangladesh
    deployments, unless the customer needs otherwise).
-2. Apply `supabase/migrations/0001_foundation.sql` (see above).
+2. Apply `supabase/migrations/0001_foundation.sql` and
+   `supabase/migrations/0002_core.sql` (see above).
 3. Point the restaurant's Vercel deployment at that project with the two
    env vars above.
 4. Create the first user via Supabase Auth (Dashboard → Authentication →
@@ -142,10 +159,10 @@ There is no automated provisioning yet — that is later-phase work.
 - **App shell** — sidebar + topbar layout (`AppLayout`), mobile sidebar,
   user menu, EN/বাং language switcher (choice saved in localStorage as
   `foodx.language`).
-- **Dashboard** (`/`) — honest empty states only. Today's sales, orders
-  today and active tables all show `0` with a "No data yet" badge, because
-  the modules that produce that data do not exist yet. No fake numbers,
-  no mock charts.
+- **Dashboard** (`/`) — today's sales, orders today and active tables,
+  now read from the real Phase 2 tables (orders + tables). When there is
+  no data yet it shows honest `0`s with a "No data yet" badge. No fake
+  numbers, no mock charts.
 - **Settings** (`/settings`) — restaurant info (name, slug, currency,
   timezone), branding (display name, logo URL, primary/secondary colours
   with live preview), tax rate, service-charge rate, receipt footer.
@@ -162,11 +179,50 @@ There is no automated provisioning yet — that is later-phase work.
   restaurant everywhere. Defaults: orange `#ea580c`, green `#16a34a`.
 - **Database** — 10 tables, RLS isolation, 12 system roles, 39 permissions
   (see [DATABASE.md](DATABASE.md)).
-- **i18n** — full English + Bangla UI, 150 keys, no missing keys in either
+- **i18n** — full English + Bangla UI, 361 keys, no missing keys in either
   language. Fallback language is English.
 - **PWA manifest** — installable manifest (name, icons, theme colour
   `#ea580c`). The service worker currently precaches **nothing**
   (`workbox.globPatterns: []`); offline support is deferred.
+
+## What Phase 2 adds
+
+- **Menu** (`/menu`) — categories, products (price, availability,
+  kitchen station, image URL), product variants (size/option with price
+  adjustment), modifiers (paid add-ons), kitchen stations. Products keep
+  working when their category or station is deleted (the link is set to
+  NULL); past orders keep price/name snapshots.
+- **Tables** (`/tables`) — table grid with live status (available /
+  occupied / reserved / cleaning), create/edit, status change, delete
+  (refused while the table has an active order). Each table has a QR
+  code *value*; a QR *image* is not generated yet and the page says so.
+- **POS** (`/pos`) — the order-taking screen: pick dine-in (table),
+  takeaway, or delivery; browse categories/products with search; add
+  items with variants, modifiers, and quantities; flat discount; tax +
+  service charge from the restaurant settings; live total. **Prices are
+  never trusted from the client** — the service re-reads product prices
+  from the database at order time and computes every total. Placing an
+  order creates the order + items + status history (`DRAFT → CONFIRMED`)
+  and marks a dine-in table occupied. Payments: cash, card, bKash,
+  Nagad, bank, due; split payments allowed; a payment may not exceed
+  the remaining balance. The order summary is shown on screen — printing
+  is not implemented yet and the page says so.
+- **Orders** (`/orders`, `/orders/:id`) — list with a status filter,
+  order detail (items with snapshots, payments, status history), and
+  the state machine: `DRAFT → CONFIRMED → SENT_TO_KITCHEN → PREPARING →
+  READY → SERVED → COMPLETED`, plus `CANCELLED` (reason required, from
+  any non-terminal status) and `REFUNDED` (reason required, from
+  `COMPLETED` only). Invalid moves are refused. Completing or
+  cancelling an order frees its table when nothing else uses it.
+- **Kitchen display** (`/kds`) — live orders in `SENT_TO_KITCHEN` /
+  `PREPARING` / `READY`, grouped by kitchen station, oldest first, with
+  waiting time. Kitchen advances `PREPARING → READY`. Live updates via
+  Supabase Realtime with a 30-second poll and a manual refresh as the
+  safety net.
+- **Database** — 12 new tables, RLS on all of them, order-number
+  uniqueness per restaurant, price/name snapshots on order items, and
+  append-only payment + status-history tables (see
+  [DATABASE.md](DATABASE.md#phase-2-tables-core-restaurant)).
 
 ## What is not built yet
 
@@ -175,8 +231,7 @@ Do not assume it exists.
 
 | Area | Status |
 | --- | --- |
-| Orders, menu/products, tables, billing | Not started |
-| Kitchen display (KDS), inventory, purchases, expenses | Not started |
+| Kitchen display (KDS), inventory, purchases, expenses | KDS is built (Phase 2); inventory, purchases, expenses not started |
 | Customers, loyalty, delivery, online ordering | Not started |
 | Reports / analytics | Not started (recharts is installed but unused) |
 | Role editing / assigning permissions to roles | Read-only view only; the `role_permissions` table is seeded **empty** — the matrix shows all dashes until assignments are made (a later phase) |
@@ -188,10 +243,10 @@ Do not assume it exists.
 | Developer Panel (separate from Restaurant Admin) | Not started |
 | Docker packaging | Not started |
 
-The 9-phase plan is: 1 Foundation (this repo) → 2 Core POS → 3 Menu &
-Tables → 4 Inventory → 5 Staff & Roles → 6 Reports → 7 Customer &
-Loyalty → 8 Online & Delivery → 9 Production Hardening. Phase numbers in
-code comments refer to this plan.
+The 9-phase plan is: 1 Foundation → 2 Core Restaurant (this repo) → 3
+Inventory → 4 Customers → 5 Digital Ordering → 6 Delivery → 7 Business
+→ 8 Developer Platform → 9 Production Hardening. Phase numbers in code
+comments refer to this plan.
 
 ## Project structure
 
