@@ -17,6 +17,20 @@ export function authErrorKey(message: string | undefined): string {
 }
 
 /**
+ * True when a PostgREST error is a unique-violation on the restaurants
+ * slug — i.e. the chosen restaurant URL name is already taken. In the
+ * Settings save flow this is the only plain insert with a unique
+ * constraint, so code 23505 here always means the slug is taken.
+ */
+export function isSlugTakenError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { code?: unknown; message?: unknown }
+  if (e.code === '23505') return true
+  const message = typeof e.message === 'string' ? e.message : ''
+  return /restaurants_slug_key/i.test(message)
+}
+
+/**
  * True when a PostgREST error means the Phase 1 tables have not been
  * created in the live database yet (migrations not applied). The app
  * degrades gracefully in that case instead of showing raw errors.

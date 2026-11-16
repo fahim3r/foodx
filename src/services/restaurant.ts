@@ -43,21 +43,31 @@ export async function fetchSettings(
   return data as RestaurantSettings | null
 }
 
+/**
+ * Create the caller's first restaurant and return its id.
+ *
+ * The id is generated here, not by the database, and the insert does NOT
+ * ask PostgREST to return the row: the restaurants SELECT policy only
+ * shows the caller's own restaurant, which is decided by the profile —
+ * and the profile is linked to the new restaurant only in the next step
+ * (linkProfileToRestaurant). So `.select().single()` here would always
+ * fail with "no rows returned" even though the insert itself succeeded,
+ * and the save would report a failure while leaving an orphaned row.
+ * The caller links the profile next, then re-reads the row through RLS.
+ */
 export async function createRestaurant(
   values: Pick<RestaurantFormValues, 'name' | 'slug' | 'currency' | 'timezone'>,
-): Promise<Restaurant> {
-  const { data, error } = await supabase
-    .from('restaurants')
-    .insert({
-      name: values.name,
-      slug: values.slug,
-      default_currency: values.currency,
-      timezone: values.timezone,
-    })
-    .select()
-    .single()
+): Promise<string> {
+  const id = crypto.randomUUID()
+  const { error } = await supabase.from('restaurants').insert({
+    id,
+    name: values.name,
+    slug: values.slug,
+    default_currency: values.currency,
+    timezone: values.timezone,
+  })
   if (error) throw error
-  return data as Restaurant
+  return id
 }
 
 export async function updateRestaurant(

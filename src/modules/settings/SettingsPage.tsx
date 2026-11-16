@@ -6,7 +6,7 @@
 // immediately; they are persisted only on save.
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { isMissingTableError } from '@/lib/errors'
+import { isMissingTableError, isSlugTakenError } from '@/lib/errors'
 import { useAuth } from '@/hooks/useAuth'
 import {
   createRestaurant,
@@ -63,7 +63,7 @@ export default function SettingsPage() {
   const [slugTouched, setSlugTouched] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
-  const [saveError, setSaveError] = useState(false)
+  const [saveErrorKey, setSaveErrorKey] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -98,7 +98,7 @@ export default function SettingsPage() {
   ) => {
     setValues((prev) => ({ ...prev, [key]: value }))
     setSaved(false)
-    setSaveError(false)
+    setSaveErrorKey(null)
   }
 
   const handleNameChange = (name: string) => {
@@ -109,20 +109,19 @@ export default function SettingsPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (!user || dbPending) return
-    setSaveError(false)
+    setSaveErrorKey(null)
     setSaved(false)
     setSaving(true)
     try {
       const slug = slugify(values.slug || values.name)
       let restaurantId = restaurant?.id
       if (!restaurantId) {
-        const created = await createRestaurant({
+        restaurantId = await createRestaurant({
           name: values.name.trim(),
           slug,
           currency: values.currency,
           timezone: values.timezone,
         })
-        restaurantId = created.id
         await linkProfileToRestaurant(
           user.id,
           restaurantId,
@@ -149,10 +148,17 @@ export default function SettingsPage() {
       await refreshWorkspace()
       setSaved(true)
     } catch (error) {
+      // Logged for diagnosis (visible in the browser console) — the UI
+      // only ever shows the friendly message, never the raw error.
+      console.error('[Settings] save failed', error)
       if (isMissingTableError(error)) {
         setLoadError(true)
       } else {
-        setSaveError(true)
+        setSaveErrorKey(
+          isSlugTakenError(error)
+            ? 'settings.slugTaken'
+            : 'settings.saveFailed',
+        )
       }
     } finally {
       setSaving(false)
@@ -413,9 +419,9 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {saveError && (
+        {saveErrorKey && (
           <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {t('settings.saveFailed')}
+            {t(saveErrorKey)}
           </p>
         )}
         {saved && (
