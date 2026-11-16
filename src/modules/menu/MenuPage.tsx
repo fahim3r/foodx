@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { isMissingTableError } from '@/lib/errors'
-import { formatMoney } from '@/lib/money'
+import { formatMoney, roundMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
 import {
   createCategory,
@@ -65,14 +65,17 @@ interface StationForm {
 interface ModifierForm {
   name: string
   nameBn: string
-  price: number
+  // Money inputs stay STRINGS in form state: a number input's value goes
+  // through binary floats, so a typed "50" could arrive as
+  // 49.970001220703125. Parse + round only on submit (see roundMoney).
+  price: string
 }
 
 interface ProductForm {
   name: string
   nameBn: string
   description: string
-  price: number
+  price: string
   categoryId: string
   stationId: string
   imageUrl: string
@@ -81,12 +84,12 @@ interface ProductForm {
 
 const EMPTY_CATEGORY: CategoryForm = { name: '', nameBn: '', sortOrder: 0 }
 const EMPTY_STATION: StationForm = { name: '', sortOrder: 0 }
-const EMPTY_MODIFIER: ModifierForm = { name: '', nameBn: '', price: 0 }
+const EMPTY_MODIFIER: ModifierForm = { name: '', nameBn: '', price: '' }
 const EMPTY_PRODUCT: ProductForm = {
   name: '',
   nameBn: '',
   description: '',
-  price: 0,
+  price: '',
   categoryId: '',
   stationId: '',
   imageUrl: '',
@@ -129,7 +132,7 @@ export default function MenuPage() {
   const [selectedModifierIds, setSelectedModifierIds] = useState<string[]>([])
   const [variants, setVariants] = useState<ProductVariant[]>([])
   const [newVariantName, setNewVariantName] = useState('')
-  const [newVariantAdjustment, setNewVariantAdjustment] = useState(0)
+  const [newVariantAdjustment, setNewVariantAdjustment] = useState('')
 
   // --- station form --------------------------------------------------------
   const [stationForm, setStationForm] = useState<StationForm>(EMPTY_STATION)
@@ -256,7 +259,7 @@ export default function MenuPage() {
     setSelectedModifierIds([])
     setVariants([])
     setNewVariantName('')
-    setNewVariantAdjustment(0)
+    setNewVariantAdjustment('')
     setProductError(null)
     setProductFormOpen(true)
   }
@@ -266,7 +269,7 @@ export default function MenuPage() {
       name: product.name,
       nameBn: product.name_bn ?? '',
       description: product.description ?? '',
-      price: Number(product.price),
+      price: String(product.price),
       categoryId: product.category_id ?? '',
       stationId: product.kitchen_station_id ?? '',
       imageUrl: product.image_url ?? '',
@@ -276,7 +279,7 @@ export default function MenuPage() {
     setSelectedModifierIds(product.modifiers.map((m) => m.id))
     setVariants(product.variants)
     setNewVariantName('')
-    setNewVariantAdjustment(0)
+    setNewVariantAdjustment('')
     setProductError(null)
     setProductFormOpen(true)
   }
@@ -292,13 +295,25 @@ export default function MenuPage() {
         name: productForm.name.trim(),
         nameBn: productForm.nameBn.trim() || undefined,
         description: productForm.description.trim() || undefined,
-        price: productForm.price,
+        price: roundMoney(parseFloat(productForm.price) || 0),
         imageUrl: productForm.imageUrl.trim() || undefined,
         sortOrder: productForm.sortOrder,
       }
       let productId = editingProductId
       if (productId) {
-        await updateProduct(productId, values)
+        // updateProduct takes DB (snake_case) keys — passing the
+        // camelCase form values sent unknown columns and every edit
+        // failed. Map them here; createProduct maps internally.
+        await updateProduct(productId, {
+          category_id: values.categoryId,
+          kitchen_station_id: values.kitchenStationId,
+          name: values.name,
+          name_bn: values.nameBn,
+          description: values.description,
+          price: values.price,
+          image_url: values.imageUrl,
+          sort_order: values.sortOrder,
+        })
       } else {
         const created = await createProduct(restaurantId, values)
         productId = created.id
@@ -349,12 +364,12 @@ export default function MenuPage() {
     try {
       await createVariant(editingProductId, {
         name: newVariantName.trim(),
-        priceAdjustment: newVariantAdjustment,
+        priceAdjustment: roundMoney(parseFloat(newVariantAdjustment) || 0),
         sortOrder: variants.length,
       })
       setVariants(await fetchVariants(editingProductId))
       setNewVariantName('')
-      setNewVariantAdjustment(0)
+      setNewVariantAdjustment('')
       await reloadProducts()
     } catch (error) {
       console.error('[Menu] add variant failed', error)
@@ -446,13 +461,13 @@ export default function MenuPage() {
         await updateModifier(editingModifierId, {
           name: modifierForm.name.trim(),
           name_bn: modifierForm.nameBn.trim() || null,
-          price: modifierForm.price,
+          price: roundMoney(parseFloat(modifierForm.price) || 0),
         })
       } else {
         await createModifier(restaurantId, {
           name: modifierForm.name.trim(),
           nameBn: modifierForm.nameBn.trim() || undefined,
-          price: modifierForm.price,
+          price: roundMoney(parseFloat(modifierForm.price) || 0),
         })
       }
       await reloadModifiers()
@@ -909,7 +924,7 @@ export default function MenuPage() {
                     onChange={(e) =>
                       setProductForm((prev) => ({
                         ...prev,
-                        price: Number(e.target.value) || 0,
+                        price: e.target.value,
                       }))
                     }
                     required
@@ -1041,7 +1056,7 @@ export default function MenuPage() {
                         step={0.01}
                         value={newVariantAdjustment}
                         onChange={(e) =>
-                          setNewVariantAdjustment(Number(e.target.value) || 0)
+                          setNewVariantAdjustment(e.target.value)
                         }
                       />
                     </div>
@@ -1326,7 +1341,7 @@ export default function MenuPage() {
                           setModifierForm({
                             name: modifier.name,
                             nameBn: modifier.name_bn ?? '',
-                            price: Number(modifier.price),
+                            price: String(modifier.price),
                           })
                           setModifierError(null)
                         }}
@@ -1406,7 +1421,7 @@ export default function MenuPage() {
                             onChange={(e) =>
                               setModifierForm((prev) => ({
                                 ...prev,
-                                price: Number(e.target.value) || 0,
+                                price: e.target.value,
                               }))
                             }
                             required
@@ -1480,7 +1495,7 @@ export default function MenuPage() {
                   onChange={(e) =>
                     setModifierForm((prev) => ({
                       ...prev,
-                      price: Number(e.target.value) || 0,
+                      price: e.target.value,
                     }))
                   }
                   required

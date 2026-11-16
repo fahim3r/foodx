@@ -8,6 +8,7 @@
 // the caller and `.select().single()` is safe (unlike the Phase 1
 // restaurants bootstrap case, where the profile did not exist yet).
 import { supabase } from '@/lib/supabase'
+import { roundMoney } from '@/lib/money'
 import type {
   Category,
   KitchenStation,
@@ -159,7 +160,7 @@ export async function createModifier(
       restaurant_id: restaurantId,
       name: values.name.trim(),
       name_bn: values.nameBn?.trim() || null,
-      price: values.price,
+      price: roundMoney(values.price),
     })
     .select()
     .single()
@@ -173,7 +174,12 @@ export async function updateModifier(
 ): Promise<Modifier> {
   const { data, error } = await supabase
     .from('modifiers')
-    .update(patch)
+    .update({
+      ...patch,
+      ...(patch.price !== undefined
+        ? { price: roundMoney(patch.price) }
+        : {}),
+    })
     .eq('id', modifierId)
     .select()
     .single()
@@ -264,7 +270,7 @@ export async function createProduct(
       name: values.name.trim(),
       name_bn: values.nameBn?.trim() || null,
       description: values.description?.trim() || null,
-      price: values.price,
+      price: roundMoney(values.price),
       image_url: values.imageUrl?.trim() || null,
       sort_order: values.sortOrder ?? 0,
     })
@@ -293,7 +299,12 @@ export async function updateProduct(
 ): Promise<Product> {
   const { data, error } = await supabase
     .from('products')
-    .update(patch)
+    .update({
+      ...patch,
+      ...(patch.price !== undefined
+        ? { price: roundMoney(patch.price) }
+        : {}),
+    })
     .eq('id', productId)
     .select()
     .single()
@@ -336,7 +347,7 @@ export async function createVariant(
       id: crypto.randomUUID(),
       product_id: productId,
       name: values.name.trim(),
-      price_adjustment: values.priceAdjustment,
+      price_adjustment: roundMoney(values.priceAdjustment),
       sort_order: values.sortOrder ?? 0,
     })
     .select()
@@ -353,7 +364,12 @@ export async function updateVariant(
 ): Promise<ProductVariant> {
   const { data, error } = await supabase
     .from('product_variants')
-    .update(patch)
+    .update({
+      ...patch,
+      ...(patch.price_adjustment !== undefined
+        ? { price_adjustment: roundMoney(patch.price_adjustment) }
+        : {}),
+    })
     .eq('id', variantId)
     .select()
     .single()

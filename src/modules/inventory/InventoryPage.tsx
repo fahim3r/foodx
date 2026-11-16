@@ -448,6 +448,9 @@ export default function InventoryPage() {
       setNewRecipeQty(0)
       setRecipeSaved(true)
       await reloadRecipes()
+      // The Recipes header reads from the availability map — refresh it
+      // too, or the "No recipe" label stays stale after adding a line.
+      await reloadItems()
     } catch (error) {
       console.error('[Inventory] add recipe line failed', error)
       setRecipeError(
@@ -466,6 +469,7 @@ export default function InventoryPage() {
       setEditingRecipeId(null)
       setRecipeSaved(true)
       await reloadRecipes()
+      await reloadItems()
     } catch (error) {
       console.error('[Inventory] update recipe line failed', error)
       setRecipeError('inventory.saveFailed')
@@ -482,6 +486,7 @@ export default function InventoryPage() {
     try {
       await deleteRecipeLine(recipeId)
       await reloadRecipes()
+      await reloadItems()
     } catch (error) {
       console.error('[Inventory] delete recipe line failed', error)
       setRecipeError('inventory.saveFailed')

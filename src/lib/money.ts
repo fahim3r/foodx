@@ -22,3 +22,12 @@ export function formatMoney(amount: number, currency: string): string {
     maximumFractionDigits: 2,
   })}`
 }
+
+/**
+ * Round a money amount to 2 decimals. Call this on every money write:
+ * number inputs go through binary floats, so a typed "50" can arrive as
+ * 49.970001220703125 — rounding at the boundary keeps saved prices exact.
+ */
+export function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
