@@ -98,13 +98,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             className="size-9 rounded-md object-contain"
           />
         ) : (
-          <img
-            src={logoMark}
-            alt=""
-            width={128}
-            height={128}
-            className="size-9 shrink-0 rounded-full"
-          />
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-base font-bold text-primary-foreground">
+            {displayName.charAt(0).toUpperCase()}
+          </span>
         )}
         <span className="truncate text-lg font-bold tracking-tight">
           {displayName}
@@ -132,7 +128,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </nav>
       <div className="mt-auto px-5 py-4">
-        <p className="text-xs text-muted-foreground">{t('app.tagline')}</p>
+        <div className="flex items-center gap-2">
+          <img
+            src={logoMark}
+            alt=""
+            width={128}
+            height={128}
+            className="size-6 shrink-0 rounded-full"
+          />
+          <span className="text-sm font-semibold">FoodX</span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">{t('app.tagline')}</p>
       </div>
     </div>
   )
