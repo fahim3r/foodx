@@ -68,6 +68,10 @@ interface ModifierForm {
   // Money inputs stay STRINGS in form state: a number input's value goes
   // through binary floats, so a typed "50" could arrive as
   // 49.970001220703125. Parse + round only on submit (see roundMoney).
+  // The inputs themselves are type="text" with inputMode="decimal" for
+  // the same reason — a type="number" input mangled a filled "30" into
+  // 29.969999313354492 before React ever saw it. Do not switch them
+  // back to type="number".
   price: string
 }
 
@@ -917,9 +921,8 @@ export default function MenuPage() {
                   <Label htmlFor="product-price">{t('menu.price')}</Label>
                   <Input
                     id="product-price"
-                    type="number"
-                    min={0}
-                    step={0.01}
+                    type="text"
+                    inputMode="decimal"
                     value={productForm.price}
                     onChange={(e) =>
                       setProductForm((prev) => ({
@@ -1052,8 +1055,8 @@ export default function MenuPage() {
                       </Label>
                       <Input
                         id="variant-adjustment"
-                        type="number"
-                        step={0.01}
+                        type="text"
+                        inputMode="decimal"
                         value={newVariantAdjustment}
                         onChange={(e) =>
                           setNewVariantAdjustment(e.target.value)
@@ -1414,9 +1417,8 @@ export default function MenuPage() {
                           </Label>
                           <Input
                             id={`modifier-price-${modifier.id}`}
-                            type="number"
-                            min={0}
-                            step={0.01}
+                            type="text"
+                            inputMode="decimal"
                             value={modifierForm.price}
                             onChange={(e) =>
                               setModifierForm((prev) => ({
@@ -1488,9 +1490,8 @@ export default function MenuPage() {
                 <Label htmlFor="new-modifier-price">{t('menu.price')}</Label>
                 <Input
                   id="new-modifier-price"
-                  type="number"
-                  min={0}
-                  step={0.01}
+                  type="text"
+                  inputMode="decimal"
                   value={modifierForm.price}
                   onChange={(e) =>
                     setModifierForm((prev) => ({
