@@ -316,7 +316,7 @@ and the auth subscription in `AuthProvider`).
 - Languages: English (`en`, default) and Bangla (`bn`). Every user-facing
   string goes through `useTranslation()` — no hardcoded UI text.
 - Files: `src/i18n/locales/en.json` and `bn.json`. Both files must keep
-  the **same key set** (currently 150 keys each, verified in sync).
+  the **same key set** (currently 362 keys each, verified in sync).
 - The switcher lives in the topbar (`AppLayout`); the choice is stored in
   `localStorage` under `foodx.language` and applied on next load.
 - Adding a string: add the key to **both** locale files, in the same
@@ -324,6 +324,38 @@ and the auth subscription in `AuthProvider`).
   `placeholder`, `roles`, `settings`).
 - Currency formatting on the Dashboard uses the restaurant's currency
   (default `BDT`); the Settings form offers BDT, USD, EUR, INR.
+
+## Brand assets
+
+FoodX logo: geometric X mark, primary orange `#ea580c`, secondary deep
+charcoal `#1C1917`, cream `#FFF6ED`. Tagline: "Every order. Under control."
+/ "প্রতিটি অর্ডার, নিয়ন্ত্রণে।" Dark variants (black background) are kept
+as source material for a future dark mode and are not shipped yet.
+
+Performance rules for the logo (so it never slows the site down):
+
+- Source files are 2048×2048 PNGs — never ship those. Regenerate with
+  `scripts/build_brand_assets.py` (removes the cream background, trims,
+  resizes to the exact display size, saves WebP).
+- In-app images live in `src/assets/brand/` so Vite emits them with a
+  content hash (long-term caching): `logo-mark.webp` 128px / 6.3 KB
+  (sidebar + favicon fallback), `logo-wordmark.webp` 480px / 24.7 KB
+  (login page only — no other page downloads it).
+- Stable-URL files live in `public/`: `favicon.png` 64px,
+  `apple-touch-icon.png` 180px, `pwa-192.png` / `pwa-512.png` (manifest
+  icons; fetched only on install), `brand/logo-lockup.png` 1200px
+  (og-image — fetched only by link-preview crawlers, never by visitors).
+- The restaurant's own logo (Settings → Branding → Logo URL) always
+  overrides the FoodX mark in the sidebar.
+- **Receipt & invoice branding (Fahim's rule, 2026-11-16):** on every
+  receipt and invoice, the restaurant's logo goes on top and the FoodX
+  mark sits small underneath it ("Powered by FoodX"). Build this in when
+  receipt printing / invoicing lands (Phase 7); POS printing is not
+  implemented yet.
+- **The FoodX logo is immutable for restaurants:** it is a bundled asset
+  in `src/assets/brand/` — there is no setting anywhere that can change
+  it. Only the developer (a code change) can ever swap it. Restaurant
+  admins can only change their own restaurant's logo, name and colours.
 
 ## Contributing / development rules
 

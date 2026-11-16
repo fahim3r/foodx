@@ -18,6 +18,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import logoMark from '@/assets/brand/logo-mark.webp'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -97,9 +98,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             className="size-9 rounded-md object-contain"
           />
         ) : (
-          <span className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <UtensilsCrossed className="size-5" />
-          </span>
+          <img
+            src={logoMark}
+            alt=""
+            width={128}
+            height={128}
+            className="size-9 shrink-0 rounded-full"
+          />
         )}
         <span className="truncate text-lg font-bold tracking-tight">
           {displayName}

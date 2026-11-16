@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
-import { UtensilsCrossed } from 'lucide-react'
+import logoWordmark from '@/assets/brand/logo-wordmark.webp'
 import { authErrorKey } from '@/lib/errors'
 import { signIn, signUp } from '@/services/auth'
 import { Button } from '@/components/ui/button'
@@ -124,9 +124,14 @@ export default function LoginPage() {
 
       <Card className="w-full max-w-md">
         <CardHeader className="items-center text-center">
-          <span className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <UtensilsCrossed className="size-6" />
-          </span>
+          <img
+            src={logoWordmark}
+            alt="FoodX"
+            width={480}
+            height={119}
+            fetchPriority="high"
+            className="h-11 w-auto"
+          />
           <CardTitle className="text-2xl">
             {mode === 'signin' ? t('auth.signInTitle') : t('auth.signUpTitle')}
           </CardTitle>
