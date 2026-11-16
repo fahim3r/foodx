@@ -15,6 +15,7 @@ import {
   updateRestaurant,
   upsertSettings,
 } from '@/services/restaurant'
+import DomainSection from '@/modules/settings/DomainSection'
 import type { RestaurantFormValues } from '@/types'
 import { Button } from '@/components/ui/button'
 import {
@@ -44,6 +45,9 @@ const DEFAULTS: RestaurantFormValues = {
   receipt_footer: '',
   loyalty_earn_per_100: 1,
   loyalty_point_value: 1,
+  delivery_enabled: false,
+  delivery_fee: 0,
+  min_order_amount: 0,
 }
 
 function slugify(value: string): string {
@@ -64,6 +68,17 @@ function isValidHex(value: string): boolean {
  * the point value must stay positive (a point worth nothing breaks
  * redemption math), so 0 is not allowed for it.
  */
+/**
+ * Parse a money text input. Empty, invalid, or negative falls back.
+ * (Same rule as the loyalty rates: type="number" inputs mangled
+ * filled values, so money stays a string until submit.)
+ */
+function parseMoneyInput(value: string, fallback: number): number {
+  const parsed = Number.parseFloat(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback
+  return roundMoney(parsed)
+}
+
 function parseLoyaltyRate(
   value: string,
   fallback: number,
@@ -93,6 +108,9 @@ export default function SettingsPage() {
   // Parsed + rounded only on submit. Do not switch them back.
   const [loyaltyEarn, setLoyaltyEarn] = useState('1')
   const [loyaltyPointValue, setLoyaltyPointValue] = useState('1')
+  // Same rule for the delivery money fields.
+  const [deliveryFee, setDeliveryFee] = useState('0')
+  const [minOrderAmount, setMinOrderAmount] = useState('0')
 
   // Initialise the form from the loaded restaurant / settings.
   useEffect(() => {
@@ -117,9 +135,14 @@ export default function SettingsPage() {
       receipt_footer: settings?.receipt_footer ?? '',
       loyalty_earn_per_100: Number(settings?.loyalty_earn_per_100 ?? 1),
       loyalty_point_value: Number(settings?.loyalty_point_value ?? 1),
+      delivery_enabled: settings?.delivery_enabled ?? false,
+      delivery_fee: Number(settings?.delivery_fee ?? 0),
+      min_order_amount: Number(settings?.min_order_amount ?? 0),
     })
     setLoyaltyEarn(String(Number(settings?.loyalty_earn_per_100 ?? 1)))
     setLoyaltyPointValue(String(Number(settings?.loyalty_point_value ?? 1)))
+    setDeliveryFee(String(Number(settings?.delivery_fee ?? 0)))
+    setMinOrderAmount(String(Number(settings?.min_order_amount ?? 0)))
     setLoaded(true)
   }, [user, restaurant, settings, dbPending])
 
@@ -180,6 +203,9 @@ export default function SettingsPage() {
         // default 1 instead of saving 0 or NaN.
         loyalty_earn_per_100: parseLoyaltyRate(loyaltyEarn, 1, true),
         loyalty_point_value: parseLoyaltyRate(loyaltyPointValue, 1, false),
+        delivery_enabled: values.delivery_enabled,
+        delivery_fee: parseMoneyInput(deliveryFee, 0),
+        min_order_amount: parseMoneyInput(minOrderAmount, 0),
       })
       await refreshWorkspace()
       setSaved(true)
@@ -508,6 +534,61 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('settings.delivery.title')}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={values.delivery_enabled}
+                onChange={(e) => set('delivery_enabled', e.target.checked)}
+              />
+              {t('settings.delivery.enableDelivery')}
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="deliveryFee">
+                  {t('settings.delivery.fee')}
+                </Label>
+                <Input
+                  id="deliveryFee"
+                  type="text"
+                  inputMode="decimal"
+                  value={deliveryFee}
+                  onChange={(e) => {
+                    setDeliveryFee(e.target.value)
+                    setSaved(false)
+                    setSaveErrorKey(null)
+                  }}
+                  placeholder={t('settings.delivery.feePlaceholder')}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="minOrderAmount">
+                  {t('settings.delivery.minOrder')}
+                </Label>
+                <Input
+                  id="minOrderAmount"
+                  type="text"
+                  inputMode="decimal"
+                  value={minOrderAmount}
+                  onChange={(e) => {
+                    setMinOrderAmount(e.target.value)
+                    setSaved(false)
+                    setSaveErrorKey(null)
+                  }}
+                  placeholder={t('settings.delivery.minOrderPlaceholder')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('settings.delivery.minOrderHint')}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {saveErrorKey && (
           <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {t(saveErrorKey)}
@@ -528,6 +609,8 @@ export default function SettingsPage() {
           </Button>
         </div>
       </form>
+
+      {restaurant && <DomainSection restaurantId={restaurant.id} />}
     </div>
   )
 }

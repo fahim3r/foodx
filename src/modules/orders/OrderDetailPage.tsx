@@ -21,6 +21,7 @@ import {
   ORDER_TRANSITIONS,
   TERMINAL_ORDER_STATUSES,
   type OrderDetail,
+  type OrderSource,
   type OrderStatus,
   type OrderType,
   type PaymentMethod,
@@ -98,7 +99,11 @@ export default function OrderDetailPage() {
       ? t('orders.dineIn')
       : type === 'takeaway'
         ? t('orders.takeaway')
-        : t('orders.delivery')
+        : type === 'pickup'
+          ? t('orders.pickup')
+          : t('orders.delivery')
+
+  const sourceLabel = (source: OrderSource) => t(`orders.source${source}`)
 
   const load = useCallback(async () => {
     if (!restaurant || !id) return
@@ -300,6 +305,31 @@ export default function OrderDetailPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-1 text-sm">
           <p>{typeLabel(detail.type)}</p>
+          <p className="text-muted-foreground">
+            {t('orders.source')}: {sourceLabel(detail.source)}
+          </p>
+          {detail.customer_name && (
+            <p>
+              <span className="font-medium">{t('orders.customerName')}: </span>
+              {detail.customer_name}
+            </p>
+          )}
+          {detail.customer_phone && (
+            <p>
+              <span className="font-medium">
+                {t('orders.customerPhone')}:{' '}
+              </span>
+              {detail.customer_phone}
+            </p>
+          )}
+          {detail.delivery_address && (
+            <p>
+              <span className="font-medium">
+                {t('orders.customerAddress')}:{' '}
+              </span>
+              {detail.delivery_address}
+            </p>
+          )}
           {tableName && (
             <p>
               {t('orders.table')} {tableName}

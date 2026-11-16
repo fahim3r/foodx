@@ -100,8 +100,8 @@ scoped policy then denies access. Full policy listing:
   The database has roles, permissions, and `role_permissions`
   (see [DATABASE.md](DATABASE.md#roles-and-permissions)), and the Roles
   page displays them — but no route or action checks permissions yet,
-  and `role_permissions` is seeded empty. Permission checks are Phase 5
-  work; do not assume a page is protected just because a permission key
+  and `role_permissions` is seeded empty. Permission checks are
+  later-phase work; do not assume a page is protected just because a permission key
   exists for it. The only access control in Phase 1 is "signed in"
   (`ProtectedRoute`).
 
@@ -268,7 +268,7 @@ missed on a deployment.
 | Staff management, role editing, permission enforcement | Read-only Roles page; `role_permissions` empty; no enforcement | Phase 7 (Business) |
 | Reports / analytics | Nothing; recharts installed but unused | Phase 7 (Business) |
 | Customers, loyalty | Built in Phase 4: customer records + history, loyalty points (computed balances, earn on complete, redeem at POS, cancel/refund reversals), coupons (PERCENT/FIXED, validity, usage limits), POS integration | — |
-| Online ordering, delivery | Nothing; `feature_flags` keys reserved (`online_ordering`, `delivery`, `loyalty`, `accounting`, `nfc`, `multi_branch`) | Phases 5–6 |
+| Online ordering, delivery | Built in Phase 5: one domain per restaurant (public storefront + `/panel` admin), QR + NFC per table, online orders into Orders/KDS, delivery settings (fee, minimum order) — pay at the restaurant, no online payment | Phase 6 (Delivery) for courier/delivery management; online payment unscheduled |
 | Offline-first / LAN / sync, Docker, production hardening | Manifest-only PWA; no Docker files | Phase 9 |
 | Developer Panel (separate from Restaurant Admin) | Nothing | Phase 8 |
 | Branch management UI | `branches` table exists; no UI/service | Phase 7 (Business), with multi-branch work |
@@ -293,4 +293,45 @@ missed on a deployment.
 | Loyalty balances are computed, never stored | A stored balance drifts the moment a transaction is missed; `SUM(points)` over append-only `loyalty_transactions` is always right. One EARN / one REDEEM per order enforced by a partial unique index; corrections are new ADJUSTMENT / REVERSAL rows | [DATABASE.md](DATABASE.md#phase-4-tables-customers) |
 | Discount order is manual → coupon → loyalty | A single rule in `computeOrderTotals()`; the POS preview and `createOrder()` share it, so preview and placed order always agree. Refunding reverses the EARN; cancelling returns the redeemed points | [DATABASE.md](DATABASE.md#phase-4-tables-customers) |
 | i18n from day one (en/bn, 150 keys) | Staff audience is Bangla-first; retrofitting i18n later is expensive | §6 |
+| One domain per restaurant; admin under `/panel` on the same domain | Customers order directly on the restaurant's own domain (e.g. `addabuzz.com`); the software is managed on the same domain, not a separate admin URL. `foodx.bond` stays the platform's main domain. QR codes point at the restaurant's own domain | §12, [DEPLOYMENT.md](DEPLOYMENT.md) |
+| Public menu is anon-readable; online ordering goes through SECURITY DEFINER functions | Customers must order with no login, so the menu tables have anon SELECT policies (checked first: no sensitive column) — but anon never touches `orders`/`customers` directly. `place_online_order()` re-reads prices and computes totals server-side, exactly like the POS, so a tampered client cannot set prices | §12, [DATABASE.md](DATABASE.md#phase-5-tables-digital-ordering) |
+| No online payment in v1 | Pay at the restaurant (cash/card on delivery/pickup). Taking money online needs payment-provider work that belongs in a later phase, not bolted onto the first public endpoint | [DATABASE.md](DATABASE.md#phase-5-tables-digital-ordering) |
 | Branding as CSS variables from `restaurant_settings` | Per-restaurant theme without rebuilds or per-tenant CSS bundles | §7 |
+
+## 12. Domain routing (Phase 5)
+
+Each restaurant gets its own domain; the app decides what to serve
+from `window.location.hostname` at boot (`src/app/App.tsx`).
+
+- **Platform hosts** — `localhost`, `127.0.0.1`, `foodx.bond`,
+  `www.foodx.bond`, and any `*.vercel.app` preview host — run today's
+  admin app unchanged at `/`. On a platform host,
+  `?store=<slug>` opens the public storefront for that slug (and
+  `?store=<slug>&table=<code>` pre-selects a table), so the feature
+  can be tested without a real restaurant domain. Menus are public
+  data by design.
+- **Restaurant domains** — any other hostname is resolved with
+  `resolve_restaurant_by_domain()`. A match serves the storefront at
+  `/` and the admin under `/panel` (the same `AdminRoutes` with
+  `basename="/panel"`). No match renders an honest "domain not
+  connected" page linking to `https://www.foodx.bond` — never the
+  admin login.
+- **The panel lock** — in panel mode, `ProtectedRoute` takes a
+  `lockedRestaurantId`. After login, if the signed-in profile's
+  restaurant differs from the resolved one (or the account has no
+  restaurant linked), the admin is replaced by an honest notice with
+  a sign-out button. The lock is a UI guard on top of RLS: the data
+  itself is still isolated by `current_restaurant_id()`, so even a
+  lock bug cannot leak another restaurant's rows. Setup mode is also
+  blocked in panel mode — a restaurant must be created on the main
+  platform first.
+- **Storefront** (`src/modules/storefront/StorefrontPage.tsx`) — no
+  auth, no router, no `AppLayout`. It loads the restaurant through
+  the `restaurant_storefronts` view, the menu through the existing
+  menu service (which works anon once the policies exist), and
+  availability through the inventory service. The cart preview uses
+  the same `computeOrderTotals()` as the POS; placement sends only
+  ids + quantities to `place_online_order()`. The QR/NFC URL for a
+  table comes from one helper, `buildTableQrUrl()` in
+  `src/services/storefront.ts` — the primary domain when one is set,
+  otherwise the platform preview URL.

@@ -9,7 +9,7 @@ import { isMissingTableError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { fetchOrders } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
-import type { Order, OrderStatus, OrderType } from '@/types'
+import type { Order, OrderSource, OrderStatus, OrderType } from '@/types'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -69,7 +69,11 @@ export default function OrdersPage() {
       ? t('orders.dineIn')
       : type === 'takeaway'
         ? t('orders.takeaway')
-        : t('orders.delivery')
+        : type === 'pickup'
+          ? t('orders.pickup')
+          : t('orders.delivery')
+
+  const sourceLabel = (source: OrderSource) => t(`orders.source${source}`)
 
   const load = useCallback(async () => {
     if (!restaurant) return
@@ -208,6 +212,9 @@ export default function OrdersPage() {
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                   <span>{typeLabel(order.type)}</span>
+                  <span className="text-muted-foreground">
+                    {t('orders.source')}: {sourceLabel(order.source)}
+                  </span>
                   {order.table_id && (
                     <span>
                       {t('orders.table')}{' '}

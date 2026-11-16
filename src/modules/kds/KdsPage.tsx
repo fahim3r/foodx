@@ -219,7 +219,9 @@ export default function KdsPage() {
                     ? t('kds.dineIn')
                     : order.type === 'takeaway'
                       ? t('kds.takeaway')
-                      : t('kds.delivery')
+                      : order.type === 'pickup'
+                        ? t('kds.pickup')
+                        : t('kds.delivery')
                 const tableName = order.table_id
                   ? tableNames.get(order.table_id)
                   : undefined

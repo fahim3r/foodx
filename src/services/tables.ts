@@ -44,7 +44,9 @@ export async function createTable(
 
 export async function updateTable(
   tableId: string,
-  patch: Partial<Pick<DiningTable, 'branch_id' | 'name' | 'seats' | 'qr_code'>>,
+  patch: Partial<
+    Pick<DiningTable, 'branch_id' | 'name' | 'seats' | 'qr_code' | 'nfc_value'>
+  >,
 ): Promise<DiningTable> {
   const { data, error } = await supabase
     .from('tables')

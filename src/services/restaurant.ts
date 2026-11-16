@@ -146,6 +146,9 @@ export async function upsertSettings(
     | 'receipt_footer'
     | 'loyalty_earn_per_100'
     | 'loyalty_point_value'
+    | 'delivery_enabled'
+    | 'delivery_fee'
+    | 'min_order_amount'
   >,
 ): Promise<RestaurantSettings> {
   const { data, error } = await supabase
@@ -163,6 +166,9 @@ export async function upsertSettings(
         receipt_footer: values.receipt_footer || null,
         loyalty_earn_per_100: values.loyalty_earn_per_100,
         loyalty_point_value: values.loyalty_point_value,
+        delivery_enabled: values.delivery_enabled,
+        delivery_fee: values.delivery_fee,
+        min_order_amount: values.min_order_amount,
       },
       { onConflict: 'restaurant_id' },
     )

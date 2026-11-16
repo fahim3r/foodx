@@ -6,14 +6,16 @@ self-contained deployment model, **not multi-tenant SaaS**: each restaurant
 runs its own app instance against its own Supabase project, and no
 restaurant's data ever shares a database with another's.
 
-> **Status: Phase 2 — Core Restaurant.** This repository contains the
+> **Status: Phase 5 — Digital Ordering.** This repository contains the
 > app shell, authentication, restaurant setup, branding settings, a
-> read-only roles & permissions view, and the full core restaurant flow:
-> menu (categories, products, variants, modifiers, kitchen stations),
-> tables, POS ordering with payments, order list + detail with the order
-> state machine, and a live kitchen display. See
-> [What Phase 2 adds](#what-phase-2-adds) and
-> [What is not built yet](#what-is-not-built-yet).
+> read-only roles & permissions view, the full core restaurant flow
+> (menu, tables, POS, orders, KDS), inventory with recipes and
+> purchases, customers with loyalty and coupons, and now digital
+> ordering: each restaurant gets its own domain serving a public
+> menu + online ordering, the admin runs under `/panel` on the same
+> domain, tables get real QR codes + NFC values, and online/QR orders
+> flow into Orders/KDS. See [What Phase 5 adds](#what-phase-5-adds)
+> and [What is not built yet](#what-is-not-built-yet).
 
 ## Tech stack
 
@@ -23,7 +25,7 @@ restaurant's data ever shares a database with another's.
 | Styling | Tailwind CSS v4 (via `@tailwindcss/vite`), shadcn-style UI components (Radix primitives, `class-variance-authority`, `clsx`, `tailwind-merge`) |
 | Routing | react-router-dom 7 |
 | Backend / database | Supabase (Postgres + Auth + PostgREST), `@supabase/supabase-js` v2 |
-| i18n | i18next + react-i18next — English (`en`) and Bangla (`bn`), 361 keys each |
+| i18n | i18next + react-i18next — English (`en`) and Bangla (`bn`), 681 keys each |
 | Icons | lucide-react |
 | PWA | vite-plugin-pwa — **manifest only** in Phase 1 (see below) |
 | Lint | oxlint (`npm run lint`) |
@@ -68,13 +70,20 @@ or shipped to the client.
 
 ## Database setup
 
-The schema lives in `supabase/migrations/0001_foundation.sql` (Phase 1)
-and `supabase/migrations/0002_core.sql` (Phase 2). **Migration 0001 has
-been applied to the live Supabase project; migration 0002 has not yet
-been applied**, so until it is, the menu / tables / POS / orders /
-kitchen pages show a friendly "Database setup is pending" notice instead
-of crashing — pages that need the tables degrade gracefully. Apply
-migration 0002 to make the app fully functional.
+The schema lives in `supabase/migrations/` — `0001_foundation.sql`
+(Phase 1), `0002_core.sql` (Phase 2), `0003_inventory.sql` (Phase 3),
+`0004_cancel_restock.sql` (cancel-restock fix), `0005_customers.sql`
+(Phase 4), `0006_fix_customers_schema.sql` (corrective — see
+[DATABASE.md](DATABASE.md#phase-4-tables-customers)), and
+`0007_digital_ordering.sql` (Phase 5). **Migrations 0001–0006 have
+been applied to the live Supabase project; migration 0007 has not yet
+been applied**, so until it is, the storefront / domains / online
+ordering show a friendly error instead of crashing — pages that need
+the tables degrade gracefully. Apply migration 0007 to make Phase 5
+fully functional. When applying a migration from the dashboard, always
+paste from the **fresh raw GitHub URL** and verify the new tables'
+**columns** afterwards, not just their names (a stale paste once
+applied a draft of 0005 — fixed by 0006).
 
 ### Option A — Supabase CLI (recommended)
 
@@ -83,8 +92,8 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-Apply migrations in filename order. For a new restaurant, apply both
-`0001_foundation.sql` and `0002_core.sql`.
+Apply migrations in filename order. For a new restaurant, apply all of
+`0001_foundation.sql` through `0007_digital_ordering.sql`.
 
 ### Option B — Dashboard SQL editor
 
@@ -122,6 +131,15 @@ payments**. Run it after `seed.sql`, only against a local/development
 project. **Never run it against production.** Removal SQL is in the file
 header.
 
+### Demo seed data, Phase 3 / 4 / 5 (development only)
+
+`supabase/seed_phase3.sql` (demo stock, recipes + supplier),
+`supabase/seed_phase4.sql` (demo customers + coupon) and
+`supabase/seed_phase5.sql` (one demo domain row,
+`demo.foodx.bond`, for the demo restaurant — not a real DNS record,
+for code-path testing only) follow the same rule: demo restaurant
+only, local/development only, **never run against production**.
+
 ## Deploy
 
 ### Vercel (frontend)
@@ -141,8 +159,8 @@ database). To provision a new restaurant:
 
 1. Create a new Supabase project (region: Singapore for Bangladesh
    deployments, unless the customer needs otherwise).
-2. Apply `supabase/migrations/0001_foundation.sql` and
-   `supabase/migrations/0002_core.sql` (see above).
+2. Apply `supabase/migrations/0001_foundation.sql` through
+   `supabase/migrations/0007_digital_ordering.sql` (see above).
 3. Point the restaurant's Vercel deployment at that project with the two
    env vars above.
 4. Create the first user via Supabase Auth (Dashboard → Authentication →
@@ -324,6 +342,94 @@ There is no automated provisioning yet — that is later-phase work.
   `loyalty_transactions` and `coupon_redemptions` are **append-only**
   (see [DATABASE.md](DATABASE.md#phase-4-tables-customers)).
 
+## What Phase 5 adds
+
+- **One domain per restaurant** — the customer-facing decision: each
+  restaurant gets its own domain (e.g. `addabuzz.com`). The root of
+  that domain serves the restaurant's public menu + online ordering
+  with **no login**; the same domain under `/panel` serves the FoodX
+  admin (login, locked to that restaurant — an account for a different
+  restaurant sees an honest notice, never the admin). `foodx.bond`
+  stays the platform's main domain. Each restaurant owns its domain
+  and points DNS at Vercel; the Developer connects it in Vercel and
+  maps it in the system (see [DEPLOYMENT.md](DEPLOYMENT.md)).
+- **Hostname routing** (`src/app/App.tsx`) — platform hosts
+  (`foodx.bond`, `www.foodx.bond`, `*.vercel.app`, `localhost`) run
+  today's admin app unchanged; any other hostname is resolved with
+  `resolve_restaurant_by_domain()` — a match serves the storefront at
+  `/` and the admin under `/panel` (basename `/panel` + the panel
+  lock in `ProtectedRoute`); no match renders an honest "domain not
+  connected" page with a link to foodx.bond (never the admin login).
+- **Storefront** (`src/modules/storefront/StorefrontPage.tsx`, no auth,
+  no app layout) — restaurant header (logo, name, own primary colour),
+  language toggle, category chips + search, product list with variant
+  picker and modifier checkboxes, availability badges from the
+  inventory service (0 = "Out of stock", 1–4 = "Only N left"), cart
+  with quantities, and checkout (name + phone required; Dine-in only
+  when `?table=` is present, Pickup, Delivery only when enabled).
+  **No second pricing engine**: the cart preview is priced from the
+  loaded catalog with the same `computeOrderTotals()` the POS uses,
+  and placement sends only ids + quantities — the server re-reads
+  every price. After placing, the confirmation screen shows the big
+  order number, the total, a "pay at the restaurant" note, and a live
+  status line polled every 30 seconds.
+- **Public preview** — on a platform host, `?store=<slug>` opens the
+  storefront for that slug (and `?store=<slug>&table=<code>` pre-selects
+  a table), so the feature can be tested without a real restaurant
+  domain. Menus are public data by design.
+- **Server-side online ordering** — three `SECURITY DEFINER` functions
+  (granted to `anon` + `authenticated`):
+  `resolve_restaurant_by_domain(p_domain)` (id/slug/name only),
+  `place_online_order(...)` (validates the restaurant, delivery type
+  and rules, every item, re-reads prices, computes totals exactly like
+  `computeOrderTotals`, creates the order + items + modifiers + one
+  history row, links/creates the customer by phone, deducts stock,
+  returns order id + number — all in one atomic function; no payment
+  row, the order is unpaid), and `get_online_order_status(...)`
+  (returns status + total only when the phone matches). All failures
+  raise short machine-readable codes (`unknown_restaurant`,
+  `invalid_item`, `table_not_found`, `delivery_not_available`,
+  `min_order_not_met`, …). **No anti-spam/CAPTCHA on the public order
+  endpoint in v1** — rate limiting is later work.
+- **QR codes + NFC** (`/tables`) — each table now gets a **real QR
+  code image** (generated locally with the `qrcode` library, no
+  network call), a "Print QR" button (print-friendly view with the
+  restaurant + table name), and the NFC value with a copy button and a
+  "Save NFC value" button. The URL is
+  `https://<primary domain>/?table=<qr value>` when a primary domain
+  is set, otherwise the platform preview URL
+  (`https://www.foodx.bond/?store=<slug>&table=<code>`).
+- **Domains + delivery in Settings** — a Domains section lists the
+  restaurant's domains (primary badge, set-primary, delete), an
+  add-domain form, and the DNS instructions (A @ → 216.198.79.1,
+  CNAME www → `e933cba5c7a21370.vercel-dns-017.com`, proxy OFF) plus
+  the note that the Developer must also add the domain in Vercel. A
+  Delivery card sets delivery on/off, the delivery fee, and the
+  minimum order for delivery/pickup (0 = no minimum). All money
+  inputs are `type="text"` + `inputMode="decimal"` with string state,
+  parsed + `roundMoney` on submit (the Phase 3 lesson).
+- **Online orders in the admin** — Orders list + detail show the order
+  source (POS / QR / Online) and, on the detail, the customer
+  name/phone/address (read-only). KDS shows online/QR orders exactly
+  like POS orders (its query never filtered by source). A new order
+  type, `pickup`, is handled everywhere the type is labelled (POS
+  key added; the POS selector itself is unchanged).
+- **Honest limits** — online payment is **NOT implemented**: v1 is
+  pay at the restaurant (cash/card on delivery/pickup). Coupons and
+  loyalty **redemption** are POS-only in v1; online orders still
+  **earn** loyalty points when they complete (via `completeOrder` →
+  `awardLoyaltyPoints`).
+- **Database** — 1 new table (`restaurant_domains`), new columns on
+  `orders` (`source`, `customer_name`, `customer_phone`,
+  `delivery_address`, `delivery_fee`; `type` widened to include
+  `pickup`), on `restaurant_settings` (`delivery_enabled`,
+  `delivery_fee`, `min_order_amount`) and on `tables` (`nfc_value`);
+  a public `restaurant_storefronts` view (anon + authenticated
+  SELECT); anon SELECT policies on the menu tables (none carries a
+  sensitive column — `products` has no `cost_price`); the three
+  functions above (see
+  [DATABASE.md](DATABASE.md#phase-5-tables-digital-ordering)).
+
 ## What is not built yet
 
 Everything below is planned for later phases and is **not** in this repo.
@@ -332,7 +438,9 @@ Do not assume it exists.
 | Area | Status |
 | --- | --- |
 | Kitchen display (KDS), inventory, purchases, expenses | KDS built (Phase 2); inventory + purchases built (Phase 3); expenses not started |
-| Customers, loyalty, coupons | Built (Phase 4); delivery, online ordering not started |
+| Customers, loyalty, coupons | Built (Phase 4); delivery settings + online ordering built (Phase 5); online payment not started |
+| Online payment | Not started — v1 is pay at the restaurant |
+| Rate limiting / anti-spam on the public order endpoint | Not started (later work) |
 | Reports / analytics | Not started (recharts is installed but unused) |
 | Role editing / assigning permissions to roles | Read-only view only; the `role_permissions` table is seeded **empty** — the matrix shows all dashes until assignments are made (a later phase) |
 | Branch management UI | The `branches` table exists; no UI or service touches it yet |
@@ -344,7 +452,7 @@ Do not assume it exists.
 | Docker packaging | Not started |
 
 The 9-phase plan is: 1 Foundation → 2 Core Restaurant → 3 Inventory
-→ 4 Customers (this repo) → 5 Digital Ordering → 6 Delivery → 7 Business
+→ 4 Customers → 5 Digital Ordering (this repo) → 6 Delivery → 7 Business
 → 8 Developer Platform → 9 Production Hardening. Phase numbers in code
 comments refer to this plan.
 

@@ -65,6 +65,7 @@ const ORDER_TYPE_KEYS: Record<OrderType, string> = {
   dine_in: 'pos.dineIn',
   takeaway: 'pos.takeaway',
   delivery: 'pos.delivery',
+  pickup: 'pos.pickup',
 }
 
 const PAYMENT_METHOD_KEYS: Record<PaymentMethod, string> = {

@@ -35,6 +35,9 @@ export interface RestaurantSettings {
   receipt_footer: string | null
   loyalty_earn_per_100: number
   loyalty_point_value: number
+  delivery_enabled: boolean
+  delivery_fee: number
+  min_order_amount: number
 }
 
 export interface Role {
@@ -73,6 +76,9 @@ export interface RestaurantFormValues {
   receipt_footer: string
   loyalty_earn_per_100: number
   loyalty_point_value: number
+  delivery_enabled: boolean
+  delivery_fee: number
+  min_order_amount: number
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +96,11 @@ export type OrderStatus =
   | 'CANCELLED'
   | 'REFUNDED'
 
-export type OrderType = 'dine_in' | 'takeaway' | 'delivery'
+export type OrderType = 'dine_in' | 'takeaway' | 'delivery' | 'pickup'
+
+/** Where an order came from: the counter POS, a table QR scan, or the
+ * public online storefront. */
+export type OrderSource = 'POS' | 'QR' | 'ONLINE'
 
 export type PaymentMethod = 'cash' | 'card' | 'bkash' | 'nagad' | 'bank' | 'due'
 
@@ -191,6 +201,8 @@ export interface DiningTable {
   seats: number
   status: TableStatus
   qr_code: string | null
+  /** The URL written to the table's NFC tag (same URL as the QR code). */
+  nfc_value: string | null
 }
 
 export interface Order {
@@ -200,13 +212,21 @@ export interface Order {
   table_id: string | null
   order_number: number
   type: OrderType
+  source: OrderSource
   status: OrderStatus
   subtotal: number
   discount_amount: number
   tax_amount: number
   service_charge_amount: number
   total_amount: number
+  /** Delivery fee charged on this order (0 unless type is 'delivery'). */
+  delivery_fee: number
   customer_id: string | null
+  /** Guest contact for QR / online orders (the POS leaves these null —
+   * its customers live on the customer record instead). */
+  customer_name: string | null
+  customer_phone: string | null
+  delivery_address: string | null
   coupon_id: string | null
   coupon_discount: number
   loyalty_points_redeemed: number
@@ -529,4 +549,74 @@ export interface CouponRedemption {
   order_id: string
   discount_amount: number
   created_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 — Digital Ordering (mirror supabase/migrations/0007_digital_ordering.sql)
+// ---------------------------------------------------------------------------
+
+/** One custom domain owned by a restaurant (e.g. addabuzz.com). */
+export interface RestaurantDomain {
+  id: string
+  restaurant_id: string
+  domain: string
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** What resolve_restaurant_by_domain() returns for a hostname. */
+export interface ResolvedDomain {
+  restaurant_id: string
+  slug: string
+  name: string
+}
+
+/** One row of the public restaurant_storefronts view — the only
+ * restaurant info the storefront is allowed to read. */
+export interface StorefrontInfo {
+  restaurant_id: string
+  slug: string
+  name: string
+  default_currency: string
+  timezone: string
+  branding_name: string | null
+  logo_url: string | null
+  primary_color: string | null
+  currency: string | null
+  tax_rate: number
+  service_charge_rate: number
+  delivery_enabled: boolean
+  delivery_fee: number
+  min_order_amount: number
+}
+
+/** One line of an online order as the storefront sends it (ids +
+ * quantity only — place_online_order() re-reads all prices). */
+export interface OnlineOrderLineInput {
+  productId: string
+  variantId?: string | null
+  modifierIds: string[]
+  quantity: number
+}
+
+export interface PlaceOnlineOrderInput {
+  slug: string
+  tableCode?: string | null
+  deliveryType: OrderType
+  customerName: string
+  customerPhone: string
+  deliveryAddress?: string | null
+  items: OnlineOrderLineInput[]
+}
+
+export interface PlacedOnlineOrder {
+  orderId: string
+  orderNumber: number
+  tableName: string | null
+}
+
+export interface OnlineOrderStatus {
+  status: OrderStatus
+  totalAmount: number
 }

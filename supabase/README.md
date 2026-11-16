@@ -1,9 +1,10 @@
 # FoodX — Supabase
 
 Database layer for FoodX (Phase 1: Foundation; Phase 2: Core Restaurant;
-Phase 3: Inventory). One master codebase, one separate database per
-restaurant — **not** multi-tenant SaaS. Row Level Security below is a
-second layer of defence inside a single restaurant's database.
+Phase 3: Inventory; Phase 4: Customers; Phase 5: Digital Ordering).
+One master codebase, one separate database per restaurant — **not**
+multi-tenant SaaS. Row Level Security below is a second layer of
+defence inside a single restaurant's database.
 
 ## Files
 
@@ -15,10 +16,12 @@ second layer of defence inside a single restaurant's database.
 | `migrations/0004_cancel_restock.sql` | Cancel restocks: RESTOCK movement type + `restock_for_order()` |
 | `migrations/0005_customers.sql` | Customers, loyalty transactions, coupons, coupon redemptions; loyalty rates on `restaurant_settings` |
 | `migrations/0006_fix_customers_schema.sql` | Corrective, idempotent: the live DB got a stale draft of 0005 (draft column names, missing columns) — renames/adds bring it to the exact 0005 state; no-op on a DB where 0005 applied correctly |
+| `migrations/0007_digital_ordering.sql` | Restaurant domains, online-order columns, delivery settings, NFC value, `restaurant_storefronts` view, anon menu policies, `resolve_restaurant_by_domain()` / `place_online_order()` / `get_online_order_status()` |
 | `seed.sql` | Demo data only — never run against production |
 | `seed_phase2.sql` | Demo menu + tables for the demo restaurant only — never run against production |
 | `seed_phase3.sql` | Demo stock, recipes + supplier for the demo restaurant only — never run against production |
 | `seed_phase4.sql` | Demo customers + coupon for the demo restaurant only — never run against production |
+| `seed_phase5.sql` | Demo domain row (`demo.foodx.bond`) for the demo restaurant only — never run against production |
 
 ## Applying the migration
 
@@ -40,10 +43,12 @@ to a shared database — add a new migration instead.
 
 Open the Supabase Dashboard → SQL Editor → New query, paste the full
 contents of `migrations/0001_foundation.sql`, and run it. Repeat for each
-later migration, in order — `migrations/0002_core.sql` and
-`migrations/0003_inventory.sql` are applied the same way. (The SQL editor
+later migration, in order — `migrations/0002_core.sql` through
+`migrations/0007_digital_ordering.sql` are applied the same way. (The SQL editor
 runs as `postgres`, which bypasses RLS, so the seed inserts in the
-migration succeed.)
+migration succeed.) **Paste from the fresh raw GitHub URL every time,
+and verify the new tables' columns afterwards, not just their names**
+— migration 0005 was once applied from a stale draft (fixed by 0006).
 
 ## RLS isolation model
 
@@ -169,6 +174,38 @@ loyalty transactions, or redemptions**. Run it only against a
 local/development project, as `postgres` / `service_role`, after
 `seed.sql`. Removal SQL is in the file header; deleting the demo
 restaurant cascades everything.
+
+## Demo seed — Phase 5 (`seed_phase5.sql`)
+
+Adds one demo domain row for the demo restaurant only (fixed UUID,
+repeat-safe): `demo.foodx.bond`, marked primary. It is **not a real
+DNS record** — it exists only so the domain-resolution code path can
+be tested locally. Run it only against a local/development project,
+as `postgres` / `service_role`, after `seed.sql`. Removal SQL is in
+the file header; deleting the demo restaurant cascades everything.
+
+## Public surface (Phase 5)
+
+The storefront is public by design, so Phase 5 opens a narrow hole in
+the otherwise `authenticated`-only model:
+
+- `FOR SELECT TO anon USING (true)` on the five menu tables
+  (`categories`, `products`, `product_variants`, `product_modifiers`,
+  `modifiers`) — checked first: none carries a sensitive column
+  (`products` has no `cost_price`).
+- SELECT on the `restaurant_storefronts` view to `anon` +
+  `authenticated`.
+- EXECUTE on `resolve_restaurant_by_domain()`,
+  `place_online_order()` and `get_online_order_status()` to `anon` +
+  `authenticated`.
+
+Everything else — orders, customers, inventory, settings — stays
+`authenticated`-only, and the anonymous caller reaches it only
+through the three functions. `place_online_order()` deducts stock
+**inline** rather than calling `deduct_stock_for_order()`, because
+that function verifies the item belongs to the caller's restaurant
+via `current_restaurant_id()`, which is NULL for an anonymous caller
+(see [DATABASE.md](../DATABASE.md#phase-5-tables-digital-ordering)).
 
 ## Feature flags
 

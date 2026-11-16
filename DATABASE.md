@@ -751,11 +751,134 @@ preview uses the same function as `createOrder()`, so the preview and
 the placed order always agree. Coupon discount: PERCENT →
 `roundMoney(subtotal × value / 100)`, FIXED → `min(value, subtotal)`.
 
+## Phase 5 tables (Digital Ordering)
+
+Source of truth: `supabase/migrations/0007_digital_ordering.sql`.
+
+### `restaurant_domains`
+
+One row per domain a restaurant owns (e.g. `addabuzz.com`). The
+domain is stored **lowercase, trimmed**; UNIQUE across all
+restaurants. One primary per restaurant is enforced **in the service**
+(`setPrimaryDomain()` clears the other primaries first), not in the
+DB — there is no partial unique index for it.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `domain` | `text` NOT NULL UNIQUE | Lowercase, trimmed; platform hosts are rejected by the service, not the DB |
+| `is_primary` | `boolean` NOT NULL DEFAULT `false` | The domain QR codes + NFC tags point at |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### New columns on existing tables
+
+| Table | Column | Type / default | Notes |
+| --- | --- | --- | --- |
+| `orders` | `source` | `text` NOT NULL DEFAULT `'POS'`, CHECK in `POS / QR / ONLINE` | Added via a conditional DO block (only if no such check exists, same style as 0006); existing POS orders get `'POS'` |
+| `orders` | `customer_name` | `text` NULL | Walk-in / online customer name (no FK — the `customers` row is linked separately via `customer_id` when a phone matches) |
+| `orders` | `customer_phone` | `text` NULL | Used by `get_online_order_status()` to prove the caller owns the order |
+| `orders` | `delivery_address` | `text` NULL | Delivery only |
+| `orders` | `delivery_fee` | `numeric(12,2)` NOT NULL DEFAULT `0` | Charged on delivery; part of the stored total |
+| `orders` | `type` | CHECK widened to `DINE_IN / TAKEAWAY / DELIVERY / PICKUP` | The existing `type` column IS the delivery type — no separate `delivery_type` column was added; the CHECK is dropped and re-added in a conditional DO block |
+| `restaurant_settings` | `delivery_enabled` | `boolean` NOT NULL DEFAULT `false` | Home delivery on/off |
+| `restaurant_settings` | `delivery_fee` | `numeric(12,2)` NOT NULL DEFAULT `0` | Added to the total when the order type is DELIVERY |
+| `restaurant_settings` | `min_order_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | Minimum subtotal for DELIVERY/PICKUP; 0 = no minimum |
+| `tables` | `nfc_value` | `text` NULL | The URL to write to the table's NFC tag — the same URL the QR code encodes |
+
+### `restaurant_storefronts` (view)
+
+The storefront reads restaurant info **only through this view, never
+the base tables**. It joins `restaurants` + `restaurant_settings` and
+exposes `id, slug, name, logo_url, default_currency, timezone,
+branding_name, primary_color, currency, tax_rate, service_charge_rate,
+delivery_enabled, delivery_fee, min_order_amount`. SELECT is granted
+to `anon` + `authenticated`. There is no tagline column anywhere —
+the storefront shows the restaurant name (or `branding_name`).
+
+### Public menu: anon SELECT policies
+
+A public menu must be readable without login, so Phase 5 adds
+`FOR SELECT TO anon USING (true)` policies on `categories`,
+`products`, `product_variants`, `product_modifiers` and `modifiers`.
+This was checked first: **none of those tables carries a sensitive
+column** — `products` has no `cost_price` — so the open policies are
+safe. All writes on those tables stay `authenticated`-only. Nothing
+else is open to anon: orders, customers, inventory and settings are
+still `authenticated`-only, and the anonymous caller reaches them only
+through the three functions below.
+
+### The three public functions
+
+All three are `SECURITY DEFINER`, granted EXECUTE to `anon` +
+`authenticated`, and validate that the restaurant exists and is
+`status = 'active'` (the `restaurants` table has a `status` column,
+not `is_active`).
+
+- **`resolve_restaurant_by_domain(p_domain text)`** — lowercases +
+  trims the input, joins `restaurant_domains` → `restaurants`, exact
+  match first, then a `www.`-stripped fallback. Returns at most one
+  row: `(restaurant_id, slug, name)`. No other data leaves the
+  function. Used by the app boot to decide storefront vs admin.
+- **`place_online_order(p_slug, p_table_code, p_delivery_type,
+  p_customer_name, p_customer_phone, p_delivery_address, p_items
+  jsonb)`** — the server-side order path, all in ONE function so it
+  is atomic. It resolves the restaurant by slug, validates the
+  delivery type and the delivery rules (DELIVERY needs
+  `delivery_enabled`, a non-empty address and subtotal ≥
+  `min_order_amount` when min > 0; PICKUP also checks the minimum;
+  DINE_IN needs a table whose `qr_code` equals `p_table_code`),
+  validates every item (product exists, belongs to this restaurant,
+  `is_active`, positive integer quantity; variant/modifier ids must
+  belong to the product), **re-reads all prices from the DB** (never
+  trusts client prices), computes subtotal + tax + service charge
+  exactly like `computeOrderTotals()` (tax + service on the taxable
+  amount, delivery fee added after tax, untaxed), links/creates the
+  customer by phone (upsert on `(restaurant_id, phone)` — the name is
+  set only when creating, never overwritten), creates the order
+  (`source` = `'QR'` when a table code is set, else `'ONLINE'`,
+  status `'CONFIRMED'`, order number = per-restaurant MAX+1 with the
+  unique-constraint retry pattern from `pos.ts`), its items +
+  modifiers with price snapshots, one history row, marks a dine-in
+  table occupied, deducts stock, and returns `(order_id,
+  order_number, table_name)`. **No payment row is created** — v1
+  takes no payment online; the order is unpaid and due = total.
+  On any validation failure it raises a short machine-readable
+  message (`unknown_restaurant`, `invalid_delivery_type`,
+  `customer_required`, `empty_order`, `invalid_item`,
+  `table_not_found`, `delivery_not_available`,
+  `delivery_address_required`, `min_order_not_met`).
+- **`get_online_order_status(p_slug, p_order_number, p_phone)`** —
+  returns `(status, total_amount)` only when the phone matches the
+  order's `customer_phone`; zero rows otherwise, so strangers cannot
+  enumerate orders.
+
+**Sharp edge — stock deduction inside `place_online_order` is INLINE,
+not a call to `deduct_stock_for_order()`.** That function (and
+`apply_stock_movement()`) verifies the item belongs to the caller's
+restaurant via `current_restaurant_id()`, which is NULL for an
+anonymous caller (no profile), so calling it would raise "belongs to
+another restaurant". The inline code inserts the SALE movement +
+updates the quantity per ingredient in the same shape, after the
+function already validated the restaurant by slug. If the deduction
+helpers ever change, this copy must change with them.
+
+**Honest limits (v1):** no anti-spam / CAPTCHA on the public order
+endpoint — rate limiting is later work. Coupons and loyalty
+**redemption** are POS-only; online orders still **earn** loyalty
+points when they complete (`completeOrder()` →
+`awardLoyaltyPoints()` reads `order.customer_id` + `total_amount`,
+and `created_by` NULL is fine).
+
 ## Row Level Security
 
-RLS is enabled on **all 32 tables**. Every policy is `TO authenticated`
-— the `anon` role has no direct table access at all; it can only
-authenticate. All policies are defined in `0001_foundation.sql`; the
+RLS is enabled on **all 33 tables**. Most policies are
+`TO authenticated` — but Phase 5 opens a narrow public surface for
+the storefront: `FOR SELECT TO anon` policies on the five menu tables
+(`categories`, `products`, `product_variants`, `product_modifiers`,
+`modifiers`), SELECT on the `restaurant_storefronts` view, and
+EXECUTE on the three public functions. Everything else stays
+`authenticated`-only. All policies are defined in `0001_foundation.sql`; the
 summary below is not a substitute for reading them.
 
 ### The helper: `public.current_restaurant_id()`
@@ -787,11 +910,11 @@ evaluates to deny.
 | `feature_flags` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `audit_logs` | Own restaurant | Own restaurant, or `restaurant_id IS NULL` for system events | — (insert-only) | — (insert-only) |
 | `kitchen_stations` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
-| `categories` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
-| `modifiers` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
-| `products` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
-| `product_variants` | Scoped through the parent product's restaurant | Same | Same | Same |
-| `product_modifiers` | Scoped through the parent product's restaurant | Same | — (no policy) | Same |
+| `categories` | Own restaurant (+ `anon` SELECT — public menu, Phase 5) | Own restaurant | Own restaurant | Own restaurant |
+| `modifiers` | Own restaurant (+ `anon` SELECT — public menu, Phase 5) | Own restaurant | Own restaurant | Own restaurant |
+| `products` | Own restaurant (+ `anon` SELECT — public menu, Phase 5) | Own restaurant | Own restaurant | Own restaurant |
+| `product_variants` | Scoped through the parent product's restaurant (+ `anon` SELECT — public menu, Phase 5) | Same | Same | Same |
+| `product_modifiers` | Scoped through the parent product's restaurant (+ `anon` SELECT — public menu, Phase 5) | Same | — (no policy) | Same |
 | `tables` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `orders` | Own restaurant | Own restaurant | Own restaurant | — (**no DELETE policy**: financial history is never hard-deleted) |
 | `order_items` | Scoped through the parent order's restaurant | Same | Only while the parent order is `DRAFT` | — (no DELETE policy) |
@@ -804,6 +927,7 @@ evaluates to deny.
 | `suppliers` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `purchase_orders` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `purchase_order_items` | Scoped through the parent purchase order's restaurant | Same | Only while the parent order is `DRAFT` or `ORDERED` | Same |
+| `restaurant_domains` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 
 Notes and sharp edges:
 
@@ -814,7 +938,7 @@ Notes and sharp edges:
   provisioning/licensing flow lands, revisit this policy.
 - **`profiles` UPDATE/DELETE are self-only.** An admin cannot edit or
   deactivate another user's profile through RLS in Phase 1; staff
-  management (Phase 5) will need a policy or service-role path for that.
+  management (a later phase) will need a policy or service-role path for that.
 - **System roles are read-only through RLS.** Nobody can create, edit,
   or delete a `restaurant_id IS NULL` role via the app; only migrations /
   service role can.
@@ -881,12 +1005,13 @@ Seeded by the migration, grouped by module. Keys are `<module>.<action>`.
 | `kitchen` (2) | `kitchen.view`, `kitchen.manage` |
 | `delivery` (3) | `delivery.view`, `delivery.manage`, `delivery.assign` |
 
-**Important:** these keys describe *future* modules. The tables and pages
-for orders, inventory, products, etc. do not exist yet, and **no
-permission is assigned to any role** — `role_permissions` is seeded
-empty, so the Roles page matrix is all dashes until an admin assigns
-them. Nothing in the app checks permissions yet; enforcement is Phase 5
-work. Do not treat the existence of a key as proof the feature exists.
+**Important:** these keys describe the full module set. Some of them
+(orders, inventory, products, customers, …) now exist as tables and
+pages; others (expenses, delivery, …) do not yet. **No permission is
+assigned to any role** — `role_permissions` is seeded empty, so the
+Roles page matrix is all dashes until an admin assigns them. Nothing
+in the app checks permissions yet; enforcement is later-phase work.
+Do not treat the existence of a key as proof the feature exists.
 
 ## Migration versioning
 
