@@ -47,6 +47,16 @@
 --
 -- IDEMPOTENT where practical (IF NOT EXISTS, conditional DO blocks).
 -- 0 DROP TABLE / DELETE FROM / TRUNCATE.
+--
+-- NOTE (2026-11-17): three lines in place_online_order() originally read
+-- "end;" where "end if;" belonged (the v_quantity, v_product_id and
+-- v_product_price null checks). The live 0007 run used the corrected text
+-- (fixed in the SQL Editor before running), and this file was corrected
+-- afterwards to match what was actually applied — a fresh install applying
+-- 0007 as first committed would have failed at CREATE FUNCTION with
+-- 42601. pglast cannot catch this: a PL/pgSQL body is an opaque string
+-- literal to the outer parser. Migration 0008 also redefines the function
+-- with these fixes plus the stock_row rename.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -402,7 +412,7 @@ begin
     end;
     if v_quantity is null or v_quantity <= 0 then
       raise exception 'invalid_item';
-    end;
+    end if;
     begin
       v_product_id := (v_item ->> 'product_id')::uuid;
       v_variant_id := nullif(v_item ->> 'variant_id', '')::uuid;
@@ -411,7 +421,7 @@ begin
     end;
     if v_product_id is null then
       raise exception 'invalid_item';
-    end;
+    end if;
 
     select p.price, p.name into v_product_price, v_product_name
     from public.products p
@@ -420,7 +430,7 @@ begin
       and p.is_available = true;
     if v_product_price is null then
       raise exception 'invalid_item';
-    end;
+    end if;
 
     v_unit_price := v_product_price;
     if v_variant_id is not null then

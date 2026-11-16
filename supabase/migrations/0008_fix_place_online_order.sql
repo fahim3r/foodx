@@ -144,7 +144,7 @@ begin
     end;
     if v_quantity is null or v_quantity <= 0 then
       raise exception 'invalid_item';
-    end;
+    end if;
     begin
       v_product_id := (v_item ->> 'product_id')::uuid;
       v_variant_id := nullif(v_item ->> 'variant_id', '')::uuid;
@@ -153,7 +153,7 @@ begin
     end;
     if v_product_id is null then
       raise exception 'invalid_item';
-    end;
+    end if;
 
     select p.price, p.name into v_product_price, v_product_name
     from public.products p
@@ -162,7 +162,7 @@ begin
       and p.is_available = true;
     if v_product_price is null then
       raise exception 'invalid_item';
-    end;
+    end if;
 
     v_unit_price := v_product_price;
     if v_variant_id is not null then
