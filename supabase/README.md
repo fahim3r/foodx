@@ -14,6 +14,7 @@ second layer of defence inside a single restaurant's database.
 | `migrations/0003_inventory.sql` | Stock, recipes, suppliers, purchases, movements |
 | `migrations/0004_cancel_restock.sql` | Cancel restocks: RESTOCK movement type + `restock_for_order()` |
 | `migrations/0005_customers.sql` | Customers, loyalty transactions, coupons, coupon redemptions; loyalty rates on `restaurant_settings` |
+| `migrations/0006_fix_customers_schema.sql` | Corrective, idempotent: the live DB got a stale draft of 0005 (draft column names, missing columns) — renames/adds bring it to the exact 0005 state; no-op on a DB where 0005 applied correctly |
 | `seed.sql` | Demo data only — never run against production |
 | `seed_phase2.sql` | Demo menu + tables for the demo restaurant only — never run against production |
 | `seed_phase3.sql` | Demo stock, recipes + supplier for the demo restaurant only — never run against production |

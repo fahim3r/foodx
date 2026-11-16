@@ -618,6 +618,8 @@ refunded order was already served, its food is gone.
 
 ## Phase 4 tables (Customers)
 
+> 2026-11-16: migration 0005 was applied to the live database from a STALE DRAFT of the file (the apply pasted 275 lines; the committed file is 248 lines) — the live tables had draft column names (`discount_type`, `txn_type`, …) and were missing `address`, `notes`, `is_active`, `max_uses` and `created_by`, so every Phase 4 write failed. Migration `0006_fix_customers_schema.sql` (idempotent) corrects the live schema to exactly the 0005 state. Lesson: after applying a migration, verify the COLUMNS (not just the table names) before calling it done.
+
 Source of truth: `supabase/migrations/0005_customers.sql`.
 
 ### `customers`
