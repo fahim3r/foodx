@@ -298,6 +298,130 @@ export interface KitchenStationGroup {
   orders: KitchenOrder[]
 }
 
+// ---------------------------------------------------------------------------
+// Phase 3 — Inventory (mirror supabase/migrations/0003_inventory.sql)
+// ---------------------------------------------------------------------------
+
+export type StockMovementType =
+  | 'PURCHASE'
+  | 'SALE'
+  | 'ADJUSTMENT'
+  | 'WASTE'
+  | 'TRANSFER_IN'
+  | 'TRANSFER_OUT'
+
+/** One stock item (ingredient / raw material). current_quantity changes
+ * ONLY through stock_movements via apply_stock_movement() — the item
+ * edit form has no quantity field and updateInventoryItem's patch type
+ * excludes it on purpose. */
+export interface InventoryItem {
+  id: string
+  restaurant_id: string
+  name: string
+  unit: string
+  current_quantity: number
+  low_stock_threshold: number
+  cost_price: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** One recipe line: how much of an ingredient one serving uses. */
+export interface ProductRecipe {
+  id: string
+  restaurant_id: string
+  product_id: string
+  inventory_item_id: string
+  quantity_per_unit: number
+  created_at: string
+}
+
+/** A recipe line with its ingredient attached. */
+export interface ProductRecipeWithItem extends ProductRecipe {
+  item: InventoryItem
+}
+
+/** One audited stock change. Append-only: created only by
+ * apply_stock_movement() / deduct_stock_for_order(). */
+export interface StockMovement {
+  id: string
+  restaurant_id: string
+  inventory_item_id: string
+  movement_type: StockMovementType
+  quantity_change: number
+  reference_type: string | null
+  reference_id: string | null
+  reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
+/** A stock movement with its item's name + unit attached. */
+export interface StockMovementWithItem extends StockMovement {
+  item_name: string
+  item_unit: string
+}
+
+export interface Supplier {
+  id: string
+  restaurant_id: string
+  name: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type PurchaseOrderStatus = 'DRAFT' | 'ORDERED' | 'RECEIVED' | 'CANCELLED'
+
+export interface PurchaseOrder {
+  id: string
+  restaurant_id: string
+  supplier_id: string
+  status: PurchaseOrderStatus
+  order_date: string
+  total_amount: number
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PurchaseOrderItem {
+  id: string
+  purchase_order_id: string
+  inventory_item_id: string
+  quantity: number
+  unit_cost: number
+  received_quantity: number
+}
+
+/** A purchase-order line with its item's name + unit attached. */
+export interface PurchaseOrderItemWithItem extends PurchaseOrderItem {
+  item_name: string
+  item_unit: string
+}
+
+/** A purchase order with its supplier name and lines attached. */
+export interface PurchaseOrderWithDetails extends PurchaseOrder {
+  supplier_name: string
+  items: PurchaseOrderItemWithItem[]
+}
+
+/** Purchase-order state machine. RECEIVED is final; CANCELLED only from
+ * DRAFT or ORDERED. Enforced by the purchases service. */
+export const PURCHASE_ORDER_TRANSITIONS: Record<
+  PurchaseOrderStatus,
+  PurchaseOrderStatus[]
+> = {
+  DRAFT: ['ORDERED', 'CANCELLED'],
+  ORDERED: ['RECEIVED', 'CANCELLED'],
+  RECEIVED: [],
+  CANCELLED: [],
+}
+
 /** An order as the KDS sees it: only its items for one station. */
 export interface KitchenOrder {
   order: Order

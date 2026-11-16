@@ -179,7 +179,7 @@ There is no automated provisioning yet — that is later-phase work.
   restaurant everywhere. Defaults: orange `#ea580c`, green `#16a34a`.
 - **Database** — 10 tables, RLS isolation, 12 system roles, 39 permissions
   (see [DATABASE.md](DATABASE.md)).
-- **i18n** — full English + Bangla UI, 361 keys, no missing keys in either
+- **i18n** — full English + Bangla UI, 469 keys, no missing keys in either
   language. Fallback language is English.
 - **PWA manifest** — installable manifest (name, icons, theme colour
   `#ea580c`). The service worker currently precaches **nothing**
@@ -224,6 +224,51 @@ There is no automated provisioning yet — that is later-phase work.
   append-only payment + status-history tables (see
   [DATABASE.md](DATABASE.md#phase-2-tables-core-restaurant)).
 
+## What Phase 3 adds
+
+- **Inventory** (`/inventory`, nav "Inventory") — five tabs: Items,
+  Recipes, Suppliers, Purchases, Movements.
+- **Stock items** — name, unit (kg / litre / pcs — free text),
+  low-stock threshold, cost price, active flag. The item form has **no
+  quantity field**: stock quantities change only through movements (see
+  below). Low stock is highlighted amber; negative stock red, with a
+  warning that purchases/sales need checking. Total stock value is
+  shown (quantity × cost price, summed).
+- **Recipes** — each menu product links to ingredients with a quantity
+  per serving (e.g. Chicken Burger = 1 Bun + 0.15 kg Chicken + 0.02 kg
+  Cheese). The recipe tab shows how many servings the current stock
+  allows; a product with no recipe is not stock-limited.
+- **Stock movements (audit trail)** — every stock change writes a
+  `stock_movements` row (who, when, type, signed quantity, reason,
+  reference). The table is **append-only**: no UPDATE/DELETE policy at
+  all, and rows are created only by the two database functions — a
+  wrong movement is corrected by a new ADJUSTMENT / WASTE movement,
+  never by editing history. Types: PURCHASE, SALE, ADJUSTMENT, WASTE,
+  TRANSFER_IN, TRANSFER_OUT.
+- **Adjust / Waste** — manual correction or spoilage, both with a
+  **required reason** (silent corrections are refused).
+- **Suppliers** — name, phone, email, address; a supplier with any
+  purchase order cannot be deleted.
+- **Purchase orders** — DRAFT → ORDERED → RECEIVED, CANCELLED from
+  DRAFT or ORDERED only. Receiving is **full receipt only**: every line
+  at its ordered quantity, one PURCHASE movement per line. Partial
+  receiving is **not implemented** and the page says so. Receiving is
+  idempotent per line (a retried receive cannot double-add stock).
+- **POS stock deduction** — placing an order deducts recipe ingredients
+  via `deduct_stock_for_order()` (idempotent — a retried placement
+  cannot double-deduct). The POS shows products with 0 servable
+  servings as **Out of stock** (cannot be added) and 1–4 servable with
+  an "Only N left" badge. A sale is never blocked for stock reasons:
+  deduction may take stock negative, and negatives are highlighted in
+  the stock list. **Cancelling an order does NOT restock ingredients**
+  (not implemented).
+- **Dashboard** — a low-stock line links to `/inventory` (real count,
+  honest "All stock levels are OK" state; hidden entirely when the
+  Phase 3 tables are not applied yet).
+- **Database** — 6 new tables, RLS on all of them, and two SECURITY
+  DEFINER functions (`apply_stock_movement`, `deduct_stock_for_order`)
+  (see [DATABASE.md](DATABASE.md#phase-3-tables-inventory)).
+
 ## What is not built yet
 
 Everything below is planned for later phases and is **not** in this repo.
@@ -231,7 +276,7 @@ Do not assume it exists.
 
 | Area | Status |
 | --- | --- |
-| Kitchen display (KDS), inventory, purchases, expenses | KDS is built (Phase 2); inventory, purchases, expenses not started |
+| Kitchen display (KDS), inventory, purchases, expenses | KDS built (Phase 2); inventory + purchases built (Phase 3); expenses not started |
 | Customers, loyalty, delivery, online ordering | Not started |
 | Reports / analytics | Not started (recharts is installed but unused) |
 | Role editing / assigning permissions to roles | Read-only view only; the `role_permissions` table is seeded **empty** — the matrix shows all dashes until assignments are made (a later phase) |
@@ -243,8 +288,8 @@ Do not assume it exists.
 | Developer Panel (separate from Restaurant Admin) | Not started |
 | Docker packaging | Not started |
 
-The 9-phase plan is: 1 Foundation → 2 Core Restaurant (this repo) → 3
-Inventory → 4 Customers → 5 Digital Ordering → 6 Delivery → 7 Business
+The 9-phase plan is: 1 Foundation → 2 Core Restaurant → 3 Inventory
+(this repo) → 4 Customers → 5 Digital Ordering → 6 Delivery → 7 Business
 → 8 Developer Platform → 9 Production Hardening. Phase numbers in code
 comments refer to this plan.
 
@@ -263,7 +308,8 @@ foodx/
 │   ├── index.css               # Tailwind v4 theme, brand palette, light/dark tokens
 │   ├── app/
 │   │   ├── App.tsx             # Router: public /login, /reset-password,
-│   │   │                       #   /update-password; protected /, /settings, /roles
+│   │   │                       #   /update-password; protected /, /pos, /orders,
+│   │   │                       #   /kds, /menu, /inventory, /tables, /settings, /roles
 │   │   ├── AuthProvider.tsx    # Session + workspace (profile/restaurant/settings)
 │   │   │                       #   context; dbPending graceful-degradation flag
 │   │   └── ProtectedRoute.tsx  # Redirects to /login when signed out
@@ -274,8 +320,8 @@ foodx/
 │   ├── i18n/
 │   │   ├── index.ts            # i18next init; language from localStorage, fallback en
 │   │   └── locales/
-│   │       ├── en.json         # 150 keys
-│   │       └── bn.json         # 150 keys (same key set as en)
+│   │       ├── en.json         # 469 keys
+│   │       └── bn.json         # 469 keys (same key set as en)
 │   ├── layouts/
 │   │   └── AppLayout.tsx       # Sidebar + topbar, branding CSS variables,
 │   │                           #   language switcher, dbPending / no-profile notices
@@ -288,21 +334,42 @@ foodx/
 │   │   ├── auth/               # LoginPage (sign-in/sign-up), ResetPasswordPage,
 │   │   │                       #   UpdatePasswordPage
 │   │   ├── dashboard/          # DashboardPage (honest empty states)
+│   │   ├── inventory/          # InventoryPage (items, recipes, suppliers,
+│   │   │                       #   purchase orders, movements)
+│   │   ├── kds/                # KdsPage (live kitchen display)
+│   │   ├── menu/               # MenuPage (categories, products, stations,
+│   │   │                       #   modifiers)
+│   │   ├── orders/             # OrdersPage, OrderDetailPage
+│   │   ├── pos/                # PosPage (order-taking screen)
 │   │   ├── roles/              # RolesPage (read-only list + permission matrix)
-│   │   └── settings/           # SettingsPage (setup mode + edit mode)
+│   │   ├── settings/           # SettingsPage (setup mode + edit mode)
+│   │   └── tables/             # TablesPage (table grid + status)
 │   ├── services/               # Supabase data access, one file per domain
 │   │   ├── auth.ts             # signIn, signUp, signOut, password reset, onAuthStateChange
+│   │   ├── inventory.ts        # stock items, movements, POS availability
+│   │   ├── kds.ts              # live kitchen orders (Realtime)
+│   │   ├── menu.ts             # categories / products / variants / modifiers
+│   │   ├── orders.ts           # order list, detail, status machine
+│   │   ├── pos.ts              # order placement (server-side pricing) + payments
+│   │   ├── purchases.ts        # purchase orders (state machine, full receipt)
+│   │   ├── recipes.ts          # product → ingredient lines
 │   │   ├── restaurant.ts       # profiles / restaurants / restaurant_settings queries
-│   │   └── roles.ts            # roles / permissions / role_permissions reads
+│   │   ├── roles.ts            # roles / permissions / role_permissions reads
+│   │   ├── suppliers.ts        # supplier CRUD
+│   │   └── tables.ts           # table queries + status changes
 │   ├── stores/                 # Placeholder — filled in by later phases
 │   ├── types/
-│   │   └── index.ts            # Domain types mirroring migration 0001
+│   │   └── index.ts            # Domain types mirroring migrations 0001–0003
 │   └── index.css
 ├── supabase/
 │   ├── README.md               # Database guide (migration, RLS, seed)
 │   ├── migrations/
-│   │   └── 0001_foundation.sql # 10 tables, RLS, indexes, roles + permissions seed
-│   └── seed.sql                # Demo restaurant + branch (dev only)
+│   │   ├── 0001_foundation.sql # 10 tables, RLS, indexes, roles + permissions seed
+│   │   ├── 0002_core.sql       # Menu, tables, orders, payments, kitchen display
+│   │   └── 0003_inventory.sql  # Stock, recipes, suppliers, purchases, movements
+│   ├── seed.sql                # Demo restaurant + branch (dev only)
+│   ├── seed_phase2.sql         # Demo menu + tables (dev only)
+│   └── seed_phase3.sql         # Demo stock, recipes, supplier (dev only)
 └── .env.example                # Template for the two VITE_SUPABASE_* variables
 ```
 
@@ -316,7 +383,7 @@ and the auth subscription in `AuthProvider`).
 - Languages: English (`en`, default) and Bangla (`bn`). Every user-facing
   string goes through `useTranslation()` — no hardcoded UI text.
 - Files: `src/i18n/locales/en.json` and `bn.json`. Both files must keep
-  the **same key set** (currently 362 keys each, verified in sync).
+  the **same key set** (currently 469 keys each, verified in sync).
 - The switcher lives in the topbar (`AppLayout`); the choice is stored in
   `localStorage` under `foodx.language` and applied on next load.
 - Adding a string: add the key to **both** locale files, in the same

@@ -351,6 +351,24 @@ export async function createOrder(
   if (input.tableId) {
     await setTableStatus(input.tableId, 'occupied')
   }
+
+  // Stock deduction (Phase 3): deduct recipe ingredients for this order.
+  // Best-effort — a stock failure must never fail an order at the
+  // counter. deduct_stock_for_order() is idempotent, so a retried
+  // placement cannot double-deduct. When the Phase 3 migration has not
+  // been applied yet, the function does not exist and the call fails
+  // here — the order still stands.
+  try {
+    const { error: deductError } = await supabase.rpc(
+      'deduct_stock_for_order',
+      { p_order_id: orderId },
+    )
+    if (deductError) {
+      console.error('[POS] stock deduction failed', deductError)
+    }
+  } catch (error) {
+    console.error('[POS] stock deduction failed', error)
+  }
   return order
 }
 

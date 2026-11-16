@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
+import { fetchProductAvailability } from '@/services/inventory'
 import { fetchCategories, fetchProductsWithDetails } from '@/services/menu'
 import {
   computeOrderTotals,
@@ -89,6 +90,11 @@ export default function PosPage() {
 
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<ProductWithDetails[]>([])
+  // Servings the current stock allows per product (Phase 3). A missing
+  // entry means the product has no recipe and is not stock-limited.
+  const [availability, setAvailability] = useState<Map<string, number>>(
+    new Map(),
+  )
   const [tables, setTables] = useState<DiningTable[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -146,18 +152,20 @@ export default function PosPage() {
     let cancelled = false
     const load = async () => {
       try {
-        const [loadedCategories, loadedProducts, loadedTables, loadedBranches] =
+        const [loadedCategories, loadedProducts, loadedTables, loadedBranches, loadedAvailability] =
           await Promise.all([
             fetchCategories(restaurant.id),
             fetchProductsWithDetails(restaurant.id),
             fetchTables(restaurant.id),
             fetchBranches(restaurant.id),
+            fetchProductAvailability(restaurant.id),
           ])
         if (cancelled) return
         setCategories(loadedCategories)
         setProducts(loadedProducts)
         setTables(loadedTables)
         setBranches(loadedBranches)
+        setAvailability(loadedAvailability)
         setLoadState('ok')
       } catch (error) {
         console.error('[POS] load failed', error)
@@ -305,6 +313,10 @@ export default function PosPage() {
 
   const handleProductTap = (product: ProductWithDetails) => {
     if (!product.is_available) return
+    // Out of stock (0 servable servings) cannot be added. A low but
+    // non-zero count is a warning only — a sale at the counter is never
+    // blocked, and the server allows stock to go negative.
+    if (availability.get(product.id) === 0) return
     if (product.variants.length === 0 && product.modifiers.length === 0) {
       addToCart(product, null, [], 1)
       return
@@ -396,6 +408,9 @@ export default function PosPage() {
       setDiscount(0)
       setNotes('')
       setChooserProduct(null)
+      // Stock changed (the order deducted recipe ingredients) — refresh
+      // availability so the next order sees honest servings.
+      setAvailability(await fetchProductAvailability(restaurant.id))
     } catch (error) {
       console.error('[POS] place order failed', error)
       const message = error instanceof Error ? error.message : ''
@@ -861,28 +876,44 @@ export default function PosPage() {
           )}
 
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {filteredProducts.map((product) => (
-              <Button
-                key={product.id}
-                type="button"
-                variant="outline"
-                disabled={!product.is_available}
-                onClick={() => handleProductTap(product)}
-                className="h-auto flex-col items-start gap-1 p-4 text-left"
-              >
-                <span className="font-medium">
-                  {displayName(product.name, product.name_bn)}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {formatMoney(Number(product.price), currency)}
-                </span>
-                {!product.is_available && (
-                  <span className="text-xs text-muted-foreground">
-                    {t('pos.unavailable')}
+            {filteredProducts.map((product) => {
+              const servable = availability.get(product.id)
+              const outOfStock = servable === 0
+              const lowStock =
+                servable !== undefined && servable > 0 && servable <= 4
+              return (
+                <Button
+                  key={product.id}
+                  type="button"
+                  variant="outline"
+                  disabled={!product.is_available || outOfStock}
+                  onClick={() => handleProductTap(product)}
+                  className="h-auto flex-col items-start gap-1 p-4 text-left"
+                >
+                  <span className="font-medium">
+                    {displayName(product.name, product.name_bn)}
                   </span>
-                )}
-              </Button>
-            ))}
+                  <span className="text-sm text-muted-foreground">
+                    {formatMoney(Number(product.price), currency)}
+                  </span>
+                  {!product.is_available && (
+                    <span className="text-xs text-muted-foreground">
+                      {t('pos.unavailable')}
+                    </span>
+                  )}
+                  {outOfStock && (
+                    <span className="text-xs font-medium text-destructive">
+                      {t('pos.outOfStock')}
+                    </span>
+                  )}
+                  {lowStock && (
+                    <span className="text-xs font-medium text-amber-700">
+                      {t('pos.onlyLeft', { count: servable })}
+                    </span>
+                  )}
+                </Button>
+              )
+            })}
           </div>
         </div>
 

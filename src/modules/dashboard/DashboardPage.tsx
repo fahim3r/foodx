@@ -5,9 +5,10 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { ClipboardList, ShoppingBag, Table2 } from 'lucide-react'
+import { ClipboardList, Package, ShoppingBag, Table2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { formatMoney } from '@/lib/money'
+import { fetchLowStockItems } from '@/services/inventory'
 import { fetchTodayOrders } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,8 @@ export default function DashboardPage() {
   const [ordersToday, setOrdersToday] = useState(0)
   const [occupiedTables, setOccupiedTables] = useState(0)
   const [totalTables, setTotalTables] = useState(0)
+  const [lowStockCount, setLowStockCount] = useState(0)
+  const [lowStockLoaded, setLowStockLoaded] = useState(false)
 
   useEffect(() => {
     if (!restaurant) return
@@ -54,6 +57,17 @@ export default function DashboardPage() {
         // error: stay on the honest zero states; the layout banner
         // explains the pending-database case.
         console.error('[Dashboard] could not load today’s stats', error)
+      })
+    // Low-stock line (Phase 3): hidden entirely when the inventory
+    // tables are not applied yet — never claim "all OK" without data.
+    void fetchLowStockItems(restaurant.id)
+      .then((lowStock) => {
+        if (cancelled) return
+        setLowStockCount(lowStock.length)
+        setLowStockLoaded(true)
+      })
+      .catch(() => {
+        // Phase 3 tables not applied: leave the line hidden.
       })
     return () => {
       cancelled = true
@@ -129,6 +143,38 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      {lowStockLoaded && restaurant && (
+        <Link to="/inventory" className="block">
+          <Card
+            className={
+              lowStockCount > 0 ? 'border-amber-300 bg-amber-50' : undefined
+            }
+          >
+            <CardContent className="flex items-center gap-3 pt-6">
+              <Package
+                className={
+                  lowStockCount > 0
+                    ? 'size-5 shrink-0 text-amber-700'
+                    : 'size-5 shrink-0 text-muted-foreground'
+                }
+              />
+              <p className="text-sm">
+                <span className="font-medium">
+                  {t('dashboard.lowStockTitle')}
+                  {': '}
+                </span>
+                {lowStockCount > 0
+                  ? t('dashboard.lowStockHint', { count: lowStockCount })
+                  : t('dashboard.lowStockNone')}
+              </p>
+              <span className="ml-auto shrink-0 text-sm font-medium text-primary">
+                {t('dashboard.viewInventory')} →
+              </span>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       {!restaurant && (
         <Card>

@@ -1,9 +1,9 @@
 # FoodX — Supabase
 
-Database layer for FoodX (Phase 1: Foundation; Phase 2: Core Restaurant).
-One master codebase, one separate database per restaurant — **not**
-multi-tenant SaaS. Row Level Security below is a second layer of defence
-inside a single restaurant's database.
+Database layer for FoodX (Phase 1: Foundation; Phase 2: Core Restaurant;
+Phase 3: Inventory). One master codebase, one separate database per
+restaurant — **not** multi-tenant SaaS. Row Level Security below is a
+second layer of defence inside a single restaurant's database.
 
 ## Files
 
@@ -11,8 +11,10 @@ inside a single restaurant's database.
 | --- | --- |
 | `migrations/0001_foundation.sql` | Core tables, RLS, indexes, system roles + permissions seed |
 | `migrations/0002_core.sql` | Menu, tables, orders, payments, kitchen display |
+| `migrations/0003_inventory.sql` | Stock, recipes, suppliers, purchases, movements |
 | `seed.sql` | Demo data only — never run against production |
 | `seed_phase2.sql` | Demo menu + tables for the demo restaurant only — never run against production |
+| `seed_phase3.sql` | Demo stock, recipes + supplier for the demo restaurant only — never run against production |
 
 ## Applying the migration
 
@@ -34,9 +36,10 @@ to a shared database — add a new migration instead.
 
 Open the Supabase Dashboard → SQL Editor → New query, paste the full
 contents of `migrations/0001_foundation.sql`, and run it. Repeat for each
-later migration, in order — `migrations/0002_core.sql` is applied the
-same way. (The SQL editor runs as `postgres`, which bypasses RLS, so the
-seed inserts in the migration succeed.)
+later migration, in order — `migrations/0002_core.sql` and
+`migrations/0003_inventory.sql` are applied the same way. (The SQL editor
+runs as `postgres`, which bypasses RLS, so the seed inserts in the
+migration succeed.)
 
 ## RLS isolation model
 
@@ -75,6 +78,16 @@ seed inserts in the migration succeed.)
   `order_status_history`. `order_items` may only be UPDATED while the
   parent order is `DRAFT`. `order_payments` and `order_status_history`
   are append-only (no `UPDATE` policy either).
+- Stock history is never hard-deleted either: `stock_movements` has **no
+  INSERT / UPDATE / DELETE policy at all** — rows are created only by
+  the SECURITY DEFINER functions `apply_stock_movement()` and
+  `deduct_stock_for_order()`. Stock quantities change only through
+  movements; the app never updates `inventory_items.current_quantity`
+  directly. A sale is never blocked for stock reasons — deduction may
+  take stock negative, and negatives are highlighted in the stock list.
+  Receiving a purchase order is full receipt only; partial receiving is
+  not implemented. Cancelling an order does not restock ingredients
+  (not implemented).
 - `restaurants.INSERT` is open to any authenticated user (`WITH CHECK
   true`) as a bootstrap exception: a restaurant must be created *before*
   its creator has a profile pointing at it. `UPDATE`/`DELETE` require the
@@ -129,6 +142,16 @@ repeat-safe): 2 kitchen stations, 3 categories, 8 products, 5 variants,
 Run it only against a local/development project, as `postgres` /
 `service_role`, after `seed.sql`. Removal SQL is in the file header;
 deleting the demo restaurant cascades everything.
+
+## Demo seed — Phase 3 (`seed_phase3.sql`)
+
+Adds demo stock for the demo restaurant only (fixed UUIDs, repeat-safe):
+9 inventory items, 15 recipe lines for 6 demo products, 1 supplier
+(Dhaka Fresh Foods). It creates **no stock movements or purchase
+orders** — the seeded quantities are opening stock, not movements. Run
+it only against a local/development project, as `postgres` /
+`service_role`, after `seed.sql` and `seed_phase2.sql`. Removal SQL is
+in the file header; deleting the demo restaurant cascades everything.
 
 ## Feature flags
 

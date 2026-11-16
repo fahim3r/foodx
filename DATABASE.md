@@ -433,9 +433,173 @@ policies only.
 | `note` | `text` NULL | Cancel/refund reason, or "Order placed" |
 | `created_at` | `timestamptz` | No `updated_at` |
 
+## Phase 3 tables (Inventory)
+
+### `inventory_items`
+
+One row per stock item (ingredient / raw material). Quantities are
+`numeric(12,3)` — grams and millilitres need 3 decimals.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `name` | `text` NOT NULL | UNIQUE per restaurant |
+| `unit` | `text` NOT NULL | Free text: `kg`, `litre`, `pcs`, … |
+| `current_quantity` | `numeric(12,3)` NOT NULL DEFAULT `0` | **Changed only by `apply_stock_movement()`** — the app never updates this column directly; the item edit form has no quantity field and the service excludes it from the update patch |
+| `low_stock_threshold` | `numeric(12,3)` NOT NULL DEFAULT `0` | Alert level; the stock list highlights at or below it |
+| `cost_price` | `numeric(12,2)` NOT NULL DEFAULT `0`, CHECK `cost_price >= 0` | Cost per unit; used for the total stock value |
+| `is_active` | `boolean` NOT NULL DEFAULT `true` | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+An item with any stock-movement history cannot be deleted: the
+`stock_movements` foreign key is ON DELETE RESTRICT. An item on a
+purchase order cannot be deleted either (`purchase_order_items` is
+RESTRICT). Recipe lines cascade.
+
+### `product_recipes`
+
+One row per recipe line: how much of one ingredient a single serving
+of a product uses. Deleting a product or an ingredient cascades its
+lines.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `product_id` | `uuid` NOT NULL → `products(id)` ON DELETE CASCADE | |
+| `inventory_item_id` | `uuid` NOT NULL → `inventory_items(id)` ON DELETE CASCADE | |
+| `quantity_per_unit` | `numeric(12,3)` NOT NULL, CHECK `quantity_per_unit > 0` | Per serving |
+| `created_at` | `timestamptz` | No `updated_at` |
+
+UNIQUE `(product_id, inventory_item_id)` — one line per ingredient per
+product. The RLS INSERT policy also requires the linked product AND the
+linked ingredient to belong to the caller's restaurant, so a recipe can
+never join a product to another restaurant's ingredient.
+
+### `stock_movements`
+
+The stock audit trail. One row per stock change, signed quantity
+(positive = in, negative = out). **Append-only: SELECT policy only.**
+Rows are created exclusively by the two functions below (SECURITY
+DEFINER, bypasses RLS); there is no INSERT / UPDATE / DELETE policy at
+all. A wrong movement is corrected by a new ADJUSTMENT / WASTE
+movement, never by editing or removing the row.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `inventory_item_id` | `uuid` NOT NULL → `inventory_items(id)` ON DELETE RESTRICT | An item with history cannot be deleted |
+| `movement_type` | `text` NOT NULL, CHECK in `PURCHASE / SALE / ADJUSTMENT / WASTE / TRANSFER_IN / TRANSFER_OUT` | |
+| `quantity_change` | `numeric(12,3)` NOT NULL, CHECK `quantity_change <> 0` | Signed |
+| `reference_type` | `text` NULL | e.g. `'order'`, `'purchase_order'` |
+| `reference_id` | `uuid` NULL | The order / purchase-order id |
+| `reason` | `text` NULL | Required for user-caused ADJUSTMENT / WASTE (enforced by the service); SALE rows carry `"Sale — order #N"` |
+| `created_by` | `uuid` NULL | Actor; no FK; set from `auth.uid()` inside the function |
+| `created_at` | `timestamptz` | No `updated_at` |
+
+### `suppliers`
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `name` | `text` NOT NULL | UNIQUE per restaurant |
+| `phone` / `email` / `address` | `text` NULL | |
+| `is_active` | `boolean` NOT NULL DEFAULT `true` | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+A supplier with any purchase order cannot be deleted
+(`purchase_orders.supplier_id` is ON DELETE RESTRICT).
+
+### `purchase_orders`
+
+One row per supplier purchase. `total_amount` is computed by the
+service from the lines at creation (sum of quantity × unit_cost).
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | Client-generated |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `supplier_id` | `uuid` NOT NULL → `suppliers(id)` ON DELETE RESTRICT | |
+| `status` | `text` NOT NULL DEFAULT `'DRAFT'`, CHECK in `DRAFT / ORDERED / RECEIVED / CANCELLED` | |
+| `order_date` | `date` NOT NULL DEFAULT `CURRENT_DATE` | |
+| `total_amount` | `numeric(12,2)` NOT NULL DEFAULT `0`, CHECK `total_amount >= 0` | |
+| `notes` | `text` NULL | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### Purchase-order state machine
+
+```
+DRAFT → ORDERED → RECEIVED
+CANCELLED from DRAFT or ORDERED only
+```
+
+- The `status` CHECK constraint restricts the column to the 4 valid
+  values. Allowed *transitions* are enforced in the service layer
+  (`PURCHASE_ORDER_TRANSITIONS` in `src/types/index.ts`, checked by
+  `advancePurchaseOrderStatus` in `src/services/purchases.ts`).
+- Receiving is **full receipt only**: `receivePurchaseOrder()` receives
+  every line at its ordered quantity and applies one PURCHASE movement
+  per line. Partial receiving is not implemented. A RECEIVED order is
+  final; a wrong receipt is corrected by an ADJUSTMENT movement.
+- Only a DRAFT order may be deleted (the service adds
+  `.eq('status', 'DRAFT')`); anything further along is history — cancel
+  it instead.
+
+### `purchase_order_items`
+
+One row per ordered line. `unit_cost` is what was agreed with the
+supplier at order time; receiving uses these same lines.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `purchase_order_id` | `uuid` NOT NULL → `purchase_orders(id)` ON DELETE CASCADE | |
+| `inventory_item_id` | `uuid` NOT NULL → `inventory_items(id)` ON DELETE RESTRICT | |
+| `quantity` | `numeric(12,3)` NOT NULL, CHECK `quantity > 0` | Ordered quantity |
+| `unit_cost` | `numeric(12,2)` NOT NULL, CHECK `unit_cost >= 0` | Per unit, at order time |
+| `received_quantity` | `numeric(12,3)` NOT NULL DEFAULT `0`, CHECK `received_quantity >= 0` | Set to `quantity` on full receipt |
+
+UNIQUE `(purchase_order_id, inventory_item_id)`. UPDATE is allowed
+only while the parent order is DRAFT or ORDERED (RLS) — receiving sets
+`received_quantity` while the order is still ORDERED, and a RECEIVED
+order is final.
+
+### Stock functions
+
+Both are `SECURITY DEFINER` (run as the function owner, bypass RLS),
+`EXECUTE` granted to `authenticated` and revoked from `anon`. Both
+verify the rows belong to the caller's restaurant via
+`current_restaurant_id()` and raise otherwise (`IS DISTINCT FROM`, so a
+NULL restaurant also fails).
+
+#### `apply_stock_movement(p_item_id, p_type, p_delta, p_reason, p_reference_type, p_reference_id) → numeric`
+
+The single way stock changes. Validates the type (one of the 6
+movement types) and that the delta is not zero, inserts one
+`stock_movements` row (with `created_by = auth.uid()`), then updates
+the item's `current_quantity` by the delta in the same function call
+and returns the new quantity. Negative results are allowed — a SALE
+must never be blocked, and negatives are a data signal, not an error.
+
+#### `deduct_stock_for_order(p_order_id) → void`
+
+Deducts recipe ingredients for one order. Reads the order's items +
+`product_recipes`, aggregates the needed quantity per ingredient
+(`SUM(order_items.quantity × quantity_per_unit)`), and applies one
+SALE movement per ingredient (reference_type `'order'`, reason
+`"Sale — order #N"`). **Idempotent:** if SALE movements already exist
+for the order, it returns without deducting again — a retried POS
+placement cannot double-deduct. Products with no recipe deduct
+nothing. Called by `createOrder()` in `src/services/pos.ts` after the
+order is placed; a deduction failure is logged and never fails the
+order at the counter.
+
 ## Row Level Security
 
-RLS is enabled on **all 22 tables**. Every policy is `TO authenticated`
+RLS is enabled on **all 28 tables**. Every policy is `TO authenticated`
 — the `anon` role has no direct table access at all; it can only
 authenticate. All policies are defined in `0001_foundation.sql`; the
 summary below is not a substitute for reading them.
@@ -480,6 +644,12 @@ evaluates to deny.
 | `order_item_modifiers` | Scoped through the order item's order | Same | — (append-only) | — (append-only) |
 | `order_payments` | Scoped through the parent order's restaurant | Same | — (append-only) | — (append-only) |
 | `order_status_history` | Scoped through the parent order's restaurant | Same | — (append-only) | — (append-only) |
+| `inventory_items` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
+| `product_recipes` | Own restaurant | Own restaurant + linked product and ingredient must be own restaurant's | Own restaurant | Own restaurant |
+| `stock_movements` | Own restaurant | — (**no policy**: rows are created only by `apply_stock_movement()` / `deduct_stock_for_order()`) | — (append-only) | — (append-only) |
+| `suppliers` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
+| `purchase_orders` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
+| `purchase_order_items` | Scoped through the parent purchase order's restaurant | Same | Only while the parent order is `DRAFT` or `ORDERED` | Same |
 
 Notes and sharp edges:
 
@@ -569,7 +739,7 @@ work. Do not treat the existence of a key as proof the feature exists.
 - Files live in `supabase/migrations/` and are applied **in filename
   order**.
 - Naming: `NNNN_name.sql`, zero-padded sequence — `0001_foundation.sql`
-  is the first. The next migration is `0002_<name>.sql`.
+  is the first. The next migration is `0004_<name>.sql`.
 - **Never edit a migration after it has been applied to a shared
   database.** Fix a mistake with a new migration, not an edit. (The one
   exception is a migration that has only ever run locally and never
@@ -637,6 +807,23 @@ It creates **no orders, payments, or financial history**. Run it after
 `seed.sql`, as `postgres` / service role. Removal SQL is in the file
 header; deleting the demo restaurant cascades everything.
 
+### Phase 3 demo seed (`supabase/seed_phase3.sql`)
+
+Development only, never production. Adds, for the demo restaurant only
+(fixed UUIDs, `ON CONFLICT DO NOTHING`):
+
+| Rows | Ids |
+| --- | --- |
+| 9 inventory items (Chicken, Beef, Rice, Cooking Oil, Potato, Milk, Mango, Bun, Cheese) | `aaaaaaaa-…-aaaaaaaaaaa1…9` |
+| 15 recipe lines for 6 demo products (Chicken Burger, Beef Biryani, Chicken Biryani, French Fries, Mango Lassi, Grilled Chicken) | `bbbbbbbb-…-bbbbbbbbbbb1…15` |
+| 1 supplier (Dhaka Fresh Foods) | `cccccccc-…-ccccccccccc1` |
+
+It creates **no stock movements, purchase orders, or financial
+history** — the seeded `current_quantity` values are opening stock, not
+movements. Run it after `seed.sql` and `seed_phase2.sql`, as `postgres`
+/ service role. Removal SQL is in the file header; deleting the demo
+restaurant cascades everything.
+
 ## Sync and data-integrity notes
 
 These rules apply now and constrain the Phase 9 offline/sync design —
@@ -648,7 +835,9 @@ record them here so a later phase does not accidentally break them.
   policy either. Corrections go through void/refund/cancel records
   (status changes), never `DELETE`. `audit_logs` is already insert-only
   for the same reason, and `user_roles` changes by INSERT/DELETE only
-  because assignments are not history.
+  because assignments are not history. `stock_movements` (Phase 3) has
+  no INSERT/UPDATE/DELETE policy at all — only the two stock functions
+  write it, and corrections are new ADJUSTMENT / WASTE movements.
 - **Audit everything that moves money.** Every order, payment, refund,
   void, stock adjustment, and purchase must write an `audit_logs` row
   with `before_data` / `after_data` at the same time as the change —
@@ -658,6 +847,11 @@ record them here so a later phase does not accidentally break them.
   table is the order's own audit trail, and it is written by every
   status change today. A future `audit_logs` writer for orders must not
   duplicate it silently; decide the vocabulary first.
+  **Exception (Phase 3):** stock changes are audited in
+  `stock_movements` instead — that table is the stock audit trail, and
+  every quantity change writes exactly one row there (via
+  `apply_stock_movement()`). A future `audit_logs` writer for stock
+  must not duplicate it silently either.
 - **Idempotency for future sync.** Phase 9 (offline-first / LAN +
   cloud sync) will need idempotency keys on every client-created
   mutation (e.g. a client-generated UUID per order/payment, stored on the
