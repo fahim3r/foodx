@@ -85,7 +85,7 @@ export default function DomainSection({
     setErrorKey(null)
     setBusyDomainId(domainId)
     try {
-      await setPrimaryDomain(domainId, restaurantId)
+      await setPrimaryDomain(restaurantId, domainId)
       await load()
     } catch (error) {
       console.error('[Domains] set primary failed', error)
