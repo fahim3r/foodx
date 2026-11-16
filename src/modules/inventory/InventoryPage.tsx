@@ -88,6 +88,7 @@ const MOVEMENT_TYPE_KEYS: Record<StockMovementType, string> = {
   WASTE: 'inventory.typeWaste',
   TRANSFER_IN: 'inventory.typeTransferIn',
   TRANSFER_OUT: 'inventory.typeTransferOut',
+  RESTOCK: 'inventory.typeRestock',
 }
 
 const PO_STATUS_KEYS: Record<PurchaseOrder['status'], string> = {

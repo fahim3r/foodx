@@ -309,6 +309,7 @@ export type StockMovementType =
   | 'WASTE'
   | 'TRANSFER_IN'
   | 'TRANSFER_OUT'
+  | 'RESTOCK'
 
 /** One stock item (ingredient / raw material). current_quantity changes
  * ONLY through stock_movements via apply_stock_movement() — the item

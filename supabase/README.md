@@ -12,6 +12,7 @@ second layer of defence inside a single restaurant's database.
 | `migrations/0001_foundation.sql` | Core tables, RLS, indexes, system roles + permissions seed |
 | `migrations/0002_core.sql` | Menu, tables, orders, payments, kitchen display |
 | `migrations/0003_inventory.sql` | Stock, recipes, suppliers, purchases, movements |
+| `migrations/0004_cancel_restock.sql` | Cancel restocks: RESTOCK movement type + `restock_for_order()` |
 | `seed.sql` | Demo data only — never run against production |
 | `seed_phase2.sql` | Demo menu + tables for the demo restaurant only — never run against production |
 | `seed_phase3.sql` | Demo stock, recipes + supplier for the demo restaurant only — never run against production |
@@ -80,14 +81,17 @@ migration succeed.)
   are append-only (no `UPDATE` policy either).
 - Stock history is never hard-deleted either: `stock_movements` has **no
   INSERT / UPDATE / DELETE policy at all** — rows are created only by
-  the SECURITY DEFINER functions `apply_stock_movement()` and
-  `deduct_stock_for_order()`. Stock quantities change only through
+  the SECURITY DEFINER functions `apply_stock_movement()`,
+  `deduct_stock_for_order()` and `restock_for_order()`. Stock quantities change only through
   movements; the app never updates `inventory_items.current_quantity`
   directly. A sale is never blocked for stock reasons — deduction may
   take stock negative, and negatives are highlighted in the stock list.
   Receiving a purchase order is full receipt only; partial receiving is
-  not implemented. Cancelling an order does not restock ingredients
-  (not implemented).
+  not implemented. Cancelling an order restocks ingredients: one
+  RESTOCK movement per item, exactly reversing the SALE deduction
+  (migration `0004_cancel_restock.sql`; idempotent, so a retried cancel
+  cannot double-restock). Refunds do NOT restock — a refunded order was
+  already served, its food is gone.
 - `restaurants.INSERT` is open to any authenticated user (`WITH CHECK
   true`) as a bootstrap exception: a restaurant must be created *before*
   its creator has a profile pointing at it. `UPDATE`/`DELETE` require the

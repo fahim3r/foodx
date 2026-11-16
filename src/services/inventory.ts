@@ -132,6 +132,20 @@ export async function applyMovement(
   return Number(data)
 }
 
+/**
+ * Restock an order that was cancelled: reverses the SALE movements
+ * deduct_stock_for_order() wrote (one RESTOCK movement per item).
+ * No-op when nothing was deducted, idempotent (never restocks the
+ * same order twice). Throws when the order does not exist or belongs
+ * to another restaurant.
+ */
+export async function restockForOrder(orderId: string): Promise<void> {
+  const { error } = await supabase.rpc('restock_for_order', {
+    p_order_id: orderId,
+  })
+  if (error) throw error
+}
+
 /** Manual stock correction. Delta may be positive or negative; a reason
  * is required — silent corrections are not allowed. */
 export async function adjustStock(

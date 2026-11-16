@@ -577,7 +577,7 @@ NULL restaurant also fails).
 
 #### `apply_stock_movement(p_item_id, p_type, p_delta, p_reason, p_reference_type, p_reference_id) → numeric`
 
-The single way stock changes. Validates the type (one of the 6
+The single way stock changes. Validates the type (one of the 7
 movement types) and that the delta is not zero, inserts one
 `stock_movements` row (with `created_by = auth.uid()`), then updates
 the item's `current_quantity` by the delta in the same function call
@@ -596,6 +596,18 @@ placement cannot double-deduct. Products with no recipe deduct
 nothing. Called by `createOrder()` in `src/services/pos.ts` after the
 order is placed; a deduction failure is logged and never fails the
 order at the counter.
+
+#### `restock_for_order(p_order_id) → void`
+
+Reverses an order's SALE movements when the order is cancelled: one
+RESTOCK movement per ingredient, exactly reversing the deducted
+quantity (reference_type `'order'`, reason `"Restock — order #N
+cancelled"`). **Idempotent:** if RESTOCK movements already exist for
+the order, it returns without restocking again; it is also a no-op
+when nothing was deducted (e.g. products with no recipe). Called by `cancelOrder()` in
+`src/services/orders.ts` after the cancel succeeds; a restock failure
+is logged and never fails the cancel. Refunds never call it — a
+refunded order was already served, its food is gone.
 
 ## Row Level Security
 
@@ -646,7 +658,7 @@ evaluates to deny.
 | `order_status_history` | Scoped through the parent order's restaurant | Same | — (append-only) | — (append-only) |
 | `inventory_items` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `product_recipes` | Own restaurant | Own restaurant + linked product and ingredient must be own restaurant's | Own restaurant | Own restaurant |
-| `stock_movements` | Own restaurant | — (**no policy**: rows are created only by `apply_stock_movement()` / `deduct_stock_for_order()`) | — (append-only) | — (append-only) |
+| `stock_movements` | Own restaurant | — (**no policy**: rows are created only by `apply_stock_movement()` / `deduct_stock_for_order()` / `restock_for_order()`) | — (append-only) | — (append-only) |
 | `suppliers` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `purchase_orders` | Own restaurant | Own restaurant | Own restaurant | Own restaurant |
 | `purchase_order_items` | Scoped through the parent purchase order's restaurant | Same | Only while the parent order is `DRAFT` or `ORDERED` | Same |

@@ -260,13 +260,17 @@ There is no automated provisioning yet — that is later-phase work.
   servings as **Out of stock** (cannot be added) and 1–4 servable with
   an "Only N left" badge. A sale is never blocked for stock reasons:
   deduction may take stock negative, and negatives are highlighted in
-  the stock list. **Cancelling an order does NOT restock ingredients**
-  (not implemented).
+  the stock list. **Cancelling an order restocks ingredients**: one
+  RESTOCK movement per item, exactly reversing the SALE deduction
+  (`restock_for_order()`, idempotent — a retried cancel cannot
+  double-restock). Refunds do NOT restock — a refunded order was
+  already served, its food is gone.
 - **Dashboard** — a low-stock line links to `/inventory` (real count,
   honest "All stock levels are OK" state; hidden entirely when the
   Phase 3 tables are not applied yet).
-- **Database** — 6 new tables, RLS on all of them, and two SECURITY
-  DEFINER functions (`apply_stock_movement`, `deduct_stock_for_order`)
+- **Database** — 6 new tables, RLS on all of them, and three SECURITY
+  DEFINER functions (`apply_stock_movement`, `deduct_stock_for_order`,
+  `restock_for_order`)
   (see [DATABASE.md](DATABASE.md#phase-3-tables-inventory)).
 
 ## What is not built yet

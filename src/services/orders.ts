@@ -3,6 +3,7 @@
 // (see src/types) and writes an order_status_history row. Financial
 // records are never deleted — a wrong order is CANCELLED or REFUNDED.
 import { supabase } from '@/lib/supabase'
+import { restockForOrder } from '@/services/inventory'
 import { setTableStatus } from '@/services/tables'
 import {
   canTransitionOrderStatus,
@@ -160,6 +161,11 @@ export async function completeOrder(
  * Cancel an order from any non-terminal status. A reason is required —
  * it is stored on the history row, so a cancelled order always explains
  * itself. Throws Error('cancel_reason_required') without one.
+ *
+ * Cancelling restocks: the SALE deduction is reversed with one RESTOCK
+ * movement per item (restock_for_order(), idempotent). Best-effort —
+ * a restock failure is logged and never fails the cancel. Refunds do
+ * NOT restock: a refunded order was already served, its food is gone.
  */
 export async function cancelOrder(
   order: Order,
@@ -167,7 +173,18 @@ export async function cancelOrder(
   reason: string,
 ): Promise<Order> {
   if (!reason.trim()) throw new Error('cancel_reason_required')
-  return advanceOrderStatus(order, 'CANCELLED', userId, reason.trim())
+  const cancelled = await advanceOrderStatus(
+    order,
+    'CANCELLED',
+    userId,
+    reason.trim(),
+  )
+  try {
+    await restockForOrder(order.id)
+  } catch (error) {
+    console.error('[Orders] restock after cancel failed', error)
+  }
+  return cancelled
 }
 
 /**

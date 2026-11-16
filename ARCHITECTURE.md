@@ -289,6 +289,6 @@ missed on a deployment.
 | Manifest-only PWA | Installability now; offline/sync is a Phase 9 design problem, not a config flag | §8 |
 | React context + local state, no store library | Phase 1 state is small (session + workspace + forms); a store would be premature | §5 |
 | Stock changes only through movements | Quantities must never be edited directly — the item form has no quantity field, and the only writer is `apply_stock_movement()` (SECURITY DEFINER). `stock_movements` has no INSERT/UPDATE/DELETE policy at all; corrections are new ADJUSTMENT / WASTE movements | [DATABASE.md](DATABASE.md#phase-3-tables-inventory) |
-| A sale is never blocked for stock | POS deduction may take stock negative; negatives are highlighted, not errors. Cancelling an order does not restock (not implemented) | [DATABASE.md](DATABASE.md#phase-3-tables-inventory) |
+| A sale is never blocked for stock | POS deduction may take stock negative; negatives are highlighted, not errors. Cancelling an order restocks via RESTOCK movements (`restock_for_order()`, idempotent); refunds do not restock | [DATABASE.md](DATABASE.md#phase-3-tables-inventory) |
 | i18n from day one (en/bn, 150 keys) | Staff audience is Bangla-first; retrofitting i18n later is expensive | §6 |
 | Branding as CSS variables from `restaurant_settings` | Per-restaurant theme without rebuilds or per-tenant CSS bundles | §7 |
