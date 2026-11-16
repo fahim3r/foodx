@@ -107,14 +107,15 @@ alter table public.orders
   add column if not exists delivery_address text,
   add column if not exists delivery_fee numeric(12,2) not null default 0;
 
--- Source CHECK, added only when no source check exists yet.
+-- Source CHECK, added only when no source check exists yet. (Name lookup,
+-- not pg_get_constraintdef: the def renders as "source = ANY (ARRAY[...])",
+-- so a LIKE '%source in%' test never matches.)
 do $$
 begin
   if not exists (
     select 1 from pg_constraint
     where conrelid = 'public.orders'::regclass
-      and contype = 'c'
-      and pg_get_constraintdef(oid) like '%source in%'
+      and conname = 'orders_source_check'
   ) then
     alter table public.orders
       add constraint orders_source_check
@@ -123,25 +124,24 @@ begin
 end $$;
 
 -- Widen the existing type CHECK ('dine_in','takeaway','delivery') to also
--- allow 'pickup'. The old constraint is dropped by name lookup (same
--- pattern as 0004), then the four-value check is added.
+-- allow 'pickup'. The old constraint is dropped by NAME, then the
+-- four-value check is added, in one block so a re-run is safe. (First
+-- attempt used a pg_get_constraintdef LIKE '%type in%' lookup, which finds
+-- nothing — Postgres renders the def as "type = ANY (ARRAY[...])" — so the
+-- old orders_type_check survived and the ADD failed with 42710.)
 do $$
-declare
-  cname text;
 begin
-  select conname into cname
-  from pg_constraint
-  where conrelid = 'public.orders'::regclass
-    and contype = 'c'
-    and pg_get_constraintdef(oid) like '%type in%';
-  if cname is not null then
-    execute format('alter table public.orders drop constraint %I', cname);
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.orders'::regclass
+      and conname = 'orders_type_check'
+  ) then
+    alter table public.orders drop constraint orders_type_check;
   end if;
+  alter table public.orders
+    add constraint orders_type_check
+    check (type in ('dine_in', 'takeaway', 'delivery', 'pickup'));
 end $$;
-
-alter table public.orders
-  add constraint orders_type_check
-  check (type in ('dine_in', 'takeaway', 'delivery', 'pickup'));
 
 -- ----------------------------------------------------------------------------
 -- restaurant_settings: delivery options
