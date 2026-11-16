@@ -336,7 +336,10 @@ export default function StorefrontPage({
       return
     }
     setChooserProduct(product)
-    setChooserVariantId(product.variants[0]?.id ?? null)
+    // No variant pre-selected: the base product is a valid choice, exactly
+    // like the POS chooser (which offers a "No variant" radio). Pre-selecting
+    // variants[0] made the base price unreachable on the storefront.
+    setChooserVariantId(null)
     setChooserModifierIds([])
     setChooserQty(1)
   }
@@ -932,6 +935,16 @@ export default function StorefrontPage({
                 <div className="flex flex-col gap-2">
                   <Label>{t('storefront.variant')}</Label>
                   <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={
+                        chooserVariantId === null ? 'default' : 'outline'
+                      }
+                      onClick={() => setChooserVariantId(null)}
+                    >
+                      {t('storefront.noVariant')}
+                    </Button>
                     {chooserProduct.variants.map((variant) => (
                       <Button
                         key={variant.id}
