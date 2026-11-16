@@ -273,6 +273,57 @@ There is no automated provisioning yet — that is later-phase work.
   `restock_for_order`)
   (see [DATABASE.md](DATABASE.md#phase-3-tables-inventory)).
 
+## What Phase 4 adds
+
+- **Customers** (`/customers`, nav "Customers") — three tabs:
+  Customers, Loyalty, Coupons.
+- **Customer records** — name (required), phone, email, address,
+  notes. The list shows total spent, visit count and points balance
+  per customer; clicking a row opens the detail view (profile, points
+  balance, loyalty transaction history, order history with number /
+  date / total / status). Customers are **deactivated, never
+  hard-deleted** (two-step confirm); a deactivated customer cannot be
+  attached at the POS. Phone is unique per restaurant (multiple
+  customers may have no phone). Search by name, phone or email.
+- **Loyalty points** — a balance is **always computed**
+  (`SUM(loyalty_transactions.points)`), never stored; there is no
+  balance column anywhere. Points are earned **only when an order
+  completes**: `floor(total / 100) × earn rate`, idempotent (one EARN
+  per order — a retried completion cannot double-award). The rates live
+  in `restaurant_settings` and are edited in Settings → Loyalty
+  (defaults: 1 point per ৳100, 1 point = ৳1). The Loyalty tab lists
+  per-customer balances, recent transactions across the restaurant,
+  and a manual adjust form (points +/−, **reason required** — every
+  adjustment is audited as an ADJUSTMENT transaction).
+- **Coupons** — code (stored UPPERCASE), PERCENT (0 < value ≤ 100) or
+  FIXED, minimum order amount, valid from/to dates, max uses (empty =
+  unlimited), active flag. Usage is **computed, never stored**
+  (COUNT of redemptions on non-cancelled orders). Coupons are
+  **deactivated, never hard-deleted** when they have redemptions.
+- **POS integration** — attach a customer (search by phone or name),
+  apply a coupon code (validated: active, in its date window, under
+  its usage limit, order meets the minimum), and redeem points (capped
+  at the customer's balance AND at the remaining total after manual +
+  coupon discounts). The order summary shows the three discount lines
+  separately (manual, coupon, loyalty). All three are **optional** —
+  an order with none attached works exactly as before. **Discount
+  order: manual first, then coupon, then loyalty**, each clamped so
+  the total never goes below 0; the POS preview uses the same
+  `computeOrderTotals()` as `createOrder()`, so preview and placed
+  order always agree.
+- **Cancel / refund and points** — cancelling an order **returns its
+  redeemed points** (one REVERSAL, idempotent); earned points are
+  untouched (nothing was earned — the order never completed).
+  Refunding an order **reverses its earned points** (one REVERSAL,
+  idempotent) — the money came back, so the points for it come back
+  too. Refunds still do NOT restock (Phase 3 rule). Both reversals are
+  best-effort and never fail the cancel/refund.
+- **Database** — 4 new tables (`customers`, `loyalty_transactions`,
+  `coupons`, `coupon_redemptions`), 5 new columns on `orders`, 2 new
+  columns on `restaurant_settings`; RLS on all of them;
+  `loyalty_transactions` and `coupon_redemptions` are **append-only**
+  (see [DATABASE.md](DATABASE.md#phase-4-tables-customers)).
+
 ## What is not built yet
 
 Everything below is planned for later phases and is **not** in this repo.
@@ -281,7 +332,7 @@ Do not assume it exists.
 | Area | Status |
 | --- | --- |
 | Kitchen display (KDS), inventory, purchases, expenses | KDS built (Phase 2); inventory + purchases built (Phase 3); expenses not started |
-| Customers, loyalty, delivery, online ordering | Not started |
+| Customers, loyalty, coupons | Built (Phase 4); delivery, online ordering not started |
 | Reports / analytics | Not started (recharts is installed but unused) |
 | Role editing / assigning permissions to roles | Read-only view only; the `role_permissions` table is seeded **empty** — the matrix shows all dashes until assignments are made (a later phase) |
 | Branch management UI | The `branches` table exists; no UI or service touches it yet |
@@ -293,7 +344,7 @@ Do not assume it exists.
 | Docker packaging | Not started |
 
 The 9-phase plan is: 1 Foundation → 2 Core Restaurant → 3 Inventory
-(this repo) → 4 Customers → 5 Digital Ordering → 6 Delivery → 7 Business
+→ 4 Customers (this repo) → 5 Digital Ordering → 6 Delivery → 7 Business
 → 8 Developer Platform → 9 Production Hardening. Phase numbers in code
 comments refer to this plan.
 
@@ -313,7 +364,8 @@ foodx/
 │   ├── app/
 │   │   ├── App.tsx             # Router: public /login, /reset-password,
 │   │   │                       #   /update-password; protected /, /pos, /orders,
-│   │   │                       #   /kds, /menu, /inventory, /tables, /settings, /roles
+│   │   │                       #   /kds, /menu, /inventory, /tables, /customers,
+│   │   │                       #   /settings, /roles
 │   │   ├── AuthProvider.tsx    # Session + workspace (profile/restaurant/settings)
 │   │   │                       #   context; dbPending graceful-degradation flag
 │   │   └── ProtectedRoute.tsx  # Redirects to /login when signed out
@@ -324,8 +376,8 @@ foodx/
 │   ├── i18n/
 │   │   ├── index.ts            # i18next init; language from localStorage, fallback en
 │   │   └── locales/
-│   │       ├── en.json         # 469 keys
-│   │       └── bn.json         # 469 keys (same key set as en)
+│   │       ├── en.json         # 571 keys
+│   │       └── bn.json         # 571 keys (same key set as en)
 │   ├── layouts/
 │   │   └── AppLayout.tsx       # Sidebar + topbar, branding CSS variables,
 │   │                           #   language switcher, dbPending / no-profile notices
@@ -337,6 +389,7 @@ foodx/
 │   ├── modules/                # One folder per feature area (page + its logic)
 │   │   ├── auth/               # LoginPage (sign-in/sign-up), ResetPasswordPage,
 │   │   │                       #   UpdatePasswordPage
+│   │   ├── customers/          # CustomersPage (customers, loyalty, coupons)
 │   │   ├── dashboard/          # DashboardPage (honest empty states)
 │   │   ├── inventory/          # InventoryPage (items, recipes, suppliers,
 │   │   │                       #   purchase orders, movements)
@@ -356,6 +409,9 @@ foodx/
 │   │   ├── orders.ts           # order list, detail, status machine
 │   │   ├── pos.ts              # order placement (server-side pricing) + payments
 │   │   ├── purchases.ts        # purchase orders (state machine, full receipt)
+│   │   ├── coupons.ts          # coupon CRUD + validation + redemption
+│   │   ├── customers.ts        # customer CRUD + stats + order history
+│   │   ├── loyalty.ts          # balances (SUM), earn / redeem / reversal / adjust
 │   │   ├── recipes.ts          # product → ingredient lines
 │   │   ├── restaurant.ts       # profiles / restaurants / restaurant_settings queries
 │   │   ├── roles.ts            # roles / permissions / role_permissions reads
@@ -363,17 +419,20 @@ foodx/
 │   │   └── tables.ts           # table queries + status changes
 │   ├── stores/                 # Placeholder — filled in by later phases
 │   ├── types/
-│   │   └── index.ts            # Domain types mirroring migrations 0001–0003
+│   │   └── index.ts            # Domain types mirroring migrations 0001–0005
 │   └── index.css
 ├── supabase/
 │   ├── README.md               # Database guide (migration, RLS, seed)
 │   ├── migrations/
 │   │   ├── 0001_foundation.sql # 10 tables, RLS, indexes, roles + permissions seed
 │   │   ├── 0002_core.sql       # Menu, tables, orders, payments, kitchen display
-│   │   └── 0003_inventory.sql  # Stock, recipes, suppliers, purchases, movements
+│   │   ├── 0003_inventory.sql  # Stock, recipes, suppliers, purchases, movements
+│   │   ├── 0004_cancel_restock.sql # Cancel restocks: RESTOCK + restock_for_order()
+│   │   └── 0005_customers.sql  # Customers, loyalty, coupons, redemptions
 │   ├── seed.sql                # Demo restaurant + branch (dev only)
 │   ├── seed_phase2.sql         # Demo menu + tables (dev only)
-│   └── seed_phase3.sql         # Demo stock, recipes, supplier (dev only)
+│   ├── seed_phase3.sql         # Demo stock, recipes, supplier (dev only)
+│   └── seed_phase4.sql         # Demo customers + coupon (dev only)
 └── .env.example                # Template for the two VITE_SUPABASE_* variables
 ```
 

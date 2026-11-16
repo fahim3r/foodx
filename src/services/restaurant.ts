@@ -144,6 +144,8 @@ export async function upsertSettings(
     | 'tax_rate'
     | 'service_charge_rate'
     | 'receipt_footer'
+    | 'loyalty_earn_per_100'
+    | 'loyalty_point_value'
   >,
 ): Promise<RestaurantSettings> {
   const { data, error } = await supabase
@@ -159,6 +161,8 @@ export async function upsertSettings(
         tax_rate: values.tax_rate,
         service_charge_rate: values.service_charge_rate,
         receipt_footer: values.receipt_footer || null,
+        loyalty_earn_per_100: values.loyalty_earn_per_100,
+        loyalty_point_value: values.loyalty_point_value,
       },
       { onConflict: 'restaurant_id' },
     )

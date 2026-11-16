@@ -7,6 +7,7 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isMissingTableError, isSlugTakenError } from '@/lib/errors'
+import { formatMoney, roundMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
 import {
   createRestaurant,
@@ -41,6 +42,8 @@ const DEFAULTS: RestaurantFormValues = {
   tax_rate: 0,
   service_charge_rate: 0,
   receipt_footer: '',
+  loyalty_earn_per_100: 1,
+  loyalty_point_value: 1,
 }
 
 function slugify(value: string): string {
@@ -55,6 +58,24 @@ function isValidHex(value: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(value)
 }
 
+/**
+ * Parse a loyalty-rate text input. Returns the fallback when the input
+ * is empty or invalid. The earn rate may be 0 (no points earned);
+ * the point value must stay positive (a point worth nothing breaks
+ * redemption math), so 0 is not allowed for it.
+ */
+function parseLoyaltyRate(
+  value: string,
+  fallback: number,
+  allowZero: boolean,
+): number {
+  const parsed = Number.parseFloat(value)
+  if (!Number.isFinite(parsed)) return fallback
+  if (parsed < 0) return fallback
+  if (!allowZero && parsed === 0) return fallback
+  return roundMoney(parsed)
+}
+
 export default function SettingsPage() {
   const { t } = useTranslation()
   const { user, profile, restaurant, settings, dbPending, refreshWorkspace } =
@@ -66,6 +87,12 @@ export default function SettingsPage() {
   const [saveErrorKey, setSaveErrorKey] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Loyalty rates stay STRINGS in form state and the inputs are
+  // type="text" inputMode="decimal": a type="number" input mangled a
+  // filled "30" into 29.969999313354492 before React ever saw it.
+  // Parsed + rounded only on submit. Do not switch them back.
+  const [loyaltyEarn, setLoyaltyEarn] = useState('1')
+  const [loyaltyPointValue, setLoyaltyPointValue] = useState('1')
 
   // Initialise the form from the loaded restaurant / settings.
   useEffect(() => {
@@ -88,7 +115,11 @@ export default function SettingsPage() {
       tax_rate: Number(settings?.tax_rate ?? 0),
       service_charge_rate: Number(settings?.service_charge_rate ?? 0),
       receipt_footer: settings?.receipt_footer ?? '',
+      loyalty_earn_per_100: Number(settings?.loyalty_earn_per_100 ?? 1),
+      loyalty_point_value: Number(settings?.loyalty_point_value ?? 1),
     })
+    setLoyaltyEarn(String(Number(settings?.loyalty_earn_per_100 ?? 1)))
+    setLoyaltyPointValue(String(Number(settings?.loyalty_point_value ?? 1)))
     setLoaded(true)
   }, [user, restaurant, settings, dbPending])
 
@@ -144,6 +175,11 @@ export default function SettingsPage() {
         tax_rate: values.tax_rate,
         service_charge_rate: values.service_charge_rate,
         receipt_footer: values.receipt_footer.trim(),
+        // Rates are parsed from their string inputs here, never from a
+        // number input: an empty/invalid value falls back to the
+        // default 1 instead of saving 0 or NaN.
+        loyalty_earn_per_100: parseLoyaltyRate(loyaltyEarn, 1, true),
+        loyalty_point_value: parseLoyaltyRate(loyaltyPointValue, 1, false),
       })
       await refreshWorkspace()
       setSaved(true)
@@ -418,6 +454,56 @@ export default function SettingsPage() {
                 onChange={(e) => set('receipt_footer', e.target.value)}
                 placeholder={t('settings.receiptFooterPlaceholder')}
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('settings.loyalty')}</CardTitle>
+            <CardDescription>
+              {t('settings.loyaltyHint', {
+                amount: formatMoney(100, values.currency),
+                value: formatMoney(1, values.currency),
+              })}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="loyaltyEarnPer100">
+                  {t('settings.loyaltyEarnPer100', {
+                    amount: formatMoney(100, values.currency),
+                  })}
+                </Label>
+                <Input
+                  id="loyaltyEarnPer100"
+                  type="text"
+                  inputMode="decimal"
+                  value={loyaltyEarn}
+                  onChange={(e) => {
+                    setLoyaltyEarn(e.target.value)
+                    setSaved(false)
+                    setSaveErrorKey(null)
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="loyaltyPointValue">
+                  {t('settings.loyaltyPointValue')}
+                </Label>
+                <Input
+                  id="loyaltyPointValue"
+                  type="text"
+                  inputMode="decimal"
+                  value={loyaltyPointValue}
+                  onChange={(e) => {
+                    setLoyaltyPointValue(e.target.value)
+                    setSaved(false)
+                    setSaveErrorKey(null)
+                  }}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>

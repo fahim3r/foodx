@@ -11,6 +11,13 @@ import { isMissingTableError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
 import { fetchProductAvailability } from '@/services/inventory'
+import {
+  computeCouponDiscount,
+  fetchCouponByCode,
+  validateCouponForOrder,
+} from '@/services/coupons'
+import { fetchCustomers } from '@/services/customers'
+import { fetchCustomerBalance, readLoyaltyRates } from '@/services/loyalty'
 import { fetchCategories, fetchProductsWithDetails } from '@/services/menu'
 import {
   computeOrderTotals,
@@ -25,6 +32,8 @@ import { fetchBranches, type Branch } from '@/services/restaurant'
 import { fetchTables } from '@/services/tables'
 import type {
   Category,
+  Coupon,
+  Customer,
   DiningTable,
   Order,
   OrderPayment,
@@ -107,6 +116,21 @@ export default function PosPage() {
   const [cart, setCart] = useState<CartLine[]>([])
   const [discount, setDiscount] = useState(0)
   const [notes, setNotes] = useState('')
+
+  // --- Phase 4: customer / coupon / loyalty (all optional) ------------------
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerOptions, setCustomerOptions] = useState<Customer[]>([])
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null,
+  )
+  const [customerBalance, setCustomerBalance] = useState<number | null>(null)
+  const [couponCode, setCouponCode] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null)
+  const [couponErrorKey, setCouponErrorKey] = useState<string | null>(null)
+  const [couponApplying, setCouponApplying] = useState(false)
+  // Points the cashier wants to redeem; clamped to what the customer
+  // can actually use (see redeemPointsEffective below).
+  const [redeemPoints, setRedeemPoints] = useState('')
 
   const [chooserProduct, setChooserProduct] =
     useState<ProductWithDetails | null>(null)
@@ -228,10 +252,72 @@ export default function PosPage() {
     return lines
   }, [cart, productById, displayName])
 
-  const totals = useMemo(
+  // Live preview: price every cart line from the loaded catalog, using
+  // the same totals function the placement service uses.
+  //
+  // Discount order: manual first, then coupon, then loyalty — each
+  // clamped so the total never goes below 0. The coupon discount is
+  // computed from the raw subtotal (same rule the service validates
+  // against); the redeemable points are capped by the balance AND by
+  // the remaining total after manual + coupon, so the preview and the
+  // placed order always agree.
+  const loyaltyRates = useMemo(() => readLoyaltyRates(settings), [settings])
+
+  const baseTotals = useMemo(
     () =>
       computeOrderTotals(previewLines, discount, taxRate, serviceChargeRate),
     [previewLines, discount, taxRate, serviceChargeRate],
+  )
+
+  const couponDiscount = useMemo(
+    () =>
+      appliedCoupon
+        ? computeCouponDiscount(appliedCoupon, baseTotals.subtotal)
+        : 0,
+    [appliedCoupon, baseTotals.subtotal],
+  )
+
+  const totalsAfterCoupon = useMemo(
+    () =>
+      computeOrderTotals(previewLines, discount, taxRate, serviceChargeRate, {
+        couponDiscount,
+      }),
+    [previewLines, discount, taxRate, serviceChargeRate, couponDiscount],
+  )
+
+  const maxRedeemablePoints = useMemo(() => {
+    if (!selectedCustomer || customerBalance === null) return 0
+    const byTotal = Math.floor(
+      Math.max(0, totalsAfterCoupon.totalAmount) / loyaltyRates.pointValue,
+    )
+    return Math.max(0, Math.min(customerBalance, byTotal))
+  }, [selectedCustomer, customerBalance, totalsAfterCoupon, loyaltyRates])
+
+  const redeemPointsEffective = useMemo(() => {
+    const wanted = Number.parseInt(redeemPoints, 10)
+    if (!Number.isFinite(wanted) || wanted <= 0) return 0
+    return Math.min(wanted, maxRedeemablePoints)
+  }, [redeemPoints, maxRedeemablePoints])
+
+  const loyaltyDiscount = useMemo(
+    () => roundMoney(redeemPointsEffective * loyaltyRates.pointValue),
+    [redeemPointsEffective, loyaltyRates],
+  )
+
+  const totals = useMemo(
+    () =>
+      computeOrderTotals(previewLines, discount, taxRate, serviceChargeRate, {
+        couponDiscount,
+        loyaltyDiscount,
+      }),
+    [
+      previewLines,
+      discount,
+      taxRate,
+      serviceChargeRate,
+      couponDiscount,
+      loyaltyDiscount,
+    ],
   )
 
   const availableTables = useMemo(
@@ -368,6 +454,78 @@ export default function PosPage() {
     setPaymentAmount('')
     setPaymentReference('')
     setChooserProduct(null)
+    setCustomerSearch('')
+    setCustomerOptions([])
+    setSelectedCustomer(null)
+    setCustomerBalance(null)
+    setCouponCode('')
+    setAppliedCoupon(null)
+    setCouponErrorKey(null)
+    setRedeemPoints('')
+  }
+
+  const handleCustomerSearch = async () => {
+    if (!restaurant) return
+    try {
+      const found = await fetchCustomers(restaurant.id, customerSearch)
+      setCustomerOptions(found.filter((c) => c.is_active))
+    } catch (error) {
+      console.error('[POS] customer search failed', error)
+      setCustomerOptions([])
+    }
+  }
+
+  const handleAttachCustomer = async (customer: Customer) => {
+    setSelectedCustomer(customer)
+    setCustomerOptions([])
+    setCustomerSearch('')
+    setRedeemPoints('')
+    try {
+      setCustomerBalance(await fetchCustomerBalance(customer.id))
+    } catch (error) {
+      console.error('[POS] customer balance failed', error)
+      setCustomerBalance(null)
+    }
+  }
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null)
+    setCustomerBalance(null)
+    setRedeemPoints('')
+  }
+
+  const handleApplyCoupon = async () => {
+    if (!restaurant) return
+    setCouponErrorKey(null)
+    setCouponApplying(true)
+    try {
+      const coupon = await fetchCouponByCode(restaurant.id, couponCode)
+      if (!coupon) {
+        setCouponErrorKey('customers.couponNotFound')
+        return
+      }
+      const invalid = validateCouponForOrder(
+        coupon,
+        baseTotals.subtotal,
+        new Date(),
+      )
+      if (invalid) {
+        setCouponErrorKey(invalid)
+        return
+      }
+      setAppliedCoupon(coupon)
+    } catch (error) {
+      console.error('[POS] apply coupon failed', error)
+      setCouponErrorKey('customers.couponNotFound')
+    } finally {
+      setCouponApplying(false)
+    }
+  }
+
+  const handleClearCoupon = () => {
+    setAppliedCoupon(null)
+    setCouponCode('')
+    setCouponErrorKey(null)
   }
 
   const handlePlaceOrder = async () => {
@@ -397,6 +555,11 @@ export default function PosPage() {
           type: orderType,
           notes,
           discountAmount: discount,
+          customerId: selectedCustomer?.id ?? null,
+          couponId: appliedCoupon?.id ?? null,
+          couponDiscount,
+          loyaltyPointsRedeemed: redeemPointsEffective,
+          loyaltyDiscount,
           lines,
         },
         user.id,
@@ -536,6 +699,11 @@ export default function PosPage() {
             <CardDescription>{tableName}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            {selectedCustomer && (
+              <p className="text-sm text-muted-foreground">
+                {t('pos.customer')}: {selectedCustomer.name}
+              </p>
+            )}
             <ul className="flex flex-col gap-2">
               {placedLines.map((line) => (
                 <li
@@ -568,6 +736,26 @@ export default function PosPage() {
                   {formatMoney(Number(placedOrder.discount_amount), currency)}
                 </span>
               </p>
+              {Number(placedOrder.coupon_discount) > 0 && (
+                <p className="flex justify-between">
+                  <span>{t('pos.couponDiscount')}</span>
+                  <span>
+                    {formatMoney(Number(placedOrder.coupon_discount), currency)}
+                  </span>
+                </p>
+              )}
+              {Number(placedOrder.loyalty_discount) > 0 && (
+                <p className="flex justify-between">
+                  <span>
+                    {t('pos.loyaltyDiscount')} (
+                    {Number(placedOrder.loyalty_points_redeemed)}{' '}
+                    {t('pos.points')})
+                  </span>
+                  <span>
+                    {formatMoney(Number(placedOrder.loyalty_discount), currency)}
+                  </span>
+                </p>
+              )}
               <p className="flex justify-between">
                 <span>{t('pos.tax', { rate: taxRate })}</span>
                 <span>{formatMoney(Number(placedOrder.tax_amount), currency)}</span>
@@ -1000,6 +1188,144 @@ export default function PosPage() {
                 placeholder={t('pos.notesPlaceholder')}
               />
             </div>
+            <div className="flex flex-col gap-2 border-t pt-3">
+              <Label>{t('pos.customer')}</Label>
+              {selectedCustomer ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {selectedCustomer.name}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {selectedCustomer.phone
+                        ? `${selectedCustomer.phone} · `
+                        : ''}
+                      {t('pos.pointsBalance', {
+                        points: customerBalance ?? 0,
+                      })}
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleClearCustomer}
+                  >
+                    {t('pos.clearCustomer')}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      type="search"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void handleCustomerSearch()
+                        }
+                      }}
+                      placeholder={t('pos.customerSearchPlaceholder')}
+                      aria-label={t('pos.customerSearchPlaceholder')}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleCustomerSearch()}
+                    >
+                      {t('common.search')}
+                    </Button>
+                  </div>
+                  {customerOptions.length > 0 && (
+                    <ul className="flex flex-col gap-1">
+                      {customerOptions.map((customer) => (
+                        <li key={customer.id}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-auto w-full justify-start whitespace-normal text-left"
+                            onClick={() => void handleAttachCustomer(customer)}
+                          >
+                            {customer.name}
+                            {customer.phone ? ` (${customer.phone})` : ''}
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="couponCode">{t('pos.couponCode')}</Label>
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                  <span className="font-medium">{appliedCoupon.code}</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleClearCoupon}
+                  >
+                    {t('pos.clearCoupon')}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    id="couponCode"
+                    value={couponCode}
+                    onChange={(e) =>
+                      setCouponCode(e.target.value.toUpperCase())
+                    }
+                    placeholder={t('pos.couponCodePlaceholder')}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={couponApplying || !couponCode.trim()}
+                    onClick={() => void handleApplyCoupon()}
+                  >
+                    {t('pos.applyCoupon')}
+                  </Button>
+                </div>
+              )}
+              {couponErrorKey && (
+                <p
+                  role="alert"
+                  className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  {t(couponErrorKey)}
+                </p>
+              )}
+            </div>
+            {selectedCustomer && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="redeemPoints">
+                  {t('pos.redeemPoints')}
+                </Label>
+                <Input
+                  id="redeemPoints"
+                  type="text"
+                  inputMode="numeric"
+                  value={redeemPoints}
+                  onChange={(e) => setRedeemPoints(e.target.value)}
+                  placeholder={t('pos.redeemPointsPlaceholder', {
+                    max: maxRedeemablePoints,
+                  })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('pos.pointsAvailable', {
+                    balance: customerBalance ?? 0,
+                    max: maxRedeemablePoints,
+                    value: formatMoney(loyaltyRates.pointValue, currency),
+                  })}
+                </p>
+              </div>
+            )}
             <div className="flex flex-col gap-1 border-t pt-3 text-sm">
               <p className="flex justify-between">
                 <span>{t('pos.subtotal')}</span>
@@ -1009,6 +1335,24 @@ export default function PosPage() {
                 <span>{t('pos.discount')}</span>
                 <span>{formatMoney(totals.discountAmount, currency)}</span>
               </p>
+              {totals.couponDiscount > 0 && (
+                <p className="flex justify-between">
+                  <span>
+                    {t('pos.couponDiscount')}
+                    {appliedCoupon ? ` (${appliedCoupon.code})` : ''}
+                  </span>
+                  <span>{formatMoney(totals.couponDiscount, currency)}</span>
+                </p>
+              )}
+              {totals.loyaltyDiscount > 0 && (
+                <p className="flex justify-between">
+                  <span>
+                    {t('pos.loyaltyDiscount')} ({redeemPointsEffective}{' '}
+                    {t('pos.points')})
+                  </span>
+                  <span>{formatMoney(totals.loyaltyDiscount, currency)}</span>
+                </p>
+              )}
               <p className="flex justify-between">
                 <span>{t('pos.tax', { rate: taxRate })}</span>
                 <span>{formatMoney(totals.taxAmount, currency)}</span>

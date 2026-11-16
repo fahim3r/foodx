@@ -182,6 +182,8 @@ and charge configuration edited on the Settings page.
 | `tax_rate` | `numeric(5,2)` NOT NULL DEFAULT `0` | Percent, 0–100 in the form |
 | `service_charge_rate` | `numeric(5,2)` NOT NULL DEFAULT `0` | Percent, 0–100 in the form |
 | `receipt_footer` | `text` NULL | Printed at the bottom of receipts (no receipts exist yet) |
+| `loyalty_earn_per_100` | `numeric(12,2)` NOT NULL DEFAULT `1` | **Phase 4.** Points earned per 100 currency units of a completed order's total |
+| `loyalty_point_value` | `numeric(12,2)` NOT NULL DEFAULT `1` | **Phase 4.** Currency value of one point when redeemed at the POS |
 | `created_at` / `updated_at` | `timestamptz` | |
 
 ### `feature_flags`
@@ -343,9 +345,14 @@ computed by the service from database prices, never from client values.
 | `status` | `text` NOT NULL DEFAULT `'DRAFT'`, CHECK in the 9 valid statuses (see state machine) | |
 | `subtotal` | `numeric(12,2)` NOT NULL DEFAULT `0` | Sum of line totals, before discount |
 | `discount_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | Flat discount, capped at the subtotal |
-| `tax_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | On (subtotal − discount), at the settings tax rate |
-| `service_charge_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | On (subtotal − discount), at the settings service-charge rate |
-| `total_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | (subtotal − discount) + tax + service charge |
+| `customer_id` | `uuid` NULL → `customers(id)` ON DELETE SET NULL | **Phase 4.** The customer the order belongs to, if one was attached at the POS |
+| `coupon_id` | `uuid` NULL → `coupons(id)` ON DELETE SET NULL | **Phase 4.** At most one coupon per order |
+| `coupon_discount` | `numeric(12,2)` NOT NULL DEFAULT `0` | **Phase 4.** Discount from the coupon, applied after the manual discount |
+| `loyalty_points_redeemed` | `integer` NOT NULL DEFAULT `0` | **Phase 4.** Points redeemed on this order |
+| `loyalty_discount` | `numeric(12,2)` NOT NULL DEFAULT `0` | **Phase 4.** Discount from redeemed points, applied after the coupon discount |
+| `tax_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | On (subtotal − manual − coupon − loyalty), at the settings tax rate |
+| `service_charge_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | On (subtotal − manual − coupon − loyalty), at the settings service-charge rate |
+| `total_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | (subtotal − manual − coupon − loyalty) + tax + service charge |
 | `notes` | `text` NULL | Kitchen notes from the POS |
 | `created_by` | `uuid` NULL | Actor; no FK (the user may be deleted) |
 | `created_at` / `updated_at` | `timestamptz` | |
@@ -609,9 +616,142 @@ when nothing was deducted (e.g. products with no recipe). Called by `cancelOrder
 is logged and never fails the cancel. Refunds never call it — a
 refunded order was already served, its food is gone.
 
+## Phase 4 tables (Customers)
+
+Source of truth: `supabase/migrations/0005_customers.sql`.
+
+### `customers`
+
+One row per customer of a restaurant. Customers are **deactivated
+(`is_active = false`), never hard-deleted** — their orders and loyalty
+history must survive.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `name` | `text` NOT NULL | |
+| `phone` | `text` NULL | UNIQUE per restaurant — Postgres allows multiple NULL phones, so the phone stays optional |
+| `email` | `text` NULL | |
+| `address` | `text` NULL | |
+| `notes` | `text` NULL | |
+| `is_active` | `boolean` NOT NULL DEFAULT `true` | Deactivated customers cannot be attached at the POS |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+### `loyalty_transactions`
+
+The loyalty audit trail. One row per points movement, signed
+(positive = earned/returned, negative = redeemed). **Append-only:
+SELECT + INSERT policies only, no UPDATE/DELETE policy.** There is
+**no balance column anywhere** — a customer's balance is always
+`SUM(points)` over their transactions, computed by
+`fetchCustomerBalance()`.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `customer_id` | `uuid` NOT NULL → `customers(id)` ON DELETE CASCADE | |
+| `order_id` | `uuid` NULL → `orders(id)` ON DELETE SET NULL | The order that earned/redeemed/returned the points; NULL for manual adjustments |
+| `type` | `text` NOT NULL, CHECK in `EARN / REDEEM / ADJUSTMENT / REVERSAL` | |
+| `points` | `integer` NOT NULL, CHECK `points <> 0` | Signed: EARN/REVERSAL positive, REDEEM negative, ADJUSTMENT either sign |
+| `reason` | `text` NULL | Required for manual adjustments (enforced in the service, not the DB) |
+| `created_by` | `uuid` NULL | Actor; no FK (the user may be deleted) |
+| `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | No `updated_at` — rows are never updated |
+
+Partial unique index `(order_id, type) WHERE order_id IS NOT NULL AND
+type IN ('EARN','REDEEM')` — one earn and one redeem per order, so a
+retried completion or placement cannot double-award or double-redeem.
+A wrong transaction is corrected by a new ADJUSTMENT / REVERSAL row,
+never by editing history.
+
+**Loyalty rules (enforced in `src/services/loyalty.ts` + `orders.ts` /
+`pos.ts`, not in the DB):**
+
+- Points are earned **only when an order completes** (`completeOrder()`
+  → `awardLoyaltyPoints()`): `floor(total_amount / 100) ×
+  loyalty_earn_per_100`, read from `restaurant_settings` (defaults 1
+  and 1 when the settings row is missing). No customer, or 0 points,
+  earns nothing.
+- Points are redeemed **only at the POS**: the cashier picks how many
+  points to use, capped at the customer's balance and at the remaining
+  total after manual + coupon discounts; the discount is
+  `points × loyalty_point_value`. The REDEEM row is written by
+  `createOrder()` after the order row exists; a unique-violation there
+  is ignored (the order already has the redemption).
+- **Cancelling** an order returns its redeemed points: one REVERSAL
+  with +points, reason `"Redeemed points returned — order #N
+  cancelled"` (idempotent — a second cancel attempt reverses
+  nothing). Cancelling does not touch earned points (nothing was
+  earned yet — the order never completed).
+- **Refunding** an order reverses its earned points: one REVERSAL with
+  −points, reason `"Earned points reversed — order #N refunded"`
+  (idempotent). The money came back, so the points for it come back
+  too. Refunds do not restock (Phase 3 rule) and do not return redeemed
+  points (the points were spent on a completed, served order).
+- Manual adjustments (`adjustLoyaltyPoints()`) require a **reason**
+  and a non-zero integer; they are the only way a balance changes
+  outside an order.
+- Known edge (v1, no guard): refunding an order whose earned points
+  were already spent can take the customer's computed balance
+  negative. The balance is a SUM, so it shows honestly; a guard is
+  later-phase work.
+
+### `coupons`
+
+Discount coupons, one per order at most. Coupons are **deactivated
+(`is_active = false`), never hard-deleted** when they have redemptions
+— the redemption rows reference them.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `restaurant_id` | `uuid` NOT NULL → `restaurants(id)` ON DELETE CASCADE | |
+| `code` | `text` NOT NULL | Stored UPPERCASE, trimmed; UNIQUE per restaurant |
+| `type` | `text` NOT NULL, CHECK in `PERCENT / FIXED` | |
+| `value` | `numeric(12,2)` NOT NULL, CHECK `value > 0` | PERCENT is 0 < value ≤ 100 (enforced in the service, not the DB); FIXED is a money amount |
+| `min_order_amount` | `numeric(12,2)` NOT NULL DEFAULT `0` | Checked against the raw order subtotal |
+| `valid_from` / `valid_to` | `date` NULL | NULL = no bound on that side |
+| `max_uses` | `integer` NULL | NULL = unlimited |
+| `is_active` | `boolean` NOT NULL DEFAULT `true` | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+There is **no stored `used_count`** — usage is always computed as
+`COUNT(coupon_redemptions)` joined to orders with status ≠
+`'CANCELLED'` (`fetchCouponUsage()`), so it can never drift. The
+max-uses check happens at apply time in the POS, not at the redemption
+insert — a race could exceed it by one (known v1 edge).
+
+### `coupon_redemptions`
+
+One row per coupon use: exactly one per order (UNIQUE `order_id`).
+**Append-only: SELECT + INSERT policies only, no UPDATE/DELETE.**
+`coupon_id` is ON DELETE RESTRICT — a coupon with redemptions cannot
+be deleted at all.
+
+| Column | Type / default | Notes |
+| --- | --- | --- |
+| `id` | `uuid` PK | |
+| `coupon_id` | `uuid` NOT NULL → `coupons(id)` ON DELETE RESTRICT | |
+| `order_id` | `uuid` NOT NULL UNIQUE → `orders(id)` ON DELETE CASCADE | One coupon per order in v1 |
+| `discount_amount` | `numeric(12,2)` NOT NULL, CHECK `discount_amount >= 0` | The discount the order actually got |
+| `created_at` | `timestamptz` NOT NULL DEFAULT `now()` | No `updated_at` |
+
+RLS is scoped through the parent order (`EXISTS` on `orders`, same
+pattern as `purchase_order_items` in Phase 3). The order row's own
+`coupon_id` / `coupon_discount` columns are the source of truth for
+the total; the redemption row is the audit record.
+
+**Discount order (single rule, `computeOrderTotals()` in
+`src/services/pos.ts`): manual discount first, then coupon, then
+loyalty — each clamped to what is left, total never below 0.** The POS
+preview uses the same function as `createOrder()`, so the preview and
+the placed order always agree. Coupon discount: PERCENT →
+`roundMoney(subtotal × value / 100)`, FIXED → `min(value, subtotal)`.
+
 ## Row Level Security
 
-RLS is enabled on **all 28 tables**. Every policy is `TO authenticated`
+RLS is enabled on **all 32 tables**. Every policy is `TO authenticated`
 — the `anon` role has no direct table access at all; it can only
 authenticate. All policies are defined in `0001_foundation.sql`; the
 summary below is not a substitute for reading them.
@@ -836,6 +976,20 @@ movements. Run it after `seed.sql` and `seed_phase2.sql`, as `postgres`
 / service role. Removal SQL is in the file header; deleting the demo
 restaurant cascades everything.
 
+### Phase 4 demo seed (`supabase/seed_phase4.sql`)
+
+Development only, never production. Adds, for the demo restaurant only
+(fixed UUIDs, `ON CONFLICT DO NOTHING`):
+
+| Rows | Ids |
+| --- | --- |
+| 2 customers (Rahim Uddin 01711111111, Nasrin Akter 01822222222) | `dddddddd-…-ddddddddddd1/2` |
+| 1 coupon (WELCOME10, 10% off, valid through 2026) | `eeeeeeee-…-eeeeeeeeeee1` |
+
+It creates **no orders, loyalty transactions, or redemptions**. Run it
+after `seed.sql`, as `postgres` / service role. Removal SQL is in the
+file header; deleting the demo restaurant cascades everything.
+
 ## Sync and data-integrity notes
 
 These rules apply now and constrain the Phase 9 offline/sync design —
@@ -850,6 +1004,9 @@ record them here so a later phase does not accidentally break them.
   because assignments are not history. `stock_movements` (Phase 3) has
   no INSERT/UPDATE/DELETE policy at all — only the two stock functions
   write it, and corrections are new ADJUSTMENT / WASTE movements.
+  `loyalty_transactions` and `coupon_redemptions` (Phase 4) are
+  append-only the same way: SELECT + INSERT policies only, no
+  UPDATE/DELETE; corrections are new ADJUSTMENT / REVERSAL rows.
 - **Audit everything that moves money.** Every order, payment, refund,
   void, stock adjustment, and purchase must write an `audit_logs` row
   with `before_data` / `after_data` at the same time as the change —

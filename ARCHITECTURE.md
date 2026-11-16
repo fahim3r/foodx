@@ -267,12 +267,12 @@ missed on a deployment.
 | Inventory, purchases, expenses | Built in Phase 3: stock items, recipes, movements, suppliers, purchase orders, POS deduction. Expenses still nothing | Phase 7 (Business) for expenses |
 | Staff management, role editing, permission enforcement | Read-only Roles page; `role_permissions` empty; no enforcement | Phase 7 (Business) |
 | Reports / analytics | Nothing; recharts installed but unused | Phase 7 (Business) |
-| Customers, loyalty | Nothing | Phase 4 |
+| Customers, loyalty | Built in Phase 4: customer records + history, loyalty points (computed balances, earn on complete, redeem at POS, cancel/refund reversals), coupons (PERCENT/FIXED, validity, usage limits), POS integration | — |
 | Online ordering, delivery | Nothing; `feature_flags` keys reserved (`online_ordering`, `delivery`, `loyalty`, `accounting`, `nfc`, `multi_branch`) | Phases 5–6 |
 | Offline-first / LAN / sync, Docker, production hardening | Manifest-only PWA; no Docker files | Phase 9 |
 | Developer Panel (separate from Restaurant Admin) | Nothing | Phase 8 |
 | Branch management UI | `branches` table exists; no UI/service | Phase 7 (Business), with multi-branch work |
-| Audit logging | `audit_logs` table exists (insert-only); nothing writes to it yet. Order status changes are audited in `order_status_history` (Phase 2) and stock changes in `stock_movements` (Phase 3) instead | When the first audited action lands — write the log call with the action, not after; decide the `audit_logs` vs `order_status_history` / `stock_movements` vocabulary first |
+| Audit logging | `audit_logs` table exists (insert-only); nothing writes to it yet. Order status changes are audited in `order_status_history` (Phase 2), stock changes in `stock_movements` (Phase 3), and loyalty changes in `loyalty_transactions` (Phase 4) instead | When the first audited action lands — write the log call with the action, not after; decide the `audit_logs` vs `order_status_history` / `stock_movements` vocabulary first |
 | Feature flags | Table exists; nothing reads/writes it | When the first gated feature lands |
 | Global state store | `src/stores/` placeholder | When a second consumer needs shared state |
 | Generated DB types | Hand-written mirror in `src/types/index.ts` | Optional improvement |
@@ -290,5 +290,7 @@ missed on a deployment.
 | React context + local state, no store library | Phase 1 state is small (session + workspace + forms); a store would be premature | §5 |
 | Stock changes only through movements | Quantities must never be edited directly — the item form has no quantity field, and the only writer is `apply_stock_movement()` (SECURITY DEFINER). `stock_movements` has no INSERT/UPDATE/DELETE policy at all; corrections are new ADJUSTMENT / WASTE movements | [DATABASE.md](DATABASE.md#phase-3-tables-inventory) |
 | A sale is never blocked for stock | POS deduction may take stock negative; negatives are highlighted, not errors. Cancelling an order restocks via RESTOCK movements (`restock_for_order()`, idempotent); refunds do not restock | [DATABASE.md](DATABASE.md#phase-3-tables-inventory) |
+| Loyalty balances are computed, never stored | A stored balance drifts the moment a transaction is missed; `SUM(points)` over append-only `loyalty_transactions` is always right. One EARN / one REDEEM per order enforced by a partial unique index; corrections are new ADJUSTMENT / REVERSAL rows | [DATABASE.md](DATABASE.md#phase-4-tables-customers) |
+| Discount order is manual → coupon → loyalty | A single rule in `computeOrderTotals()`; the POS preview and `createOrder()` share it, so preview and placed order always agree. Refunding reverses the EARN; cancelling returns the redeemed points | [DATABASE.md](DATABASE.md#phase-4-tables-customers) |
 | i18n from day one (en/bn, 150 keys) | Staff audience is Bangla-first; retrofitting i18n later is expensive | §6 |
 | Branding as CSS variables from `restaurant_settings` | Per-restaurant theme without rebuilds or per-tenant CSS bundles | §7 |

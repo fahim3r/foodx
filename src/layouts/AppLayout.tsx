@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Table2,
+  Users,
   UtensilsCrossed,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { to: '/menu', key: 'nav.menu', icon: UtensilsCrossed, end: false },
   { to: '/inventory', key: 'nav.inventory', icon: Boxes, end: false },
   { to: '/tables', key: 'nav.tables', icon: Table2, end: false },
+  { to: '/customers', key: 'nav.customers', icon: Users, end: false },
   { to: '/settings', key: 'nav.settings', icon: Settings, end: false },
   { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false },
 ] as const

@@ -4,6 +4,11 @@
 // records are never deleted — a wrong order is CANCELLED or REFUNDED.
 import { supabase } from '@/lib/supabase'
 import { restockForOrder } from '@/services/inventory'
+import {
+  awardLoyaltyPoints,
+  reverseLoyaltyEarn,
+  reverseLoyaltyRedemption,
+} from '@/services/loyalty'
 import { setTableStatus } from '@/services/tables'
 import {
   canTransitionOrderStatus,
@@ -149,12 +154,21 @@ export async function markOrderServed(
   return advanceOrderStatus(order, 'SERVED', userId)
 }
 
-/** SERVED → COMPLETED: the order is done and the table frees up. */
+/** SERVED → COMPLETED: the order is done and the table frees up.
+ * Completing awards loyalty points (one EARN per order, idempotent).
+ * Best-effort — an award failure is logged and never fails the
+ * completion. */
 export async function completeOrder(
   order: Order,
   userId: string,
 ): Promise<Order> {
-  return advanceOrderStatus(order, 'COMPLETED', userId)
+  const completed = await advanceOrderStatus(order, 'COMPLETED', userId)
+  try {
+    await awardLoyaltyPoints(completed)
+  } catch (error) {
+    console.error('[Orders] loyalty award failed', error)
+  }
+  return completed
 }
 
 /**
@@ -163,9 +177,11 @@ export async function completeOrder(
  * itself. Throws Error('cancel_reason_required') without one.
  *
  * Cancelling restocks: the SALE deduction is reversed with one RESTOCK
- * movement per item (restock_for_order(), idempotent). Best-effort —
- * a restock failure is logged and never fails the cancel. Refunds do
- * NOT restock: a refunded order was already served, its food is gone.
+ * movement per item (restock_for_order(), idempotent). It also returns
+ * any points the order redeemed (one REVERSAL, idempotent). Both are
+ * best-effort — a failure is logged and never fails the cancel.
+ * Refunds do NOT restock: a refunded order was already served, its
+ * food is gone.
  */
 export async function cancelOrder(
   order: Order,
@@ -184,6 +200,11 @@ export async function cancelOrder(
   } catch (error) {
     console.error('[Orders] restock after cancel failed', error)
   }
+  try {
+    await reverseLoyaltyRedemption(order.id)
+  } catch (error) {
+    console.error('[Orders] loyalty reversal after cancel failed', error)
+  }
   return cancelled
 }
 
@@ -192,6 +213,11 @@ export async function cancelOrder(
  * reason and the refunded amount are stored on the history row. (Full
  * refund accounting — negative payment rows — is later-phase work; the
  * refund here is a status + an auditable note, never a deletion.)
+ *
+ * Refunding reverses the points the order earned (one REVERSAL,
+ * idempotent): the money came back, so the points for it come back too.
+ * Best-effort — a reversal failure is logged and never fails the
+ * refund. Refunds do NOT restock: the food was already served.
  */
 export async function refundOrder(
   order: Order,
@@ -204,7 +230,13 @@ export async function refundOrder(
     amount !== undefined && Number.isFinite(amount)
       ? `Refunded ${amount} — ${reason.trim()}`
       : `Refunded — ${reason.trim()}`
-  return advanceOrderStatus(order, 'REFUNDED', userId, note)
+  const refunded = await advanceOrderStatus(order, 'REFUNDED', userId, note)
+  try {
+    await reverseLoyaltyEarn(order.id)
+  } catch (error) {
+    console.error('[Orders] loyalty reversal after refund failed', error)
+  }
+  return refunded
 }
 
 /** Today's orders for the dashboard (non-cancelled, newest first). */

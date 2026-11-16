@@ -13,9 +13,11 @@ second layer of defence inside a single restaurant's database.
 | `migrations/0002_core.sql` | Menu, tables, orders, payments, kitchen display |
 | `migrations/0003_inventory.sql` | Stock, recipes, suppliers, purchases, movements |
 | `migrations/0004_cancel_restock.sql` | Cancel restocks: RESTOCK movement type + `restock_for_order()` |
+| `migrations/0005_customers.sql` | Customers, loyalty transactions, coupons, coupon redemptions; loyalty rates on `restaurant_settings` |
 | `seed.sql` | Demo data only — never run against production |
 | `seed_phase2.sql` | Demo menu + tables for the demo restaurant only — never run against production |
 | `seed_phase3.sql` | Demo stock, recipes + supplier for the demo restaurant only — never run against production |
+| `seed_phase4.sql` | Demo customers + coupon for the demo restaurant only — never run against production |
 
 ## Applying the migration
 
@@ -156,6 +158,16 @@ orders** — the seeded quantities are opening stock, not movements. Run
 it only against a local/development project, as `postgres` /
 `service_role`, after `seed.sql` and `seed_phase2.sql`. Removal SQL is
 in the file header; deleting the demo restaurant cascades everything.
+
+## Demo seed — Phase 4 (`seed_phase4.sql`)
+
+Adds demo customers and a coupon for the demo restaurant only (fixed
+UUIDs, repeat-safe): 2 customers (Rahim Uddin, Nasrin Akter), 1 coupon
+(WELCOME10, 10% off, valid through 2026). It creates **no orders,
+loyalty transactions, or redemptions**. Run it only against a
+local/development project, as `postgres` / `service_role`, after
+`seed.sql`. Removal SQL is in the file header; deleting the demo
+restaurant cascades everything.
 
 ## Feature flags
 

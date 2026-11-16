@@ -1,7 +1,8 @@
 // FoodX — App router.
 // Public: /login, /reset-password, /update-password.
 // Protected (inside <AppLayout>): / (dashboard), /pos, /orders,
-// /orders/:id, /kds, /menu, /inventory, /tables, /settings, /roles.
+// /orders/:id, /kds, /menu, /inventory, /tables, /customers, /settings,
+// /roles.
 // Unknown routes redirect to /.
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './AuthProvider'
@@ -10,6 +11,7 @@ import LoginPage from '@/modules/auth/LoginPage'
 import ResetPasswordPage from '@/modules/auth/ResetPasswordPage'
 import UpdatePasswordPage from '@/modules/auth/UpdatePasswordPage'
 import DashboardPage from '@/modules/dashboard/DashboardPage'
+import CustomersPage from '@/modules/customers/CustomersPage'
 import InventoryPage from '@/modules/inventory/InventoryPage'
 import KdsPage from '@/modules/kds/KdsPage'
 import MenuPage from '@/modules/menu/MenuPage'
@@ -37,6 +39,7 @@ export default function App() {
             <Route path="/menu" element={<MenuPage />} />
             <Route path="/inventory" element={<InventoryPage />} />
             <Route path="/tables" element={<TablesPage />} />
+            <Route path="/customers" element={<CustomersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/roles" element={<RolesPage />} />
           </Route>

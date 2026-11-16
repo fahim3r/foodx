@@ -12,6 +12,8 @@
 // retry on the unique-constraint collision.
 import { supabase } from '@/lib/supabase'
 import { isUniqueViolationError } from '@/lib/errors'
+import { recordCouponRedemption } from '@/services/coupons'
+import { recordLoyaltyRedemption } from '@/services/loyalty'
 import { setTableStatus } from '@/services/tables'
 import type {
   CreateOrderInput,
@@ -41,7 +43,9 @@ export interface PricedLine {
 
 /**
  * Compute order totals from priced lines. Tax and service charge apply to
- * (subtotal − discount). Pure function — the POS page uses the same one
+ * (subtotal − discounts). Discounts apply in order — manual first, then
+ * coupon, then loyalty — each clamped to what is left, so the total
+ * never goes below 0. Pure function — the POS page uses the same one
  * for its live total preview, so the preview and the placed order agree.
  */
 export function computeOrderTotals(
@@ -49,17 +53,30 @@ export function computeOrderTotals(
   discountAmount: number,
   taxRate: number,
   serviceChargeRate: number,
+  extra?: { couponDiscount?: number; loyaltyDiscount?: number },
 ): OrderTotals {
   const subtotal = roundMoney(
     lines.reduce((sum, line) => sum + line.lineTotal, 0),
   )
   const discount = Math.min(Math.max(discountAmount, 0), subtotal)
-  const taxable = roundMoney(subtotal - discount)
+  const afterManual = roundMoney(subtotal - discount)
+  const couponDiscount = Math.min(
+    Math.max(extra?.couponDiscount ?? 0, 0),
+    afterManual,
+  )
+  const afterCoupon = roundMoney(afterManual - couponDiscount)
+  const loyaltyDiscount = Math.min(
+    Math.max(extra?.loyaltyDiscount ?? 0, 0),
+    afterCoupon,
+  )
+  const taxable = roundMoney(afterCoupon - loyaltyDiscount)
   const taxAmount = roundMoney((taxable * taxRate) / 100)
   const serviceChargeAmount = roundMoney((taxable * serviceChargeRate) / 100)
   return {
     subtotal,
     discountAmount: discount,
+    couponDiscount: roundMoney(couponDiscount),
+    loyaltyDiscount: roundMoney(loyaltyDiscount),
     taxAmount,
     serviceChargeAmount,
     totalAmount: roundMoney(taxable + taxAmount + serviceChargeAmount),
@@ -245,6 +262,10 @@ export async function createOrder(
     input.discountAmount,
     settings.taxRate,
     settings.serviceChargeRate,
+    {
+      couponDiscount: input.couponDiscount ?? 0,
+      loyaltyDiscount: input.loyaltyDiscount ?? 0,
+    },
   )
 
   const orderId = crypto.randomUUID()
@@ -270,6 +291,11 @@ export async function createOrder(
           status: 'CONFIRMED',
           subtotal: totals.subtotal,
           discount_amount: totals.discountAmount,
+          coupon_discount: totals.couponDiscount,
+          loyalty_points_redeemed: input.loyaltyPointsRedeemed ?? 0,
+          loyalty_discount: totals.loyaltyDiscount,
+          coupon_id: input.couponId ?? null,
+          customer_id: input.customerId ?? null,
           tax_amount: totals.taxAmount,
           service_charge_amount: totals.serviceChargeAmount,
           total_amount: totals.totalAmount,
@@ -368,6 +394,31 @@ export async function createOrder(
     }
   } catch (error) {
     console.error('[POS] stock deduction failed', error)
+  }
+
+  // Coupon + loyalty records (Phase 4): best-effort, after the order
+  // row exists — they must never fail an order at the counter. The
+  // order's own discount columns are the source of truth for the
+  // total; these rows are the audit trail (and the coupon usage count).
+  // Both inserts are idempotent, so a retried placement cannot
+  // double-record them.
+  if (input.couponId && totals.couponDiscount > 0) {
+    try {
+      await recordCouponRedemption(
+        orderId,
+        input.couponId,
+        totals.couponDiscount,
+      )
+    } catch (error) {
+      console.error('[POS] coupon redemption failed', error)
+    }
+  }
+  if (input.customerId && (input.loyaltyPointsRedeemed ?? 0) > 0) {
+    try {
+      await recordLoyaltyRedemption(order, input.loyaltyPointsRedeemed ?? 0)
+    } catch (error) {
+      console.error('[POS] loyalty redemption failed', error)
+    }
   }
   return order
 }

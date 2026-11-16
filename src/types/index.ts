@@ -33,6 +33,8 @@ export interface RestaurantSettings {
   tax_rate: number
   service_charge_rate: number
   receipt_footer: string | null
+  loyalty_earn_per_100: number
+  loyalty_point_value: number
 }
 
 export interface Role {
@@ -69,6 +71,8 @@ export interface RestaurantFormValues {
   tax_rate: number
   service_charge_rate: number
   receipt_footer: string
+  loyalty_earn_per_100: number
+  loyalty_point_value: number
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +206,11 @@ export interface Order {
   tax_amount: number
   service_charge_amount: number
   total_amount: number
+  customer_id: string | null
+  coupon_id: string | null
+  coupon_discount: number
+  loyalty_points_redeemed: number
+  loyalty_discount: number
   notes: string | null
   created_by: string | null
   created_at: string
@@ -279,13 +288,22 @@ export interface CreateOrderInput {
   type: OrderType
   notes?: string
   discountAmount: number
+  customerId?: string | null
+  couponId?: string | null
+  couponDiscount?: number
+  loyaltyPointsRedeemed?: number
+  loyaltyDiscount?: number
   lines: PosOrderLineInput[]
 }
 
-/** Money totals for an order, computed from DB prices. */
+/** Money totals for an order, computed from DB prices. Discounts apply
+ * in this order: manual, then coupon, then loyalty — each clamped to
+ * what is left, so the total never goes below 0. */
 export interface OrderTotals {
   subtotal: number
   discountAmount: number
+  couponDiscount: number
+  loyaltyDiscount: number
   taxAmount: number
   serviceChargeAmount: number
   totalAmount: number
@@ -427,4 +445,88 @@ export const PURCHASE_ORDER_TRANSITIONS: Record<
 export interface KitchenOrder {
   order: Order
   items: OrderItemWithModifiers[]
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — Customers (mirror supabase/migrations/0005_customers.sql)
+// ---------------------------------------------------------------------------
+
+export interface Customer {
+  id: string
+  restaurant_id: string
+  name: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  notes: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Per-customer lifetime numbers, computed from orders (never stored). */
+export interface CustomerStats {
+  orderCount: number
+  totalSpent: number
+  lastOrderAt: string | null
+}
+
+/** One loyalty transaction. Append-only: balances are always
+ * SUM(points) over these rows — there is no balance column anywhere. */
+export type LoyaltyTransactionType = 'EARN' | 'REDEEM' | 'ADJUSTMENT' | 'REVERSAL'
+
+export interface LoyaltyTransaction {
+  id: string
+  restaurant_id: string
+  customer_id: string
+  order_id: string | null
+  type: LoyaltyTransactionType
+  points: number
+  reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
+/** A loyalty transaction with its order number / customer name attached. */
+export interface LoyaltyTransactionWithOrder extends LoyaltyTransaction {
+  order_number: number | null
+  customer_name: string | null
+}
+
+/** Loyalty rates from restaurant_settings. Defaults: 1 point per 100
+ * currency units of order total, 1 point = 1 currency unit on redeem. */
+export interface LoyaltyRates {
+  earnPer100: number
+  pointValue: number
+}
+
+export type CouponType = 'PERCENT' | 'FIXED'
+
+export interface Coupon {
+  id: string
+  restaurant_id: string
+  code: string
+  type: CouponType
+  value: number
+  min_order_amount: number
+  valid_from: string | null
+  valid_to: string | null
+  max_uses: number | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** A coupon with its usage count attached (uses counts redemptions on
+ * non-cancelled orders only — the count is computed, never stored). */
+export interface CouponWithUsage extends Coupon {
+  uses: number
+}
+
+export interface CouponRedemption {
+  id: string
+  coupon_id: string
+  order_id: string
+  discount_amount: number
+  created_at: string
 }
