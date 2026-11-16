@@ -304,6 +304,9 @@ export default function SettingsPage() {
                   onChange={(e) => set('branding_name', e.target.value)}
                   placeholder={t('settings.brandingNamePlaceholder')}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {t('settings.brandingNameHint')}
+                </p>
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="logoUrl">{t('settings.logoUrl')}</Label>

@@ -348,8 +348,11 @@ Performance rules for the logo (so it never slows the site down):
 - The restaurant's own logo (Settings → Branding → Logo URL) always
   overrides the FoodX mark in the sidebar.
 - **Sidebar layout (Fahim's rule, 2026-11-16):** top = the restaurant's
-  logo (or the first letter of its name when no logo is set — never the
-  FoodX mark); bottom = the small FoodX mark + "FoodX" + tagline.
+  logo ONLY (wider when no name is shown); the name appears next to it
+  only when a display name is set in Settings → Branding (`branding_name`
+  — empty means logo only). When no logo is set, the first letter of the
+  restaurant name shows in a tile — never the FoodX mark. Bottom = the
+  FoodX **wordmark image** + tagline (never the X icon + typed "FoodX").
 - **Receipt & invoice branding (Fahim's rule, 2026-11-16):** on every
   receipt and invoice, the restaurant's logo goes on top and the FoodX
   mark sits small underneath it ("Powered by FoodX"). Build this in when

@@ -18,7 +18,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import logoMark from '@/assets/brand/logo-mark.webp'
+import logoWordmark from '@/assets/brand/logo-wordmark.webp'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -83,6 +83,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { restaurant, settings } = useAuth()
   const displayName =
     settings?.branding_name ?? restaurant?.name ?? t('app.name')
+  // Sidebar header: the restaurant logo only. The name appears next to it
+  // only when a display name is set in Settings → Branding; otherwise
+  // just the logo shows.
+  const sidebarName = settings?.branding_name?.trim() ?? ''
 
   return (
     <div className="flex h-full flex-col">
@@ -94,17 +98,19 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         {settings?.logo_url ? (
           <img
             src={settings.logo_url}
-            alt={displayName}
-            className="size-9 rounded-md object-contain"
+            alt={sidebarName || displayName}
+            className="h-9 w-auto max-w-44 shrink-0 rounded-md object-contain"
           />
         ) : (
           <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-base font-bold text-primary-foreground">
             {displayName.charAt(0).toUpperCase()}
           </span>
         )}
-        <span className="truncate text-lg font-bold tracking-tight">
-          {displayName}
-        </span>
+        {sidebarName ? (
+          <span className="truncate text-lg font-bold tracking-tight">
+            {sidebarName}
+          </span>
+        ) : null}
       </Link>
       <nav className="flex flex-col gap-1 px-3 py-2" aria-label={t('layout.nav')}>
         {NAV_ITEMS.map(({ to, key, icon: Icon, end }) => (
@@ -128,17 +134,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </nav>
       <div className="mt-auto px-5 py-4">
-        <div className="flex items-center gap-2">
-          <img
-            src={logoMark}
-            alt=""
-            width={128}
-            height={128}
-            className="size-6 shrink-0 rounded-full"
-          />
-          <span className="text-sm font-semibold">FoodX</span>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">{t('app.tagline')}</p>
+        <img
+          src={logoWordmark}
+          alt="FoodX"
+          width={480}
+          height={119}
+          className="h-7 w-auto"
+        />
+        <p className="mt-1.5 text-xs text-muted-foreground">{t('app.tagline')}</p>
       </div>
     </div>
   )
