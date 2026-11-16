@@ -19,7 +19,12 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: fullName ? { full_name: fullName } : undefined },
+    options: {
+      data: fullName ? { full_name: fullName } : undefined,
+      // Send the confirmation link back to this live site (not the
+      // Supabase dashboard's Site URL default, which was localhost).
+      emailRedirectTo: `${window.location.origin}/`,
+    },
   })
   if (error) throw error
   // When email confirmation is enabled, sign-up returns no session.
