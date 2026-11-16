@@ -122,16 +122,16 @@ export default function LoginPage() {
         ))}
       </div>
 
+      <img
+        src={logoWordmark}
+        alt="FoodX"
+        width={480}
+        height={119}
+        fetchPriority="high"
+        className="mb-6 h-14 w-auto"
+      />
       <Card className="w-full max-w-md">
         <CardHeader className="items-center text-center">
-          <img
-            src={logoWordmark}
-            alt="FoodX"
-            width={480}
-            height={119}
-            fetchPriority="high"
-            className="h-11 w-auto"
-          />
           <CardTitle className="text-2xl">
             {mode === 'signin' ? t('auth.signInTitle') : t('auth.signUpTitle')}
           </CardTitle>
