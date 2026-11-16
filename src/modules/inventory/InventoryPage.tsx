@@ -577,6 +577,7 @@ export default function InventoryPage() {
     setSelectedPoId(poId)
     setPoConfirm(null)
     setPoActionDone(null)
+    setPoError(null)
     try {
       setSelectedPo(await fetchPurchaseOrderDetail(poId))
     } catch (error) {
@@ -1906,7 +1907,6 @@ function PoLineAdder({
         onChange={(e) => setItemId(e.target.value)}
         className={SELECT_CLASS}
         aria-label={t('inventory.ingredient')}
-        required
       >
         <option value="">{t('inventory.ingredient')}</option>
         {availableItems.map((item) => (
@@ -1923,7 +1923,6 @@ function PoLineAdder({
         onChange={(e) => setQuantity(Number(e.target.value) || 0)}
         placeholder={t('inventory.quantity')}
         aria-label={t('inventory.quantity')}
-        required
       />
       <Input
         type="number"
@@ -1933,7 +1932,6 @@ function PoLineAdder({
         onChange={(e) => setUnitCost(Number(e.target.value) || 0)}
         placeholder={t('inventory.unitCost')}
         aria-label={t('inventory.unitCost')}
-        required
       />
       <Button type="button" size="sm" onClick={handleAdd}>
         {t('inventory.addLine')}

@@ -65,7 +65,8 @@ export async function fetchPurchaseOrderDetail(
     .from('purchase_order_items')
     .select('*, inventory_items(name, unit)')
     .eq('purchase_order_id', purchaseOrderId)
-    .order('created_at', { ascending: true })
+  // NOTE: purchase_order_items has no created_at column — do not order by it
+  // (PostgREST 42703). Line order is display-only.
   if (linesError) throw linesError
   const orderRow = order as PurchaseOrder & {
     suppliers: { name: string } | null
