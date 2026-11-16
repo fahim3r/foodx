@@ -1,8 +1,10 @@
 -- ============================================================================
 -- FoodX — Phase 2 demo seed (supabase/seed_phase2.sql)
 -- ============================================================================
--- DEMO DATA ONLY, for the DEMO restaurant only. Run this only against a
--- local / development Supabase project, NEVER against production.
+-- DEMO DATA ONLY, for the DEMO restaurant only. Approved 2026-11-17 to
+-- run against production as well, so the FoodX Demo restaurant — the
+-- public landing page on foodx.bond — has a demo menu for client demos.
+-- Never run it for any other restaurant.
 --
 -- What it creates (fixed UUIDs, so re-running is safe), all under the demo
 -- restaurant 11111111-1111-1111-1111-111111111111 ("FoodX Demo Restaurant",

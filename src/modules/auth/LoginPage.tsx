@@ -70,7 +70,10 @@ export default function LoginPage() {
     try {
       if (mode === 'signin') {
         await signIn(email.trim(), password)
-        void navigate('/', { replace: true })
+        // Up one level: the login page sits at <panel>/login and the
+        // dashboard at <panel> (relative, so it works in both
+        // mountings — see the note on AdminRoutes in App.tsx).
+        void navigate('..', { replace: true })
       } else {
         const { needsEmailConfirmation } = await signUp(
           email.trim(),
@@ -83,7 +86,7 @@ export default function LoginPage() {
           )
           setMode('signin')
         } else {
-          void navigate('/', { replace: true })
+          void navigate('..', { replace: true })
         }
       }
     } catch (error) {
@@ -180,7 +183,7 @@ export default function LoginPage() {
                 <Label htmlFor="password">{t('auth.password')}</Label>
                 {mode === 'signin' && (
                   <Link
-                    to="/reset-password"
+                    to="../reset-password"
                     className="text-sm text-primary hover:underline"
                   >
                     {t('auth.forgotPassword')}

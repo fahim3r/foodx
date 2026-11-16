@@ -1,5 +1,6 @@
-// FoodX — ProtectedRoute: redirects unauthenticated users to /login.
-// Renders the app layout (sidebar + topbar) around the protected page.
+// FoodX — ProtectedRoute: redirects unauthenticated users to the
+// panel login. Renders the app layout (sidebar + topbar) around the
+// protected page.
 //
 // Panel lock (Phase 5): when lockedRestaurantId is set, this route runs
 // under /panel on a restaurant's own domain, and only the account whose
@@ -37,7 +38,10 @@ export default function ProtectedRoute({
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />
+    // Relative target: the admin lives under /panel in both mountings
+    // (descendant of /panel/* on platform hosts, basename /panel on a
+    // restaurant domain), so "login" resolves to the panel login.
+    return <Navigate to="login" replace />
   }
 
   if (lockedRestaurantId) {

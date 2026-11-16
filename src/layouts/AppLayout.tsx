@@ -4,7 +4,7 @@
 // so the primary color follows the restaurant's branding everywhere.
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Boxes,
   ChefHat,
@@ -85,6 +85,17 @@ function LanguageSwitcher() {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation()
   const { restaurant, settings } = useAuth()
+  const { pathname } = useLocation()
+  // The admin lives under /panel in both mountings, but the router
+  // reports the path differently: under basename /panel (restaurant
+  // domain) useLocation() returns the stripped path ("/pos"), while
+  // as a descendant of /panel/* (platform hosts) it returns the full
+  // path ("/panel/pos"). Derive the prefix from that, so the sidebar
+  // links (and their active state) are right in both cases.
+  const panelBase =
+    pathname === '/panel' || pathname.startsWith('/panel/') ? '/panel' : ''
+  const navTo = (to: string) =>
+    to === '/' ? panelBase || '/' : `${panelBase}${to}`
   const displayName =
     settings?.branding_name ?? restaurant?.name ?? t('app.name')
   // Sidebar header: the restaurant logo only. The name appears next to it
@@ -94,8 +105,15 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <Link
-        to="/"
+      {/*
+        Plain anchor (not a router Link): the logo must go to the panel
+        root (/panel) from any admin page, at any depth. A router Link
+        to="/" would land on the public storefront on platform hosts,
+        and to="/panel" would gain a second /panel under the basename
+        mounting on restaurant domains.
+      */}
+      <a
+        href="/panel"
         onClick={onNavigate}
         className="flex items-center gap-2.5 px-5 py-4"
       >
@@ -115,12 +133,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             {sidebarName}
           </span>
         ) : null}
-      </Link>
+      </a>
       <nav className="flex flex-col gap-1 px-3 py-2" aria-label={t('layout.nav')}>
         {NAV_ITEMS.map(({ to, key, icon: Icon, end }) => (
           <NavLink
             key={to}
-            to={to}
+            to={navTo(to)}
             end={end}
             onClick={onNavigate}
             className={({ isActive }) =>

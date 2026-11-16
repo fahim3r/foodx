@@ -5,10 +5,13 @@
 // work for anonymous callers); order placement and status go through
 // SECURITY DEFINER functions, which validate everything server-side.
 //
-// Hostnames: the platform hosts below serve the admin app at / (and the
-// storefront preview via ?store=<slug>). Any other hostname is resolved
-// with resolve_restaurant_by_domain(): a match serves that restaurant's
-// storefront at / and the admin app under /panel.
+// Hostnames: on the platform hosts below, / serves the public
+// storefront of the demo restaurant (DEFAULT_DEMO_STORE_SLUG, or
+// ?store=<slug> to preview another restaurant), /panel serves the
+// admin app, and /devpanel is the Developer Panel placeholder (Phase 8).
+// Any other hostname is resolved with resolve_restaurant_by_domain():
+// a match serves that restaurant's storefront at / and the admin app
+// under /panel.
 import { supabase } from '@/lib/supabase'
 import { fetchProductAvailability } from '@/services/inventory'
 import {
@@ -40,6 +43,14 @@ export function isPlatformHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase()
   return PLATFORM_HOSTS.has(host) || host.endsWith('.vercel.app')
 }
+
+/**
+ * The restaurant whose storefront is the landing page on the platform
+ * hosts (foodx.bond / www.foodx.bond) — the FoodX Demo restaurant,
+ * used for client demos (Fahim's decision 2026-11-17). ?store=<slug>
+ * still overrides it to preview any other restaurant.
+ */
+export const DEFAULT_DEMO_STORE_SLUG = 'foodx-demo'
 
 /** The host the storefront preview lives on (platform host). */
 export const PREVIEW_HOST = 'www.foodx.bond'

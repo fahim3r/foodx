@@ -1,19 +1,35 @@
 // FoodX — App router.
 //
-// Hostname-based routing (Phase 5):
-// - Platform hosts (foodx.bond, www.foodx.bond, *.vercel.app, localhost):
-//   the admin app at /, plus the storefront preview via ?store=<slug>
-//   (and ?store=<slug>&table=<code> to pre-select a table).
+// Hostname-based routing:
+// - Platform hosts (foodx.bond, www.foodx.bond, *.vercel.app, localhost)
+//   — one router (PlatformRoutes):
+//   - /panel/* → the admin app (AdminRoutes, mounted as a descendant;
+//     its route paths are relative on purpose — see the note there).
+//     Signed in → Dashboard, signed out → Login page.
+//   - /devpanel* → the Developer Panel placeholder (the real Developer
+//     Control Panel is Phase 8 work, so no login form, no fake data).
+//   - Legacy admin URLs (/login, /pos, /orders, …) redirect to their
+//     /panel/* equivalents, query string included.
+//   - Anything else → the public storefront: the FoodX Demo
+//     restaurant (DEFAULT_DEMO_STORE_SLUG) by default — the platform
+//     domain is the demo landing page — or ?store=<slug> to preview
+//     another restaurant (and ?store=<slug>&table=<code> to pre-select
+//     a table).
 // - Any other hostname: resolved with resolve_restaurant_by_domain().
 //   A match serves that restaurant's public storefront at / and the
 //   admin app under /panel, locked to that restaurant. No match renders
 //   an honest "domain not connected" page (never the admin login).
 //
 // The storefront needs no login and no router of its own (it uses plain
-// links only); the admin app keeps its existing routes, under basename
-// /panel on a restaurant domain.
+// links only).
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AuthProvider } from './AuthProvider'
 import ProtectedRoute from './ProtectedRoute'
@@ -31,15 +47,29 @@ import PosPage from '@/modules/pos/PosPage'
 import RolesPage from '@/modules/roles/RolesPage'
 import SettingsPage from '@/modules/settings/SettingsPage'
 import TablesPage from '@/modules/tables/TablesPage'
+import DevPanelPlaceholderPage from '@/modules/devpanel/DevPanelPlaceholderPage'
 import DomainNotConnectedPage from '@/modules/storefront/DomainNotConnectedPage'
 import StorefrontPage from '@/modules/storefront/StorefrontPage'
-import { isPlatformHost, resolveDomain } from '@/services/storefront'
+import {
+  DEFAULT_DEMO_STORE_SLUG,
+  isPlatformHost,
+  resolveDomain,
+} from '@/services/storefront'
 import type { ResolvedDomain } from '@/types'
 
 /** The admin app: public auth pages + the protected pages. When
  * lockedRestaurantId is set (panel on a restaurant domain), the
  * protected area only serves the account whose profile points at that
- * restaurant (enforced in ProtectedRoute). */
+ * restaurant (enforced in ProtectedRoute).
+ *
+ * NOTE: the route paths here are RELATIVE (no leading slash) on
+ * purpose. AdminRoutes is mounted two ways — as a descendant of
+ * /panel/* on the platform hosts, and under basename /panel on a
+ * restaurant domain — and relative paths resolve correctly under both.
+ * Absolute paths would match the wrong place in one of the two
+ * mountings. The same rule applies to navigation inside the admin
+ * (ProtectedRoute, the auth pages): relative where the target is a
+ * sibling admin page. */
 function AdminRoutes({
   lockedRestaurantId,
 }: {
@@ -47,26 +77,93 @@ function AdminRoutes({
 }) {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/update-password" element={<UpdatePasswordPage />} />
+      <Route path="login" element={<LoginPage />} />
+      <Route path="reset-password" element={<ResetPasswordPage />} />
+      <Route path="update-password" element={<UpdatePasswordPage />} />
       <Route
         element={<ProtectedRoute lockedRestaurantId={lockedRestaurantId} />}
       >
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/pos" element={<PosPage />} />
-        <Route path="/orders" element={<OrdersPage />} />
-        <Route path="/orders/:id" element={<OrderDetailPage />} />
-        <Route path="/kds" element={<KdsPage />} />
-        <Route path="/menu" element={<MenuPage />} />
-        <Route path="/inventory" element={<InventoryPage />} />
-        <Route path="/tables" element={<TablesPage />} />
-        <Route path="/customers" element={<CustomersPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/roles" element={<RolesPage />} />
+        <Route index element={<DashboardPage />} />
+        <Route path="pos" element={<PosPage />} />
+        <Route path="orders" element={<OrdersPage />} />
+        <Route path="orders/:id" element={<OrderDetailPage />} />
+        <Route path="kds" element={<KdsPage />} />
+        <Route path="menu" element={<MenuPage />} />
+        <Route path="inventory" element={<InventoryPage />} />
+        <Route path="tables" element={<TablesPage />} />
+        <Route path="customers" element={<CustomersPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="roles" element={<RolesPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="." replace />} />
     </Routes>
+  )
+}
+
+/** Admin paths from before the /panel move (platform hosts only).
+ * Visiting one redirects to its /panel/* equivalent, so old links and
+ * bookmarks keep working. */
+const LEGACY_ADMIN_PATHS = [
+  '/login',
+  '/reset-password',
+  '/update-password',
+  '/pos',
+  '/orders',
+  '/orders/:id',
+  '/kds',
+  '/menu',
+  '/inventory',
+  '/tables',
+  '/customers',
+  '/settings',
+  '/roles',
+] as const
+
+/** Redirect a legacy admin URL to its /panel/* equivalent, keeping
+ * the query string (e.g. /orders/abc?x=1 → /panel/orders/abc?x=1). */
+function LegacyAdminRedirect() {
+  const { pathname, search } = useLocation()
+  return <Navigate to={`/panel${pathname}${search}`} replace />
+}
+
+/**
+ * The platform hosts in one router: /panel/* is the admin app,
+ * /devpanel* is the Developer Panel placeholder (Phase 8), the legacy
+ * admin URLs redirect to their /panel/* equivalents, and everything
+ * else is the public storefront — the demo restaurant by default, or
+ * ?store=<slug> to preview another restaurant.
+ */
+function PlatformRoutes({
+  previewSlug,
+  tableCode,
+}: {
+  previewSlug: string | null
+  tableCode: string | null
+}) {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/panel/*" element={<AdminRoutes />} />
+        <Route path="/devpanel" element={<DevPanelPlaceholderPage />} />
+        <Route path="/devpanel/*" element={<DevPanelPlaceholderPage />} />
+        {LEGACY_ADMIN_PATHS.map((path) => (
+          <Route
+            key={path}
+            path={path}
+            element={<LegacyAdminRedirect />}
+          />
+        ))}
+        <Route
+          path="/*"
+          element={
+            <StorefrontPage
+              slug={previewSlug ?? DEFAULT_DEMO_STORE_SLUG}
+              tableCode={tableCode}
+            />
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
@@ -102,17 +199,11 @@ function HostRouter() {
     }
   }, [hostname, platform])
 
-  // Platform host: admin app, or the storefront preview when
-  // ?store=<slug> is present.
+  // Platform host: one router — /panel/* admin, /devpanel placeholder,
+  // legacy admin redirects, everything else the demo storefront
+  // (?store=<slug> previews another restaurant).
   if (platform) {
-    if (previewSlug) {
-      return <StorefrontPage slug={previewSlug} tableCode={tableCode} />
-    }
-    return (
-      <BrowserRouter>
-        <AdminRoutes />
-      </BrowserRouter>
-    )
+    return <PlatformRoutes previewSlug={previewSlug} tableCode={tableCode} />
   }
 
   // Restaurant domain: resolve first.

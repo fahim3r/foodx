@@ -355,11 +355,21 @@ There is no automated provisioning yet — that is later-phase work.
   maps it in the system (see [DEPLOYMENT.md](DEPLOYMENT.md)).
 - **Hostname routing** (`src/app/App.tsx`) — platform hosts
   (`foodx.bond`, `www.foodx.bond`, `*.vercel.app`, `localhost`) run
-  today's admin app unchanged; any other hostname is resolved with
-  `resolve_restaurant_by_domain()` — a match serves the storefront at
-  `/` and the admin under `/panel` (basename `/panel` + the panel
+  one router: `/` serves the public storefront of the **FoodX Demo
+  restaurant** (the platform domain is the demo landing page —
+  `DEFAULT_DEMO_STORE_SLUG` in `src/services/storefront.ts`),
+  `/panel/*` serves the admin app (signed in → Dashboard, signed out
+  → Login page), `/devpanel*` serves a placeholder page for the
+  Developer Panel (the real panel is Phase 8 work), and the old admin
+  URLs (`/login`, `/pos`, `/orders`, …) redirect to their `/panel/*`
+  equivalents, query string included. Any other hostname is resolved
+  with `resolve_restaurant_by_domain()` — a match serves the storefront
+  at `/` and the admin under `/panel` (basename `/panel` + the panel
   lock in `ProtectedRoute`); no match renders an honest "domain not
   connected" page with a link to foodx.bond (never the admin login).
+  `AdminRoutes` uses relative route paths on purpose, so the same
+  component works mounted as a descendant of `/panel/*` (platform)
+  and under basename `/panel` (restaurant domain).
 - **Storefront** (`src/modules/storefront/StorefrontPage.tsx`, no auth,
   no app layout) — restaurant header (logo, name, own primary colour),
   language toggle, category chips + search, product list with variant
@@ -375,8 +385,9 @@ There is no automated provisioning yet — that is later-phase work.
   status line polled every 30 seconds.
 - **Public preview** — on a platform host, `?store=<slug>` opens the
   storefront for that slug (and `?store=<slug>&table=<code>` pre-selects
-  a table), so the feature can be tested without a real restaurant
-  domain. Menus are public data by design.
+  a table), so any restaurant's storefront can be tested without a
+  real restaurant domain. Without `?store=`, the platform root shows
+  the FoodX Demo restaurant. Menus are public data by design.
 - **Server-side online ordering** — three `SECURITY DEFINER` functions
   (granted to `anon` + `authenticated`):
   `resolve_restaurant_by_domain(p_domain)` (id/slug/name only),

@@ -25,7 +25,6 @@ import {
   fetchStorefrontAvailability,
   fetchStorefrontMenu,
   getOnlineOrderStatus,
-  isPlatformHost,
   placeOnlineOrder,
 } from '@/services/storefront'
 import { computeOrderTotals, type PricedLine } from '@/services/pos'
@@ -185,11 +184,10 @@ export default function StorefrontPage({
       ? tableCode.slice(slug.length + 1)
       : tableCode
     : null
-  // On a restaurant domain the staff login is /panel; on the platform
-  // preview host it is the normal /login.
-  const loginHref = isPlatformHost(window.location.hostname)
-    ? '/login'
-    : '/panel'
+  // The staff login is /panel on every host now — on the platform
+  // hosts the admin moved from / to /panel, and on a restaurant domain
+  // it was /panel already.
+  const loginHref = '/panel'
 
   // Load the restaurant + menu (public data, no login).
   useEffect(() => {

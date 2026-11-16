@@ -304,12 +304,20 @@ Each restaurant gets its own domain; the app decides what to serve
 from `window.location.hostname` at boot (`src/app/App.tsx`).
 
 - **Platform hosts** — `localhost`, `127.0.0.1`, `foodx.bond`,
-  `www.foodx.bond`, and any `*.vercel.app` preview host — run today's
-  admin app unchanged at `/`. On a platform host,
-  `?store=<slug>` opens the public storefront for that slug (and
-  `?store=<slug>&table=<code>` pre-selects a table), so the feature
-  can be tested without a real restaurant domain. Menus are public
-  data by design.
+  `www.foodx.bond`, and any `*.vercel.app` preview host — run one
+  router (`PlatformRoutes` in `src/app/App.tsx`): `/` serves the
+  public storefront of the **FoodX Demo restaurant** (the platform
+  domain is the demo landing page for client demos —
+  `DEFAULT_DEMO_STORE_SLUG` in `src/services/storefront.ts`),
+  `/panel/*` serves the admin app (signed in → Dashboard, signed out
+  → Login page), `/devpanel*` serves a placeholder page for the
+  Developer Panel (the real panel is Phase 8 work — no login form, no
+  fake data), and the old admin URLs (`/login`, `/pos`, `/orders`, …)
+  redirect to their `/panel/*` equivalents, query string included.
+  `?store=<slug>` still overrides the demo restaurant to preview any
+  other restaurant's storefront (and `?store=<slug>&table=<code>`
+  pre-selects a table), so the feature can be tested without a real
+  restaurant domain. Menus are public data by design.
 - **Restaurant domains** — any other hostname is resolved with
   `resolve_restaurant_by_domain()`. A match serves the storefront at
   `/` and the admin under `/panel` (the same `AdminRoutes` with

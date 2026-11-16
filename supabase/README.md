@@ -18,7 +18,7 @@ defence inside a single restaurant's database.
 | `migrations/0006_fix_customers_schema.sql` | Corrective, idempotent: the live DB got a stale draft of 0005 (draft column names, missing columns) — renames/adds bring it to the exact 0005 state; no-op on a DB where 0005 applied correctly |
 | `migrations/0007_digital_ordering.sql` | Restaurant domains, online-order columns, delivery settings, NFC value, `restaurant_storefronts` view, anon menu policies, `resolve_restaurant_by_domain()` / `place_online_order()` / `get_online_order_status()` |
 | `seed.sql` | Demo data only — never run against production |
-| `seed_phase2.sql` | Demo menu + tables for the demo restaurant only — never run against production |
+| `seed_phase2.sql` | Demo menu + tables for the demo restaurant only — approved 2026-11-17 to run against production for the demo restaurant (the public landing page) |
 | `seed_phase3.sql` | Demo stock, recipes + supplier for the demo restaurant only — never run against production |
 | `seed_phase4.sql` | Demo customers + coupon for the demo restaurant only — never run against production |
 | `seed_phase5.sql` | Demo domain row (`demo.foodx.bond`) for the demo restaurant only — never run against production |
@@ -151,8 +151,11 @@ delete from public.restaurants
 Adds a demo menu and tables for the demo restaurant only (fixed UUIDs,
 repeat-safe): 2 kitchen stations, 3 categories, 8 products, 5 variants,
 3 modifiers, 6 tables (T1–T6). It creates **no orders or payments**.
-Run it only against a local/development project, as `postgres` /
-`service_role`, after `seed.sql`. Removal SQL is in the file header;
+Run it against a local/development project, as `postgres` /
+`service_role`, after `seed.sql`. Approved 2026-11-17 to run against
+production as well, for the demo restaurant only — the FoodX Demo
+restaurant is the public landing page on foodx.bond, so it needs a
+demo menu for client demos. Removal SQL is in the file header;
 deleting the demo restaurant cascades everything.
 
 ## Demo seed — Phase 3 (`seed_phase3.sql`)

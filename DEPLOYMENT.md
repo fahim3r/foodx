@@ -95,9 +95,12 @@ The app decides what to serve from `window.location.hostname`
 (see [ARCHITECTURE.md](ARCHITECTURE.md#12-domain-routing-phase-5)):
 
 - Platform hosts (`foodx.bond`, `www.foodx.bond`, `*.vercel.app`,
-  `localhost`) serve the admin app at `/`, plus the storefront
-  preview via `?store=<slug>` (public data, for testing without a
-  real domain).
+  `localhost`) serve the public storefront of the **FoodX Demo
+  restaurant** at `/` (the platform domain is the demo landing page),
+  the admin app under `/panel`, and a Developer Panel placeholder at
+  `/devpanel` (the real panel is Phase 8 work). `?store=<slug>` still
+  previews any other restaurant's storefront (public data, for
+  testing without a real domain).
 - Any other hostname is resolved with
   `resolve_restaurant_by_domain()`. A match serves the storefront
   at `/` and the admin under `/panel` (locked to that restaurant);
