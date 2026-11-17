@@ -620,3 +620,111 @@ export interface OnlineOrderStatus {
   status: OrderStatus
   totalAmount: number
 }
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Delivery
+// ---------------------------------------------------------------------------
+
+export type DeliveryDriverStatus = 'AVAILABLE' | 'ON_DELIVERY' | 'OFFLINE'
+
+export interface DeliveryDriver {
+  id: string
+  restaurant_id: string
+  branch_id: string | null
+  user_id: string | null
+  name: string
+  phone: string
+  email: string | null
+  vehicle_type: string | null
+  vehicle_number: string | null
+  status: DeliveryDriverStatus
+  is_active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DeliveryZone {
+  id: string
+  restaurant_id: string
+  branch_id: string | null
+  name: string
+  fee: number
+  min_order_amount: number
+  estimated_minutes: number | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type DeliveryStatus =
+  | 'PENDING'
+  | 'ASSIGNED'
+  | 'PICKED_UP'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'CANCELLED'
+
+/** The delivery state machine. DELIVERED / FAILED / CANCELLED are
+ * terminal for the delivery (the linked order has its own machine). */
+export const DELIVERY_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
+  PENDING: ['ASSIGNED', 'CANCELLED'],
+  ASSIGNED: ['PICKED_UP', 'CANCELLED'],
+  PICKED_UP: ['OUT_FOR_DELIVERY', 'FAILED'],
+  OUT_FOR_DELIVERY: ['DELIVERED', 'FAILED'],
+  DELIVERED: [],
+  FAILED: [],
+  CANCELLED: [],
+}
+
+export function canTransitionDeliveryStatus(
+  from: DeliveryStatus,
+  to: DeliveryStatus,
+): boolean {
+  return (DELIVERY_TRANSITIONS[from] ?? []).includes(to)
+}
+
+export const TERMINAL_DELIVERY_STATUSES: DeliveryStatus[] = [
+  'DELIVERED',
+  'FAILED',
+  'CANCELLED',
+]
+
+/** The dispatch record for one delivery order (1:1 with orders). */
+export interface DeliveryOrder {
+  order_id: string
+  driver_id: string | null
+  zone_id: string | null
+  status: DeliveryStatus
+  /** Snapshot of the amount to collect on delivery (= order total while
+   * the order is unpaid), taken when this row is created. */
+  cod_amount: number
+  delivery_notes: string | null
+  assigned_at: string | null
+  picked_up_at: string | null
+  out_for_delivery_at: string | null
+  delivered_at: string | null
+  failed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** One delivery status change. Append-only. */
+export interface DeliveryStatusHistory {
+  id: string
+  delivery_order_id: string
+  from_status: DeliveryStatus | null
+  to_status: DeliveryStatus
+  changed_by: string | null
+  created_at: string
+}
+
+/** A row on the delivery board: the order, its dispatch record (null
+ * until dispatch has created one), and the assigned driver's name. */
+export interface DeliveryBoardEntry {
+  order: Order
+  delivery: DeliveryOrder | null
+  driver_name: string | null
+  zone_name: string | null
+}
