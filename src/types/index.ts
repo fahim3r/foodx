@@ -733,3 +733,109 @@ export interface DeliveryBoardEntry {
   driver_name: string | null
   zone_name: string | null
 }
+
+// ---------------------------------------------------------------------------
+// Phase 7 — Business (migration 0013)
+// ---------------------------------------------------------------------------
+
+/** The twelve expense categories from §36, seeded per restaurant by the
+ * business service the first time categories are loaded. Stored as data
+ * (expense_categories rows); the UI localises the system names. */
+export const DEFAULT_EXPENSE_CATEGORY_NAMES = [
+  'Rent',
+  'Salary',
+  'Utilities',
+  'Gas',
+  'Electricity',
+  'Internet',
+  'Marketing',
+  'Packaging',
+  'Transportation',
+  'Maintenance',
+  'Supplies',
+  'Other',
+] as const
+
+export interface ExpenseCategory {
+  id: string
+  restaurant_id: string
+  name: string
+  is_system: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Expense {
+  id: string
+  restaurant_id: string
+  branch_id: string | null
+  category_id: string
+  amount: number
+  /** date (yyyy-mm-dd) the expense belongs to. */
+  expense_date: string
+  payment_method: PaymentMethod
+  notes: string | null
+  attachment_url: string | null
+  created_by: string | null
+  /** §46: expenses are voided, never hard-deleted. */
+  is_voided: boolean
+  voided_at: string | null
+  voided_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CashierShiftStatus = 'OPEN' | 'CLOSED'
+
+export interface CashierShift {
+  id: string
+  restaurant_id: string
+  branch_id: string | null
+  opened_by: string | null
+  opening_cash: number
+  status: CashierShiftStatus
+  opened_at: string
+  closed_by: string | null
+  closed_at: string | null
+  /** Computed from DB data at close; never client-supplied. */
+  expected_cash: number | null
+  actual_cash: number | null
+  /** actual − expected, stored at close. */
+  difference: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CashMovementType = 'CASH_IN' | 'CASH_OUT' | 'ADJUSTMENT'
+
+/** Append-only cash drawer movement during a shift (§38). */
+export interface ShiftCashMovement {
+  id: string
+  shift_id: string
+  type: CashMovementType
+  /** Positive for CASH_IN / CASH_OUT; signed for ADJUSTMENT. */
+  amount: number
+  reason: string
+  created_by: string | null
+  created_at: string
+}
+
+/** One day's closing snapshot (§37 daily closing). */
+export interface DailyClosing {
+  id: string
+  restaurant_id: string
+  branch_id: string | null
+  closing_date: string
+  total_sales: number
+  total_purchases: number
+  total_expenses: number
+  total_refunds: number
+  cash_expected: number | null
+  cash_actual: number | null
+  difference: number | null
+  closed_by: string | null
+  created_at: string
+}
+
