@@ -1,1 +1,199 @@
-Ly8gRm9vZFggaW5zdGFuY2UtaGVhcnRiZWF0IEVkZ2UgRnVuY3Rpb24gKFBoYXNlIDggc3RlcCAyKS4KLy8KLy8gRGVwbG95ZWQgb24gdGhlIFJFR0lTVFJZIFN1cGFiYXNlIHByb2plY3QuIEEgY2xpZW50IGluc3RhbGxhdGlvbiBQT1NUcwovLyB7IGluc3RhbmNlX2lkLCB0b2tlbiwgdmVyc2lvbiwgZG9tYWluPyB9IHdpdGggdGhlIHJlZ2lzdHJ5IHByb2plY3QncwovLyBhbm9uIGtleSBpbiB0aGUgYXBpa2V5L0F1dGhvcml6YXRpb24gaGVhZGVycy4gVGhlIGZ1bmN0aW9uOgovLyAgIDEuIGZpbmRzIHRoZSBjbGllbnQgYnkgY2xpZW50X2NvZGUgYW5kIGNvbXBhcmVzIFNIQS0yNTYodG9rZW4pIHdpdGgKLy8gICAgICBkZXZfY2xpZW50cy5pbnN0YW5jZV90b2tlbl9oYXNoIChjb25zdGFudC10aW1lIGNvbXBhcmUpLAovLyAgIDIuIGFwcGVuZHMgYSBkZXZfaGVhcnRiZWF0cyByb3cgYW5kIHN0YW1wcyBsYXN0X3NlZW5fYXQgKyB0aGUKLy8gICAgICByZXBvcnRlZCB2ZXJzaW9uIG9uIHRoZSBjbGllbnQgKHNlcnZpY2Ugcm9sZSDigJQgUkxTIGJ5cGFzc2VkLAovLyAgICAgIHdoaWNoIGlzIHdoeSB0aGUgdG9rZW4gY2hlY2sgYWJvdmUgbXVzdCBiZSBleGFjdCksCi8vICAgMy4gYW5zd2VycyB3aXRoIGV2ZXJ5dGhpbmcgdGhlIGluc3RhbmNlIGNhY2hlcyBsb2NhbGx5OiBlZmZlY3RpdmUKLy8gICAgICBsaWNlbnNlIHN0YXR1cyAoY29tcHV0ZWQgZXhwaXJ5LCBzYW1lIHJ1bGUgYXMgdGhlIERldmVsb3BlcgovLyAgICAgIFBhbmVsKSwgdGhlIGNsaWVudCdzIGZlYXR1cmUgZmxhZ3MsIGFuZCB0aGUgbmV3ZXN0IHB1Ymxpc2hlZAovLyAgICAgIHJlbGVhc2UgdGFyZ2V0ZWQgYXQgaXQuCi8vCi8vIFN1c3BlbnNpb24gaXMgZGF0YSwgbm90IGEgdHJhbnNwb3J0IGVycm9yOiBhIHN1c3BlbmRlZCBjbGllbnQgc3RpbGwKLy8gZ2V0cyBIVFRQIDIwMCB3aXRoIGl0cyBsaWNlbnNlIHN0YXRlIGluIHRoZSBib2R5LiBVbmtub3duIGluc3RhbmNlLAovLyBtaXNzaW5nIHRva2VuIGFuZCB3cm9uZyB0b2tlbiBhbGwgZ2V0IHRoZSBzYW1lIGdlbmVyaWMgNDAxLgoKaW1wb3J0IHsgY3JlYXRlQ2xpZW50IH0gZnJvbSAnanNyOkBzdXBhYmFzZS9zdXBhYmFzZS1qc0AyJwoKY29uc3QgRkVBVFVSRV9LRVlTID0gWwogICdvbmxpbmVfb3JkZXJpbmcnLAogICdkZWxpdmVyeScsCiAgJ2xveWFsdHknLAogICdhY2NvdW50aW5nJywKICAnbmZjJywKICAnbXVsdGlfYnJhbmNoJywKXSBhcyBjb25zdAoKZnVuY3Rpb24ganNvbihib2R5OiB1bmtub3duLCBzdGF0dXMgPSAyMDApOiBSZXNwb25zZSB7CiAgcmV0dXJuIG5ldyBSZXNwb25zZShKU09OLnN0cmluZ2lmeShib2R5KSwgewogICAgc3RhdHVzLAogICAgaGVhZGVyczogeyAnQ29udGVudC1UeXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nIH0sCiAgfSkKfQoKYXN5bmMgZnVuY3Rpb24gc2hhMjU2SGV4KHZhbHVlOiBzdHJpbmcpOiBQcm9taXNlPHN0cmluZz4gewogIGNvbnN0IGRpZ2VzdCA9IGF3YWl0IGNyeXB0by5zdWJ0bGUuZGlnZXN0KAogICAgJ1NIQS0yNTYnLAogICAgbmV3IFRleHRFbmNvZGVyKCkuZW5jb2RlKHZhbHVlKSwKICApCiAgcmV0dXJuIFsuLi5uZXcgVWludDhBcnJheShkaWdlc3QpXQogICAgLm1hcCgoYikgPT4gYi50b1N0cmluZygxNikucGFkU3RhcnQoMiwgJzAnKSkKICAgIC5qb2luKCcnKQp9CgpmdW5jdGlvbiB0aW1pbmdTYWZlRXF1YWwoYTogc3RyaW5nLCBiOiBzdHJpbmcpOiBib29sZWFuIHsKICBpZiAoYS5sZW5ndGggIT09IGIubGVuZ3RoKSByZXR1cm4gZmFsc2UKICBsZXQgZGlmZiA9IDAKICBmb3IgKGxldCBpID0gMDsgaSA8IGEubGVuZ3RoOyBpKyspIGRpZmYgfD0gYS5jaGFyQ29kZUF0KGkpIF4gYi5jaGFyQ29kZUF0KGkpCiAgcmV0dXJuIGRpZmYgPT09IDAKfQoKLy8gTWluaW1hbCBzZW12ZXIgY29tcGFyZSAoeC55LnosIG1pc3NpbmcgcGFydHMgPSAwKS4gTWlycm9ycwovLyBjb21wYXJlVmVyc2lvbnMgaW4gc3JjL3NlcnZpY2VzL2RldnBhbmVsLnRzIOKAlCBrZXB0IGluIHN5bmMgbWFudWFsbHk7Ci8vIGJvdGggYXJlIGNvdmVyZWQgYnkgdGhlIFBoYXNlIDggc3RlcCAyIGFjY2VwdGFuY2UgdGVzdC4KZnVuY3Rpb24gY29tcGFyZVZlcnNpb25zKGE6IHN0cmluZywgYjogc3RyaW5nKTogbnVtYmVyIHsKICBjb25zdCBwYSA9IGEuc3BsaXQoJy4nKS5tYXAoKG4pID0+IE51bWJlci5wYXJzZUludChuLCAxMCkgfHwgMCkKICBjb25zdCBwYiA9IGIuc3BsaXQoJy4nKS5tYXAoKG4pID0+IE51bWJlci5wYXJzZUludChuLCAxMCkgfHwgMCkKICBmb3IgKGxldCBpID0gMDsgaSA8IE1hdGgubWF4KHBhLmxlbmd0aCwgcGIubGVuZ3RoKTsgaSsrKSB7CiAgICBjb25zdCBkaWZmID0gKHBhW2ldID8/IDApIC0gKHBiW2ldID8/IDApCiAgICBpZiAoZGlmZiAhPT0gMCkgcmV0dXJuIGRpZmYKICB9CiAgcmV0dXJuIDAKfQoKaW50ZXJmYWNlIEhlYXJ0YmVhdEJvZHkgewogIGluc3RhbmNlX2lkPzogdW5rbm93bgogIHRva2VuPzogdW5rbm93bgogIHZlcnNpb24/OiB1bmtub3duCiAgZG9tYWluPzogdW5rbm93bgp9CgpEZW5vLnNlcnZlKGFzeW5jIChyZXEpID0+IHsKICBpZiAocmVxLm1ldGhvZCAhPT0gJ1BPU1QnKSByZXR1cm4ganNvbih7IGVycm9yOiAnbWV0aG9kX25vdF9hbGxvd2VkJyB9LCA0MDUpCgogIGxldCBib2R5OiBIZWFydGJlYXRCb2R5CiAgdHJ5IHsKICAgIGJvZHkgPSAoYXdhaXQgcmVxLmpzb24oKSkgYXMgSGVhcnRiZWF0Qm9keQogIH0gY2F0Y2ggewogICAgcmV0dXJuIGpzb24oeyBlcnJvcjogJ2ludmFsaWRfanNvbicgfSwgNDAwKQogIH0KICBjb25zdCBpbnN0YW5jZUlkID0gdHlwZW9mIGJvZHkuaW5zdGFuY2VfaWQgPT09ICdzdHJpbmcnID8gYm9keS5pbnN0YW5jZV9pZCA6ICcnCiAgY29uc3QgdG9rZW4gPSB0eXBlb2YgYm9keS50b2tlbiA9PT0gJ3N0cmluZycgPyBib2R5LnRva2VuIDogJycKICBjb25zdCB2ZXJzaW9uID0gdHlwZW9mIGJvZHkudmVyc2lvbiA9PT0gJ3N0cmluZycgPyBib2R5LnZlcnNpb24gOiAnJwogIGNvbnN0IGRvbWFpbiA9IHR5cGVvZiBib2R5LmRvbWFpbiA9PT0gJ3N0cmluZycgPyBib2R5LmRvbWFpbiA6IG51bGwKICBpZiAoIWluc3RhbmNlSWQgfHwgIXRva2VuIHx8ICF2ZXJzaW9uKSB7CiAgICByZXR1cm4ganNvbih7IGVycm9yOiAnbWlzc2luZ19maWVsZHMnIH0sIDQwMCkKICB9CgogIGNvbnN0IGFkbWluID0gY3JlYXRlQ2xpZW50KAogICAgRGVuby5lbnYuZ2V0KCdTVVBBQkFTRV9VUkwnKSA/PyAnJywKICAgIERlbm8uZW52LmdldCgnU1VQQUJBU0VfU0VSVklDRV9ST0xFX0tFWScpID8/ICcnLAogICkKCiAgY29uc3QgeyBkYXRhOiBjbGllbnQsIGVycm9yOiBjbGllbnRFcnJvciB9ID0gYXdhaXQgYWRtaW4KICAgIC5mcm9tKCdkZXZfY2xpZW50cycpCiAgICAuc2VsZWN0KCdpZCwgc3RhdHVzLCBpbnN0YW5jZV90b2tlbl9oYXNoJykKICAgIC5lcSgnY2xpZW50X2NvZGUnLCBpbnN0YW5jZUlkKQogICAgLm1heWJlU2luZ2xlKCkKICBpZiAoY2xpZW50RXJyb3IpIHJldHVybiBqc29uKHsgZXJyb3I6ICdyZWdpc3RyeV9lcnJvcicgfSwgNTAwKQogIGlmICghY2xpZW50IHx8ICFjbGllbnQuaW5zdGFuY2VfdG9rZW5faGFzaCkgewogICAgcmV0dXJuIGpzb24oeyBlcnJvcjogJ3VuYXV0aG9yaXplZCcgfSwgNDAxKQogIH0KICBjb25zdCB0b2tlbkhhc2ggPSBhd2FpdCBzaGEyNTZIZXgodG9rZW4pCiAgaWYgKCF0aW1pbmdTYWZlRXF1YWwodG9rZW5IYXNoLCBjbGllbnQuaW5zdGFuY2VfdG9rZW5faGFzaCkpIHsKICAgIHJldHVybiBqc29uKHsgZXJyb3I6ICd1bmF1dGhvcml6ZWQnIH0sIDQwMSkKICB9CgogIGNvbnN0IG5vdyA9IG5ldyBEYXRlKCkKICBjb25zdCB7IGVycm9yOiBpbnNlcnRFcnJvciB9ID0gYXdhaXQgYWRtaW4uZnJvbSgnZGV2X2hlYXJ0YmVhdHMnKS5pbnNlcnQoewogICAgY2xpZW50X2lkOiBjbGllbnQuaWQsCiAgICB2ZXJzaW9uLAogICAgZG9tYWluLAogICAgdXNlcl9hZ2VudDogcmVxLmhlYWRlcnMuZ2V0KCd1c2VyLWFnZW50JyksCiAgfSkKICBpZiAoaW5zZXJ0RXJyb3IpIHJldHVybiBqc29uKHsgZXJyb3I6ICdyZWdpc3RyeV9lcnJvcicgfSwgNTAwKQogIGF3YWl0IGFkbWluCiAgICAuZnJvbSgnZGV2X2NsaWVudHMnKQogICAgLnVwZGF0ZSh7IGxhc3Rfc2Vlbl9hdDogbm93LnRvSVNPU3RyaW5nKCksIHZlcnNpb24gfSkKICAgIC5lcSgnaWQnLCBjbGllbnQuaWQpCgogIC8vIEN1cnJlbnQgbGljZW5zZTogbmV3ZXN0IHJvdyB0aGF0IGlzIG5vdCBDQU5DRUxMRUQvUkVORVdFRCwgd2l0aCB0aGUKICAvLyBwYW5lbCdzIGNvbXB1dGVkLWV4cGlyeSBydWxlIGFwcGxpZWQgKEFDVElWRSBwYXN0IGV4cGlyeSA9IEVYUElSRUQpLgogIGNvbnN0IHsgZGF0YTogbGljZW5zZVJvd3MgfSA9IGF3YWl0IGFkbWluCiAgICAuZnJvbSgnZGV2X2xpY2Vuc2VzJykKICAgIC5zZWxlY3QoJ3N0YXR1cywgcGxhbiwgc3RhcnRfZGF0ZSwgZXhwaXJ5X2RhdGUnKQogICAgLmVxKCdjbGllbnRfaWQnLCBjbGllbnQuaWQpCiAgICAubm90KCdzdGF0dXMnLCAnaW4nLCAnKENBTkNFTExFRCxSRU5FV0VEKScpCiAgICAub3JkZXIoJ2NyZWF0ZWRfYXQnLCB7IGFzY2VuZGluZzogZmFsc2UgfSkKICAgIC5saW1pdCgxKQogIGNvbnN0IGxpY2Vuc2VSb3cgPSBsaWNlbnNlUm93cz8uWzBdID8/IG51bGwKICBsZXQgbGljZW5zZTogewogICAgc3RhdHVzOiBzdHJpbmcKICAgIHBsYW46IHN0cmluZwogICAgc3RhcnRfZGF0ZTogc3RyaW5nCiAgICBleHBpcnlfZGF0ZTogc3RyaW5nIHwgbnVsbAogIH0gfCBudWxsID0gbnVsbAogIGlmIChsaWNlbnNlUm93KSB7CiAgICBjb25zdCB0b2RheSA9IG5vdy50b0lTT1N0cmluZygpLnNsaWNlKDAsIDEwKQogICAgY29uc3QgZWZmZWN0aXZlID0KICAgICAgbGljZW5zZVJvdy5zdGF0dXMgPT09ICdBQ1RJVkUnICYmCiAgICAgIGxpY2Vuc2VSb3cuZXhwaXJ5X2RhdGUgIT09IG51bGwgJiYKICAgICAgbGljZW5zZVJvdy5leHBpcnlfZGF0ZSA8IHRvZGF5CiAgICAgICAgPyAnRVhQSVJFRCcKICAgICAgICA6IGxpY2Vuc2VSb3cuc3RhdHVzCiAgICBsaWNlbnNlID0gewogICAgICBzdGF0dXM6IGVmZmVjdGl2ZSwKICAgICAgcGxhbjogbGljZW5zZVJvdy5wbGFuLAogICAgICBzdGFydF9kYXRlOiBsaWNlbnNlUm93LnN0YXJ0X2RhdGUsCiAgICAgIGV4cGlyeV9kYXRlOiBsaWNlbnNlUm93LmV4cGlyeV9kYXRlLAogICAgfQogIH0KCiAgY29uc3QgeyBkYXRhOiBmZWF0dXJlUm93cyB9ID0gYXdhaXQgYWRtaW4KICAgIC5mcm9tKCdkZXZfY2xpZW50X2ZlYXR1cmVzJykKICAgIC5zZWxlY3QoJ2ZlYXR1cmVfa2V5LCBpc19lbmFibGVkJykKICAgIC5lcSgnY2xpZW50X2lkJywgY2xpZW50LmlkKQogIGNvbnN0IGZlYXR1cmVzOiBSZWNvcmQ8c3RyaW5nLCBib29sZWFuPiA9IHt9CiAgZm9yIChjb25zdCBrZXkgb2YgRkVBVFVSRV9LRVlTKSBmZWF0dXJlc1trZXldID0gZmFsc2UKICBmb3IgKGNvbnN0IHJvdyBvZiBmZWF0dXJlUm93cyA/PyBbXSkgewogICAgaWYgKHJvdy5mZWF0dXJlX2tleSBpbiBmZWF0dXJlcykgZmVhdHVyZXNbcm93LmZlYXR1cmVfa2V5XSA9IHJvdy5pc19lbmFibGVkCiAgfQoKICBjb25zdCB7IGRhdGE6IHJlbGVhc2VSb3dzIH0gPSBhd2FpdCBhZG1pbgogICAgLmZyb20oJ2Rldl9yZWxlYXNlcycpCiAgICAuc2VsZWN0KCd2ZXJzaW9uLCByZWxlYXNlX25vdGVzLCByZXF1aXJlZF9taWdyYXRpb25zLCB0YXJnZXRfY2xpZW50X2lkJykKICAgIC5lcSgnc3RhdHVzJywgJ1BVQkxJU0hFRCcpCiAgbGV0IGxhdGVzdFJlbGVhc2U6IHsKICAgIHZlcnNpb246IHN0cmluZwogICAgcmVsZWFzZV9ub3Rlczogc3RyaW5nCiAgICByZXF1aXJlZF9taWdyYXRpb25zOiBzdHJpbmdbXQogIH0gfCBudWxsID0gbnVsbAogIGZvciAoY29uc3Qgcm93IG9mIHJlbGVhc2VSb3dzID8/IFtdKSB7CiAgICBpZiAocm93LnRhcmdldF9jbGllbnRfaWQgIT09IG51bGwgJiYgcm93LnRhcmdldF9jbGllbnRfaWQgIT09IGNsaWVudC5pZCkgewogICAgICBjb250aW51ZQogICAgfQogICAgaWYgKAogICAgICBsYXRlc3RSZWxlYXNlID09PSBudWxsIHx8CiAgICAgIGNvbXBhcmVWZXJzaW9ucyhyb3cudmVyc2lvbiwgbGF0ZXN0UmVsZWFzZS52ZXJzaW9uKSA+IDAKICAgICkgewogICAgICBsYXRlc3RSZWxlYXNlID0gewogICAgICAgIHZlcnNpb246IHJvdy52ZXJzaW9uLAogICAgICAgIHJlbGVhc2Vfbm90ZXM6IHJvdy5yZWxlYXNlX25vdGVzLAogICAgICAgIHJlcXVpcmVkX21pZ3JhdGlvbnM6IHJvdy5yZXF1aXJlZF9taWdyYXRpb25zID8/IFtdLAogICAgICB9CiAgICB9CiAgfQoKICByZXR1cm4ganNvbih7CiAgICBvazogdHJ1ZSwKICAgIHNlcnZlcl90aW1lOiBub3cudG9JU09TdHJpbmcoKSwKICAgIGNsaWVudF9zdGF0dXM6IGNsaWVudC5zdGF0dXMsCiAgICBsaWNlbnNlLAogICAgZmVhdHVyZXMsCiAgICBsYXRlc3RfcmVsZWFzZTogbGF0ZXN0UmVsZWFzZSwKICB9KQp9KQo=
+// FoodX instance-heartbeat Edge Function (Phase 8 step 2).
+//
+// Deployed on the REGISTRY Supabase project. A client installation POSTs
+// { instance_id, token, version, domain? } with the registry project's
+// anon key in the apikey/Authorization headers. The function:
+//   1. finds the client by client_code and compares SHA-256(token) with
+//      dev_clients.instance_token_hash (constant-time compare),
+//   2. appends a dev_heartbeats row and stamps last_seen_at + the
+//      reported version on the client (service role — RLS bypassed,
+//      which is why the token check above must be exact),
+//   3. answers with everything the instance caches locally: effective
+//      license status (computed expiry, same rule as the Developer
+//      Panel), the client's feature flags, and the newest published
+//      release targeted at it.
+//
+// Suspension is data, not a transport error: a suspended client still
+// gets HTTP 200 with its license state in the body. Unknown instance,
+// missing token and wrong token all get the same generic 401.
+
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+
+const FEATURE_KEYS = [
+  'online_ordering',
+  'delivery',
+  'loyalty',
+  'accounting',
+  'nfc',
+  'multi_branch',
+] as const
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value),
+  )
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+// Minimal semver compare (x.y.z, missing parts = 0). Mirrors
+// compareVersions in src/services/devpanel.ts — kept in sync manually;
+// both are covered by the Phase 8 step 2 acceptance test.
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => Number.parseInt(n, 10) || 0)
+  const pb = b.split('.').map((n) => Number.parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+interface HeartbeatBody {
+  instance_id?: unknown
+  token?: unknown
+  version?: unknown
+  domain?: unknown
+}
+
+Deno.serve(async (req) => {
+  if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
+
+  let body: HeartbeatBody
+  try {
+    body = (await req.json()) as HeartbeatBody
+  } catch {
+    return json({ error: 'invalid_json' }, 400)
+  }
+  const instanceId = typeof body.instance_id === 'string' ? body.instance_id : ''
+  const token = typeof body.token === 'string' ? body.token : ''
+  const version = typeof body.version === 'string' ? body.version : ''
+  const domain = typeof body.domain === 'string' ? body.domain : null
+  if (!instanceId || !token || !version) {
+    return json({ error: 'missing_fields' }, 400)
+  }
+
+  const admin = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  )
+
+  const { data: client, error: clientError } = await admin
+    .from('dev_clients')
+    .select('id, status, instance_token_hash')
+    .eq('client_code', instanceId)
+    .maybeSingle()
+  if (clientError) return json({ error: 'registry_error' }, 500)
+  if (!client || !client.instance_token_hash) {
+    return json({ error: 'unauthorized' }, 401)
+  }
+  const tokenHash = await sha256Hex(token)
+  if (!timingSafeEqual(tokenHash, client.instance_token_hash)) {
+    return json({ error: 'unauthorized' }, 401)
+  }
+
+  const now = new Date()
+  const { error: insertError } = await admin.from('dev_heartbeats').insert({
+    client_id: client.id,
+    version,
+    domain,
+    user_agent: req.headers.get('user-agent'),
+  })
+  if (insertError) return json({ error: 'registry_error' }, 500)
+  await admin
+    .from('dev_clients')
+    .update({ last_seen_at: now.toISOString(), version })
+    .eq('id', client.id)
+
+  // Current license: newest row that is not CANCELLED/RENEWED, with the
+  // panel's computed-expiry rule applied (ACTIVE past expiry = EXPIRED).
+  const { data: licenseRows } = await admin
+    .from('dev_licenses')
+    .select('status, plan, start_date, expiry_date')
+    .eq('client_id', client.id)
+    .not('status', 'in', '(CANCELLED,RENEWED)')
+    .order('created_at', { ascending: false })
+    .limit(1)
+  const licenseRow = licenseRows?.[0] ?? null
+  let license: {
+    status: string
+    plan: string
+    start_date: string
+    expiry_date: string | null
+  } | null = null
+  if (licenseRow) {
+    const today = now.toISOString().slice(0, 10)
+    const effective =
+      licenseRow.status === 'ACTIVE' &&
+      licenseRow.expiry_date !== null &&
+      licenseRow.expiry_date < today
+        ? 'EXPIRED'
+        : licenseRow.status
+    license = {
+      status: effective,
+      plan: licenseRow.plan,
+      start_date: licenseRow.start_date,
+      expiry_date: licenseRow.expiry_date,
+    }
+  }
+
+  const { data: featureRows } = await admin
+    .from('dev_client_features')
+    .select('feature_key, is_enabled')
+    .eq('client_id', client.id)
+  const features: Record<string, boolean> = {}
+  for (const key of FEATURE_KEYS) features[key] = false
+  for (const row of featureRows ?? []) {
+    if (row.feature_key in features) features[row.feature_key] = row.is_enabled
+  }
+
+  const { data: releaseRows } = await admin
+    .from('dev_releases')
+    .select('version, release_notes, required_migrations, target_client_id')
+    .eq('status', 'PUBLISHED')
+  let latestRelease: {
+    version: string
+    release_notes: string
+    required_migrations: string[]
+  } | null = null
+  for (const row of releaseRows ?? []) {
+    if (row.target_client_id !== null && row.target_client_id !== client.id) {
+      continue
+    }
+    if (
+      latestRelease === null ||
+      compareVersions(row.version, latestRelease.version) > 0
+    ) {
+      latestRelease = {
+        version: row.version,
+        release_notes: row.release_notes,
+        required_migrations: row.required_migrations ?? [],
+      }
+    }
+  }
+
+  return json({
+    ok: true,
+    server_time: now.toISOString(),
+    client_status: client.status,
+    license,
+    features,
+    latest_release: latestRelease,
+  })
+})
