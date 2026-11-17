@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
 
   const { data: releaseRows } = await admin
     .from('dev_releases')
-    .select('version, release_notes, required_migrations, target_client_id')
+    .select('version, release_notes, required_migrations, target_client_ids')
     .eq('status', 'PUBLISHED')
   let latestRelease: {
     version: string
@@ -184,7 +184,10 @@ Deno.serve(async (req) => {
     required_migrations: string[]
   } | null = null
   for (const row of releaseRows ?? []) {
-    if (row.target_client_id !== null && row.target_client_id !== client.id) {
+    // target_client_ids: null/empty = all clients (mirrors the
+    // Developer Panel's latestPublishedRelease in devpanel.ts).
+    const targets = row.target_client_ids ?? []
+    if (targets.length > 0 && !targets.includes(client.id)) {
       continue
     }
     if (
