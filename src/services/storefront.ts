@@ -20,6 +20,7 @@ import {
 } from '@/services/menu'
 import type {
   Category,
+  DeliveryZone,
   OnlineOrderStatus,
   OrderStatus,
   PlaceOnlineOrderInput,
@@ -103,6 +104,26 @@ export async function fetchStorefrontMenu(
   return { categories, products }
 }
 
+/**
+ * The restaurant's active delivery zones, for the checkout zone
+ * picker (migration 0012). Public: the anon SELECT policy on
+ * delivery_zones makes this work logged out. Ordered the way the
+ * panel orders them (sort_order, then name).
+ */
+export async function fetchPublicZones(
+  restaurantId: string,
+): Promise<DeliveryZone[]> {
+  const { data, error } = await supabase
+    .from('delivery_zones')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as DeliveryZone[]
+}
+
 /** Servings the current stock allows per product (same as the POS). */
 export async function fetchStorefrontAvailability(
   restaurantId: string,
@@ -149,6 +170,7 @@ const ONLINE_ORDER_ERRORS = [
   'delivery_not_available',
   'delivery_address_required',
   'min_order_not_met',
+  'invalid_zone',
 ] as const
 
 /**
@@ -169,6 +191,7 @@ export async function placeOnlineOrder(
       p_customer_name: input.customerName.trim(),
       p_customer_phone: input.customerPhone.trim(),
       p_delivery_address: input.deliveryAddress?.trim() || null,
+      p_zone_id: input.zoneId ?? null,
       p_items: input.items.map((line) => ({
         product_id: line.productId,
         variant_id: line.variantId ?? null,
