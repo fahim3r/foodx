@@ -80,9 +80,11 @@ The schema lives in `supabase/migrations/` — `0001_foundation.sql`
 `0007_digital_ordering.sql` (Phase 5), `0008` / `0009`
 (place_online_order corrective fixes), `0010_remove_orphan_trigger_functions.sql`
 (drift cleanup — two orphan trigger functions dropped), and
-`0011_delivery.sql` (Phase 6). **Migrations 0001–0011 have been
-applied to the live Supabase project** (verified 2026-11-17: all
-tables, functions and RLS policies match this repo). Pages that need
+`0011_delivery.sql` (Phase 6) and
+`0012_storefront_zone_picker.sql` (Phase 6 step 2). **Migrations
+0001–0012 have been applied to the live Supabase project**
+(verified 2026-11-17: all tables, functions and RLS policies match
+this repo). Pages that need
 tables from a migration that has not been applied yet degrade
 gracefully instead of crashing. When applying a migration from the dashboard, always
 paste from the **fresh raw GitHub URL** and verify the new tables'
@@ -97,7 +99,7 @@ supabase db push
 ```
 
 Apply migrations in filename order. For a new restaurant, apply all of
-`0001_foundation.sql` through `0011_delivery.sql`.
+`0001_foundation.sql` through `0012_storefront_zone_picker.sql`.
 
 ### Option B — Dashboard SQL editor
 
@@ -472,11 +474,15 @@ There is no automated provisioning yet — that is later-phase work.
   driver (with optional zone); advance buttons per status; Drivers
   and Zones tabs with full CRUD (money as text + decimal, two-step
   delete). Sidebar entry + EN/BN i18n.
-- **Not in Phase 6:** the storefront checkout does not pick a zone
-  yet (zone fee still comes from settings — the zone picker is the
-  next step, it needs a `place_online_order` migration), and there
-  is no separate driver app — drivers are managed from the panel
-  and `fetchDriverDeliveries` backs a simple driver view.
+- **Storefront zone picker (step 2, `0012_storefront_zone_picker.sql`):**
+  at checkout the customer picks a delivery zone; `place_online_order`
+  validates it server-side (`invalid_zone`) and the zone's fee +
+  minimum replace the settings values for that order. The choice is
+  stored on `orders.delivery_zone_id` and the board pre-fills its
+  dispatch row from it. Restaurants without zones keep the settings
+  fee, unchanged. Still not built: a separate driver app — drivers
+  are managed from the panel and `fetchDriverDeliveries` backs a
+  simple driver view.
 
 ## What is not built yet
 
@@ -487,7 +493,7 @@ Do not assume it exists.
 | --- | --- |
 | Kitchen display (KDS), inventory, purchases, expenses | KDS built (Phase 2); inventory + purchases built (Phase 3); expenses not started |
 | Customers, loyalty, coupons | Built (Phase 4); delivery settings + online ordering built (Phase 5); online payment not started |
-| Delivery management | Built (Phase 6): drivers, zones, board, assignment, status history; storefront zone picker + separate driver app not started |
+| Delivery management | Built (Phase 6): drivers, zones, board, assignment, status history, storefront zone picker; separate driver app not started |
 | Online payment | Not started — v1 is pay at the restaurant |
 | Rate limiting / anti-spam on the public order endpoint | Not started (later work) |
 | Reports / analytics | Not started (recharts is installed but unused) |
