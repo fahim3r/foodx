@@ -190,7 +190,11 @@ export async function ensureDeliveryOrder(
   if (existing) return existing as DeliveryOrder
   const { data, error } = await supabase
     .from('delivery_orders')
-    .insert({ order_id: order.id, cod_amount: order.total_amount })
+    .insert({
+        order_id: order.id,
+        cod_amount: order.total_amount,
+        zone_id: order.delivery_zone_id ?? null,
+      })
     .select()
     .single()
   if (error) throw error
