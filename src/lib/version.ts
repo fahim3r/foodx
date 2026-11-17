@@ -1,1 +1,7 @@
-Ly8gVGhlIHJ1bm5pbmcgYXBwJ3MgdmVyc2lvbiDigJQgc2luZ2xlIHNvdXJjZSBvZiB0cnV0aCBpcyBwYWNrYWdlLmpzb24KLy8gKHJlc29sdmVKc29uTW9kdWxlIGlzIGVuYWJsZWQpLiBCdW1wIHBhY2thZ2UuanNvbidzIHZlcnNpb24gd2hlbgovLyBjdXR0aW5nIGEgcmVsZWFzZSBpbiB0aGUgRGV2ZWxvcGVyIFBhbmVsOyBpbnN0YW5jZXMgcmVwb3J0IHRoaXMgdmFsdWUKLy8gaW4gdGhlaXIgaGVhcnRiZWF0IGFuZCBjb21wYXJlIGl0IGFnYWluc3QgdGhlIGxhdGVzdCByZWxlYXNlLgppbXBvcnQgeyB2ZXJzaW9uIH0gZnJvbSAnLi4vLi4vcGFja2FnZS5qc29uJwoKZXhwb3J0IGNvbnN0IEFQUF9WRVJTSU9OID0gdmVyc2lvbgo=
+// The running app's version — single source of truth is package.json
+// (resolveJsonModule is enabled). Bump package.json's version when
+// cutting a release in the Developer Panel; instances report this value
+// in their heartbeat and compare it against the latest release.
+import { version } from '../../package.json'
+
+export const APP_VERSION = version
