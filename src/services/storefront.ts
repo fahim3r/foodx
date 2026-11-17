@@ -107,8 +107,8 @@ export async function fetchStorefrontMenu(
 /**
  * The restaurant's active delivery zones, for the checkout zone
  * picker (migration 0012). Public: the anon SELECT policy on
- * delivery_zones makes this work logged out. Ordered the way the
- * panel orders them (sort_order, then name).
+ * delivery_zones makes this work logged out. Ordered by name,
+ * the same order the panel's zone list uses.
  */
 export async function fetchPublicZones(
   restaurantId: string,
@@ -118,7 +118,6 @@ export async function fetchPublicZones(
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
-    .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
   if (error) throw error
   return (data ?? []) as DeliveryZone[]
