@@ -1,1 +1,27 @@
-aW1wb3J0IHsgdXNlRWZmZWN0LCB1c2VTdGF0ZSB9IGZyb20gJ3JlYWN0JwoKaW1wb3J0IHsKICBnZXRMaWNlbnNlVmlldywKICBMSUNFTlNFX1VQREFURURfRVZFTlQsCiAgdHlwZSBMaWNlbnNlVmlldywKfSBmcm9tICdAL3NlcnZpY2VzL2hlYXJ0YmVhdCcKCi8qKgogKiBSZWFjdGl2ZSB2aWV3IG9mIHRoZSBjYWNoZWQgbGljZW5zZSBzdGF0ZSAoUGhhc2UgOCBzdGVwIDIpLiBSZWZyZXNoZXMKICogd2hlbmV2ZXIgYSBoZWFydGJlYXQgY29tcGxldGVzIG9yIGFub3RoZXIgdGFiIHVwZGF0ZXMgdGhlIGNhY2hlLgogKi8KZXhwb3J0IGZ1bmN0aW9uIHVzZUxpY2Vuc2VTdGF0ZSgpOiBMaWNlbnNlVmlldyB7CiAgY29uc3QgW3ZpZXcsIHNldFZpZXddID0gdXNlU3RhdGU8TGljZW5zZVZpZXc+KCgpID0+IGdldExpY2Vuc2VWaWV3KCkpCgogIHVzZUVmZmVjdCgoKSA9PiB7CiAgICBjb25zdCByZWZyZXNoID0gKCkgPT4gc2V0VmlldyhnZXRMaWNlbnNlVmlldygpKQogICAgd2luZG93LmFkZEV2ZW50TGlzdGVuZXIoTElDRU5TRV9VUERBVEVEX0VWRU5ULCByZWZyZXNoKQogICAgd2luZG93LmFkZEV2ZW50TGlzdGVuZXIoJ3N0b3JhZ2UnLCByZWZyZXNoKQogICAgcmV0dXJuICgpID0+IHsKICAgICAgd2luZG93LnJlbW92ZUV2ZW50TGlzdGVuZXIoTElDRU5TRV9VUERBVEVEX0VWRU5ULCByZWZyZXNoKQogICAgICB3aW5kb3cucmVtb3ZlRXZlbnRMaXN0ZW5lcignc3RvcmFnZScsIHJlZnJlc2gpCiAgICB9CiAgfSwgW10pCgogIHJldHVybiB2aWV3Cn0K
+import { useEffect, useState } from 'react'
+
+import {
+  getLicenseView,
+  LICENSE_UPDATED_EVENT,
+  type LicenseView,
+} from '@/services/heartbeat'
+
+/**
+ * Reactive view of the cached license state (Phase 8 step 2). Refreshes
+ * whenever a heartbeat completes or another tab updates the cache.
+ */
+export function useLicenseState(): LicenseView {
+  const [view, setView] = useState<LicenseView>(() => getLicenseView())
+
+  useEffect(() => {
+    const refresh = () => setView(getLicenseView())
+    window.addEventListener(LICENSE_UPDATED_EVENT, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener(LICENSE_UPDATED_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
+
+  return view
+}
