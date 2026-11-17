@@ -6,8 +6,8 @@
 //   - /panel/* → the admin app (AdminRoutes, mounted as a descendant;
 //     its route paths are relative on purpose — see the note there).
 //     Signed in → Dashboard, signed out → Login page.
-//   - /devpanel* → the Developer Panel placeholder (the real Developer
-//     Control Panel is Phase 8 work, so no login form, no fake data).
+//   - /devpanel* → the Developer Panel (Phase 8): its own sign-in gate
+//     plus the developer allow-list; fully separated from /panel (§88).
 //   - Legacy admin URLs (/login, /pos, /orders, …) redirect to their
 //     /panel/* equivalents, query string included.
 //   - Anything else → the public storefront: the FoodX Demo
@@ -49,7 +49,7 @@ import PosPage from '@/modules/pos/PosPage'
 import RolesPage from '@/modules/roles/RolesPage'
 import SettingsPage from '@/modules/settings/SettingsPage'
 import TablesPage from '@/modules/tables/TablesPage'
-import DevPanelPlaceholderPage from '@/modules/devpanel/DevPanelPlaceholderPage'
+import DevPanelPage from '@/modules/devpanel/DevPanelPage'
 import DomainNotConnectedPage from '@/modules/storefront/DomainNotConnectedPage'
 import StorefrontPage from '@/modules/storefront/StorefrontPage'
 import {
@@ -134,7 +134,7 @@ function LegacyAdminRedirect() {
 
 /**
  * The platform hosts in one router: /panel/* is the admin app,
- * /devpanel* is the Developer Panel placeholder (Phase 8), the legacy
+ * /devpanel* is the Developer Panel (Phase 8), the legacy
  * admin URLs redirect to their /panel/* equivalents, and everything
  * else is the public storefront — the demo restaurant by default, or
  * ?store=<slug> to preview another restaurant.
@@ -150,8 +150,8 @@ function PlatformRoutes({
     <BrowserRouter>
       <Routes>
         <Route path="/panel/*" element={<AdminRoutes />} />
-        <Route path="/devpanel" element={<DevPanelPlaceholderPage />} />
-        <Route path="/devpanel/*" element={<DevPanelPlaceholderPage />} />
+        <Route path="/devpanel" element={<DevPanelPage />} />
+        <Route path="/devpanel/*" element={<DevPanelPage />} />
         {LEGACY_ADMIN_PATHS.map((path) => (
           <Route
             key={path}
@@ -205,7 +205,7 @@ function HostRouter() {
     }
   }, [hostname, platform])
 
-  // Platform host: one router — /panel/* admin, /devpanel placeholder,
+  // Platform host: one router — /panel/* admin, /devpanel vendor panel,
   // legacy admin redirects, everything else the demo storefront
   // (?store=<slug> previews another restaurant).
   if (platform) {
