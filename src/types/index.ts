@@ -839,3 +839,129 @@ export interface DailyClosing {
   created_at: string
 }
 
+// ---------------------------------------------------------------------------
+// Phase 8 — Developer Platform, Step 1: manual registry (migration 0014).
+// Vendor-side records only: these describe client DEPLOYMENTS (their own
+// databases/domains), never restaurant data (§1, §51, §52, §55, §60, §72).
+// ---------------------------------------------------------------------------
+
+export type DevClientStatus = 'ACTIVE' | 'SUSPENDED' | 'INACTIVE'
+
+/** A registered FoodX client deployment (§51 client record). */
+export interface DevClient {
+  id: string
+  client_code: string
+  restaurant_name: string
+  owner_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  domain: string | null
+  instance_url: string | null
+  /** Which Supabase project the deployment uses — informational (§51). */
+  instance_supabase_ref: string | null
+  /** Version AS REGISTERED by the developer. Instances do not report
+   * home yet (Phase 8 Step 2), so this is never live-polled data. */
+  version: string | null
+  plan: string | null
+  status: DevClientStatus
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type LicensePlan =
+  | 'MONTHLY'
+  | 'QUARTERLY'
+  | 'HALF_YEARLY'
+  | 'YEARLY'
+  | 'LIFETIME'
+
+export const LICENSE_PLANS: LicensePlan[] = [
+  'MONTHLY',
+  'QUARTERLY',
+  'HALF_YEARLY',
+  'YEARLY',
+  'LIFETIME',
+]
+
+export type LicenseStatus =
+  | 'PENDING'
+  | 'ACTIVE'
+  | 'SUSPENDED'
+  | 'EXPIRED'
+  | 'RENEWED'
+  | 'CANCELLED'
+
+/** One license row (§52). Renewal creates a new row; history is kept. */
+export interface DevLicense {
+  id: string
+  client_id: string
+  license_key: string
+  plan: LicensePlan
+  start_date: string
+  /** NULL for LIFETIME licenses — they never expire (§52). */
+  expiry_date: string | null
+  status: LicenseStatus
+  max_branches: number | null
+  max_users: number | null
+  max_devices: number | null
+  features: Record<string, boolean>
+  created_at: string
+  updated_at: string
+}
+
+export type DevReleaseStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+
+/** A software release the developer can roll out to clients (§55). */
+export interface DevRelease {
+  id: string
+  version: string
+  release_notes: string | null
+  required_migrations: string[]
+  compatibility: string | null
+  /** NULL = all clients (§55 target clients). */
+  target_client_ids: string[] | null
+  status: DevReleaseStatus
+  published_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Vendor-registered feature keys (§60) — same vocabulary as the
+ * per-restaurant feature_flags table in 0001, different scope: these
+ * are per client DEPLOYMENT and, in Step 1, are not yet pulled by the
+ * client instance (see devpanel service notes). */
+export type DevFeatureKey =
+  | 'online_ordering'
+  | 'delivery'
+  | 'loyalty'
+  | 'accounting'
+  | 'nfc'
+  | 'multi_branch'
+
+export const DEV_FEATURE_KEYS: DevFeatureKey[] = [
+  'online_ordering',
+  'delivery',
+  'loyalty',
+  'accounting',
+  'nfc',
+  'multi_branch',
+]
+
+export interface DevClientFeature {
+  id: string
+  client_id: string
+  feature_key: DevFeatureKey
+  is_enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Append-only support history entry for a client (§72). */
+export interface DevSupportNote {
+  id: string
+  client_id: string
+  note: string
+  created_by: string | null
+  created_at: string
+}
