@@ -6,7 +6,7 @@ self-contained deployment model, **not multi-tenant SaaS**: each restaurant
 runs its own app instance against its own Supabase project, and no
 restaurant's data ever shares a database with another's.
 
-> **Status: Phase 8 — Developer Platform (Step 1).** This repository contains the
+> **Status: Phase 8 — Developer Platform (Steps 1 + 2).** This repository contains the
 > app shell, authentication, restaurant setup, branding settings, a
 > read-only roles & permissions view, the full core restaurant flow
 > (menu, tables, POS, orders, KDS), inventory with recipes and
@@ -528,6 +528,37 @@ There is no automated provisioning yet — that is later-phase work.
   printing.
 
 ## What Phase 8 adds
+
+### Step 2 — instance heartbeat (migration `0015`)
+
+- **Registry additions** (`0015_instance_heartbeat.sql`) —
+  `dev_clients.instance_token_hash` (only the SHA-256 hash of the
+  per-instance token is stored; the plaintext is shown once in the
+  Developer Panel and then lives only in that deployment's env) and
+  `dev_clients.last_seen_at`, plus `dev_heartbeats`, an append-only
+  check-in history only the Edge Function's service role writes.
+- **Edge Function** (`supabase/functions/instance-heartbeat`) —
+  deployed on the registry project. An instance POSTs its client
+  code, token and version (with the registry's public anon key); the
+  function validates the token hash, records the heartbeat, and
+  answers with the effective license state (same computed-expiry
+  rule as the panel), the client's feature flags, and the newest
+  published release targeted at it. CORS is open by design — the
+  token is the auth.
+- **Instance side** (`src/services/heartbeat.ts`,
+  `src/lib/version.ts`) — configured per deployment via
+  `VITE_FOODX_REGISTRY_URL`, `VITE_FOODX_REGISTRY_ANON_KEY`,
+  `VITE_FOODX_INSTANCE_ID`, `VITE_FOODX_INSTANCE_TOKEN` (see
+  `.env.example`). Unconfigured deployments do nothing. The panel
+  heartbeats on load and every 6 hours and caches the response, so
+  everything works offline; a license problem raises a warning
+  banner but never blocks POS (§53). Settings gains a **License &
+  updates** card (§42) with a manual "Check now". The Delivery and
+  Business modules are gated by the pulled feature flags (§60);
+  the other flags are display-only for now. Update *execution*
+  remains a vendor-operated deploy — the panel only detects and
+  displays new releases (§56).
+
 
 - **Developer registry tables** (`0014_devpanel.sql`) — `dev_clients`
   (the §51 client record: code, restaurant, owner, contact, domain,
