@@ -221,6 +221,10 @@ export interface Order {
   total_amount: number
   /** Delivery fee charged on this order (0 unless type is 'delivery'). */
   delivery_fee: number
+  /** Zone the customer picked online (migration 0012); null for POS
+   * orders and restaurants without zones. The delivery board pre-fills
+   * its dispatch row from this. */
+  delivery_zone_id?: string | null
   customer_id: string | null
   /** Guest contact for QR / online orders (the POS leaves these null —
    * its customers live on the customer record instead). */
@@ -607,6 +611,7 @@ export interface PlaceOnlineOrderInput {
   customerName: string
   customerPhone: string
   deliveryAddress?: string | null
+  zoneId?: string | null
   items: OnlineOrderLineInput[]
 }
 
