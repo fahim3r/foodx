@@ -38,6 +38,7 @@ import ResetPasswordPage from '@/modules/auth/ResetPasswordPage'
 import UpdatePasswordPage from '@/modules/auth/UpdatePasswordPage'
 import DashboardPage from '@/modules/dashboard/DashboardPage'
 import CustomersPage from '@/modules/customers/CustomersPage'
+import DeliveryPage from '@/modules/delivery/DeliveryPage'
 import InventoryPage from '@/modules/inventory/InventoryPage'
 import KdsPage from '@/modules/kds/KdsPage'
 import MenuPage from '@/modules/menu/MenuPage'
@@ -92,6 +93,7 @@ function AdminRoutes({
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="tables" element={<TablesPage />} />
         <Route path="customers" element={<CustomersPage />} />
+        <Route path="delivery" element={<DeliveryPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="roles" element={<RolesPage />} />
       </Route>
@@ -115,6 +117,7 @@ const LEGACY_ADMIN_PATHS = [
   '/inventory',
   '/tables',
   '/customers',
+  '/delivery',
   '/settings',
   '/roles',
 ] as const
