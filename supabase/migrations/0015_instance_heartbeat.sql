@@ -1,1 +1,46 @@
-LS0gPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQotLSBGb29kWCBtaWdyYXRpb24gMDAxNSDigJQgUGhhc2UgOCBzdGVwIDI6IGluc3RhbmNlIGhlYXJ0YmVhdCBzdXBwb3J0Ci0tIChQSEFTRThfU1RFUDJfSEVBUlRCRUFUX0RFU0lHTi5tZCkKLS0KLS0gV2hhdCB0aGlzIGFkZHM6Ci0tICAgKiBkZXZfY2xpZW50cy5pbnN0YW5jZV90b2tlbl9oYXNoIOKAlCBTSEEtMjU2IGhleCBvZiB0aGUgcGVyLWluc3RhbmNlCi0tICAgICB0b2tlbiBhbiBpbnN0YWxsYXRpb24gdXNlcyB0byBwaG9uZSBob21lLiBPbmx5IHRoZSBoYXNoIGlzIHN0b3JlZDsKLS0gICAgIHRoZSBwbGFpbnRleHQgdG9rZW4gaXMgc2hvd24gb25jZSBpbiB0aGUgRGV2ZWxvcGVyIFBhbmVsIHdoZW4gaXQgaXMKLS0gICAgIGdlbmVyYXRlZCBhbmQgdGhlbiBsaXZlcyBvbmx5IGluIHRoYXQgZGVwbG95bWVudCdzIGVudgotLSAgICAgKFZJVEVfRk9PRFhfSU5TVEFOQ0VfVE9LRU4pLiBOVUxMID0gbm8gdG9rZW4gaXNzdWVkIHlldC4KLS0gICAqIGRldl9jbGllbnRzLmxhc3Rfc2Vlbl9hdCDigJQgd3JpdHRlbiBieSB0aGUgaW5zdGFuY2UtaGVhcnRiZWF0IEVkZ2UKLS0gICAgIEZ1bmN0aW9uIChzZXJ2aWNlIHJvbGUpIG9uIGV2ZXJ5IGFjY2VwdGVkIGhlYXJ0YmVhdC4gTlVMTCA9IHRoZQotLSAgICAgaW5zdGFuY2UgaGFzIG5ldmVyIGNoZWNrZWQgaW47IHRoZSBwYW5lbCBsYWJlbHMgaXRzIHZlcnNpb24KLS0gICAgICJhcyByZWdpc3RlcmVkIiB1bnRpbCB0aGVuIGFuZCAibGFzdCByZXBvcnRlZCIgYWZ0ZXJ3YXJkcy4KLS0gICAqIGRldl9oZWFydGJlYXRzIOKAlCBhcHBlbmQtb25seSBjaGVjay1pbiBoaXN0b3J5IChvbmUgcm93IHBlciBhY2NlcHRlZAotLSAgICAgaGVhcnRiZWF0KS4gUkxTOiBkZXZlbG9wZXJzIG1heSBTRUxFQ1Q7IHRoZXJlIGlzIGRlbGliZXJhdGVseSBOTwotLSAgICAgaW5zZXJ0L3VwZGF0ZS9kZWxldGUgcG9saWN5IGZvciBhbm9uL2F1dGhlbnRpY2F0ZWQg4oCUIG9ubHkgdGhlIEVkZ2UKLS0gICAgIEZ1bmN0aW9uJ3Mgc2VydmljZSByb2xlIHdyaXRlcyBoZXJlLCBhbmQgbm90aGluZyBldmVyIHVwZGF0ZXMgb3IKLS0gICAgIGRlbGV0ZXMgaGlzdG9yeS4KLS0KLS0gZGV2X2NsaWVudHMgYWxyZWFkeSBoYXMgZGV2ZWxvcGVyIHNlbGVjdC9pbnNlcnQvdXBkYXRlIHBvbGljaWVzIGZyb20KLS0gMDAxNCwgd2hpY2ggY292ZXIgdGhlIHR3byBuZXcgY29sdW1ucyAodG9rZW4gZ2VuZXJhdGlvbiB1cGRhdGVzCi0tIGluc3RhbmNlX3Rva2VuX2hhc2ggZnJvbSB0aGUgRGV2ZWxvcGVyIFBhbmVsKS4KLS0gPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQoKYWx0ZXIgdGFibGUgcHVibGljLmRldl9jbGllbnRzCiAgYWRkIGNvbHVtbiBpZiBub3QgZXhpc3RzIGluc3RhbmNlX3Rva2VuX2hhc2ggdGV4dCwKICBhZGQgY29sdW1uIGlmIG5vdCBleGlzdHMgbGFzdF9zZWVuX2F0IHRpbWVzdGFtcHR6OwoKY3JlYXRlIHRhYmxlIGlmIG5vdCBleGlzdHMgcHVibGljLmRldl9oZWFydGJlYXRzICgKICBpZCB1dWlkIHByaW1hcnkga2V5IGRlZmF1bHQgZ2VuX3JhbmRvbV91dWlkKCksCiAgY2xpZW50X2lkIHV1aWQgbm90IG51bGwgcmVmZXJlbmNlcyBwdWJsaWMuZGV2X2NsaWVudHMgKGlkKSBvbiBkZWxldGUgY2FzY2FkZSwKICB2ZXJzaW9uIHRleHQgbm90IG51bGwsCiAgZG9tYWluIHRleHQsCiAgdXNlcl9hZ2VudCB0ZXh0LAogIGNyZWF0ZWRfYXQgdGltZXN0YW1wdHogbm90IG51bGwgZGVmYXVsdCBub3coKQopOwoKY3JlYXRlIGluZGV4IGlmIG5vdCBleGlzdHMgZGV2X2hlYXJ0YmVhdHNfY2xpZW50X2NyZWF0ZWRfaWR4CiAgb24gcHVibGljLmRldl9oZWFydGJlYXRzIChjbGllbnRfaWQsIGNyZWF0ZWRfYXQgZGVzYyk7CgphbHRlciB0YWJsZSBwdWJsaWMuZGV2X2hlYXJ0YmVhdHMgZW5hYmxlIHJvdyBsZXZlbCBzZWN1cml0eTsKCmRyb3AgcG9saWN5IGlmIGV4aXN0cyBkZXZfaGVhcnRiZWF0c19zZWxlY3RfZGV2ZWxvcGVyIG9uIHB1YmxpYy5kZXZfaGVhcnRiZWF0czsKY3JlYXRlIHBvbGljeSBkZXZfaGVhcnRiZWF0c19zZWxlY3RfZGV2ZWxvcGVyIG9uIHB1YmxpYy5kZXZfaGVhcnRiZWF0cwogIGZvciBzZWxlY3QgdG8gYXV0aGVudGljYXRlZCB1c2luZyAocHVibGljLmlzX2RldmVsb3BlcigpKTsK
+-- ============================================================================
+-- FoodX migration 0015 — Phase 8 step 2: instance heartbeat support
+-- (PHASE8_STEP2_HEARTBEAT_DESIGN.md)
+--
+-- What this adds:
+--   * dev_clients.instance_token_hash — SHA-256 hex of the per-instance
+--     token an installation uses to phone home. Only the hash is stored;
+--     the plaintext token is shown once in the Developer Panel when it is
+--     generated and then lives only in that deployment's env
+--     (VITE_FOODX_INSTANCE_TOKEN). NULL = no token issued yet.
+--   * dev_clients.last_seen_at — written by the instance-heartbeat Edge
+--     Function (service role) on every accepted heartbeat. NULL = the
+--     instance has never checked in; the panel labels its version
+--     "as registered" until then and "last reported" afterwards.
+--   * dev_heartbeats — append-only check-in history (one row per accepted
+--     heartbeat). RLS: developers may SELECT; there is deliberately NO
+--     insert/update/delete policy for anon/authenticated — only the Edge
+--     Function's service role writes here, and nothing ever updates or
+--     deletes history.
+--
+-- dev_clients already has developer select/insert/update policies from
+-- 0014, which cover the two new columns (token generation updates
+-- instance_token_hash from the Developer Panel).
+-- ============================================================================
+
+alter table public.dev_clients
+  add column if not exists instance_token_hash text,
+  add column if not exists last_seen_at timestamptz;
+
+create table if not exists public.dev_heartbeats (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.dev_clients (id) on delete cascade,
+  version text not null,
+  domain text,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists dev_heartbeats_client_created_idx
+  on public.dev_heartbeats (client_id, created_at desc);
+
+alter table public.dev_heartbeats enable row level security;
+
+drop policy if exists dev_heartbeats_select_developer on public.dev_heartbeats;
+create policy dev_heartbeats_select_developer on public.dev_heartbeats
+  for select to authenticated using (public.is_developer());
