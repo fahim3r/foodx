@@ -31,9 +31,8 @@ import {
   voidExpense,
   type ShiftSummary,
 } from '@/services/business'
-import { fetchBranches } from '@/services/restaurant'
+import { fetchBranches, type Branch } from '@/services/restaurant'
 import type {
-  Branch,
   CashMovementType,
   CashierShift,
   DailyClosing,
