@@ -1,1 +1,223 @@
-Ly8gRm9vZFgg4oCUIGluc3RhbmNlIGhlYXJ0YmVhdCArIGxpY2Vuc2Ugc3RhdGUgKFBoYXNlIDggc3RlcCAyKS4KLy8KLy8gQSBkZXBsb3ltZW50IGNvbmZpZ3VyZWQgd2l0aCB0aGUgVklURV9GT09EWF8qIGVudiB2YWx1ZXMgcGhvbmVzIGhvbWUKLy8gdG8gdGhlIHZlbmRvciByZWdpc3RyeSAodGhlIGluc3RhbmNlLWhlYXJ0YmVhdCBFZGdlIEZ1bmN0aW9uLCBzZWUKLy8gc3VwYWJhc2UvZnVuY3Rpb25zL2luc3RhbmNlLWhlYXJ0YmVhdCk6IGl0IHJlcG9ydHMgaXRzIHZlcnNpb24gYW5kCi8vIHJlY2VpdmVzIGl0cyBsaWNlbnNlIHN0YXRlLCBmZWF0dXJlIGZsYWdzIGFuZCB0aGUgbGF0ZXN0IHJlbGVhc2UuCi8vIFRoZSByZXNwb25zZSBpcyBjYWNoZWQgaW4gbG9jYWxTdG9yYWdlIHNvIHRoZSBwYW5lbCB3b3JrcyBmdWxseQovLyBvZmZsaW5lICjCpzUpOyB2YWxpZGF0aW9uIGlzIGFkdmlzb3J5IOKAlCBwZXIgwqc1MyBhIGxpY2Vuc2UgcHJvYmxlbQovLyByYWlzZXMgd2FybmluZ3MgYnV0IG5ldmVyIGJsb2NrcyBQT1Mgb3Igb3RoZXIgbG9jYWwgb3BlcmF0aW9ucy4KLy8KLy8gVW5jb25maWd1cmVkIGRlcGxveW1lbnRzIChubyBlbnYgdmFsdWVzIOKAlCBsb2NhbC9kZXYgYnVpbGRzLCBvciBhCi8vIGNsaWVudCBub3QgeWV0IHByb3Zpc2lvbmVkKSBza2lwIGV2ZXJ5dGhpbmc6IG5vIGNhbGxzLCBubyBiYW5uZXJzLAovLyBubyBtb2R1bGUgZ2F0ZXMuCgppbXBvcnQgeyBBUFBfVkVSU0lPTiB9IGZyb20gJ0AvbGliL3ZlcnNpb24nCmltcG9ydCB0eXBlIHsKICBEZXZDbGllbnRTdGF0dXMsCiAgRGV2RmVhdHVyZUtleSwKICBMaWNlbnNlUGxhbiwKICBMaWNlbnNlU3RhdHVzLAp9IGZyb20gJ0AvdHlwZXMnCgpjb25zdCBSRUdJU1RSWV9VUkwgPSBpbXBvcnQubWV0YS5lbnYuVklURV9GT09EWF9SRUdJU1RSWV9VUkwgYXMKICB8IHN0cmluZwogIHwgdW5kZWZpbmVkCmNvbnN0IFJFR0lTVFJZX0FOT05fS0VZID0gaW1wb3J0Lm1ldGEuZW52LlZJVEVfRk9PRFhfUkVHSVNUUllfQU5PTl9LRVkgYXMKICB8IHN0cmluZwogIHwgdW5kZWZpbmVkCmNvbnN0IElOU1RBTkNFX0lEID0gaW1wb3J0Lm1ldGEuZW52LlZJVEVfRk9PRFhfSU5TVEFOQ0VfSUQgYXMKICB8IHN0cmluZwogIHwgdW5kZWZpbmVkCmNvbnN0IElOU1RBTkNFX1RPS0VOID0gaW1wb3J0Lm1ldGEuZW52LlZJVEVfRk9PRFhfSU5TVEFOQ0VfVE9LRU4gYXMKICB8IHN0cmluZwogIHwgdW5kZWZpbmVkCgpjb25zdCBDQUNIRV9LRVkgPSAnZm9vZHgubGljZW5zZV9zdGF0ZScKZXhwb3J0IGNvbnN0IExJQ0VOU0VfVVBEQVRFRF9FVkVOVCA9ICdmb29keC1saWNlbnNlLXVwZGF0ZWQnCmNvbnN0IFNUQUxFX0FGVEVSX01TID0gNyAqIDI0ICogNjAgKiA2MCAqIDEwMDAKY29uc3QgRVhQSVJJTkdfV0lUSElOX0RBWVMgPSA3CgpleHBvcnQgaW50ZXJmYWNlIEhlYXJ0YmVhdExpY2Vuc2UgewogIHN0YXR1czogTGljZW5zZVN0YXR1cwogIHBsYW46IExpY2Vuc2VQbGFuCiAgc3RhcnRfZGF0ZTogc3RyaW5nCiAgZXhwaXJ5X2RhdGU6IHN0cmluZyB8IG51bGwKfQoKZXhwb3J0IGludGVyZmFjZSBIZWFydGJlYXRSZWxlYXNlIHsKICB2ZXJzaW9uOiBzdHJpbmcKICByZWxlYXNlX25vdGVzOiBzdHJpbmcKICByZXF1aXJlZF9taWdyYXRpb25zOiBzdHJpbmdbXQp9CgpleHBvcnQgaW50ZXJmYWNlIExpY2Vuc2VTdGF0ZUNhY2hlIHsKICBmZXRjaGVkX2F0OiBzdHJpbmcKICBzZXJ2ZXJfdGltZTogc3RyaW5nCiAgY2xpZW50X3N0YXR1czogRGV2Q2xpZW50U3RhdHVzCiAgbGljZW5zZTogSGVhcnRiZWF0TGljZW5zZSB8IG51bGwKICBmZWF0dXJlczogUmVjb3JkPERldkZlYXR1cmVLZXksIGJvb2xlYW4+CiAgbGF0ZXN0X3JlbGVhc2U6IEhlYXJ0YmVhdFJlbGVhc2UgfCBudWxsCn0KCmV4cG9ydCB0eXBlIExpY2Vuc2VXYXJuaW5nUmVhc29uID0KICB8ICdleHBpcmVkJwogIHwgJ3N1c3BlbmRlZCcKICB8ICdub19saWNlbnNlJwogIHwgJ2NsaWVudF9zdXNwZW5kZWQnCiAgfCAnc3RhbGUnCgpleHBvcnQgaW50ZXJmYWNlIExpY2Vuc2VWaWV3IHsKICBkaXNwbGF5OiAnVU5DT05GSUdVUkVEJyB8ICdVTktOT1dOJyB8ICdPSycgfCAnRVhQSVJJTkcnIHwgJ1dBUk5JTkcnCiAgcmVhc29uOiBMaWNlbnNlV2FybmluZ1JlYXNvbiB8IG51bGwKICBjYWNoZTogTGljZW5zZVN0YXRlQ2FjaGUgfCBudWxsCiAgdXBkYXRlQXZhaWxhYmxlOiBib29sZWFuCn0KCmV4cG9ydCBmdW5jdGlvbiBpc0hlYXJ0YmVhdENvbmZpZ3VyZWQoKTogYm9vbGVhbiB7CiAgcmV0dXJuIEJvb2xlYW4oCiAgICBSRUdJU1RSWV9VUkwgJiYgUkVHSVNUUllfQU5PTl9LRVkgJiYgSU5TVEFOQ0VfSUQgJiYgSU5TVEFOQ0VfVE9LRU4sCiAgKQp9CgpleHBvcnQgZnVuY3Rpb24gaGVhcnRiZWF0SW5zdGFuY2VJZCgpOiBzdHJpbmcgfCBudWxsIHsKICByZXR1cm4gSU5TVEFOQ0VfSUQgPz8gbnVsbAp9CgpleHBvcnQgZnVuY3Rpb24gcmVhZExpY2Vuc2VDYWNoZSgpOiBMaWNlbnNlU3RhdGVDYWNoZSB8IG51bGwgewogIHRyeSB7CiAgICBjb25zdCByYXcgPSB3aW5kb3cubG9jYWxTdG9yYWdlLmdldEl0ZW0oQ0FDSEVfS0VZKQogICAgaWYgKCFyYXcpIHJldHVybiBudWxsCiAgICBjb25zdCBwYXJzZWQgPSBKU09OLnBhcnNlKHJhdykgYXMgTGljZW5zZVN0YXRlQ2FjaGUKICAgIGlmICh0eXBlb2YgcGFyc2VkLmZldGNoZWRfYXQgIT09ICdzdHJpbmcnIHx8ICFwYXJzZWQuZmVhdHVyZXMpIHsKICAgICAgcmV0dXJuIG51bGwKICAgIH0KICAgIHJldHVybiBwYXJzZWQKICB9IGNhdGNoIHsKICAgIHJldHVybiBudWxsCiAgfQp9CgovKioKICogUE9TVCBvbmUgaGVhcnRiZWF0IHRvIHRoZSByZWdpc3RyeSBhbmQgY2FjaGUgdGhlIHJlc3BvbnNlLiBSZXR1cm5zCiAqIHRydWUgb24gc3VjY2Vzczsgb24gYW55IGZhaWx1cmUgdGhlIHByZXZpb3VzIGNhY2hlIGlzIGtlcHQgdW50b3VjaGVkCiAqIChvZmZsaW5lLWZpcnN0KSBhbmQgZmFsc2UgaXMgcmV0dXJuZWQuCiAqLwpleHBvcnQgYXN5bmMgZnVuY3Rpb24gcnVuSGVhcnRiZWF0KCk6IFByb21pc2U8Ym9vbGVhbj4gewogIGlmICghaXNIZWFydGJlYXRDb25maWd1cmVkKCkpIHJldHVybiBmYWxzZQogIHRyeSB7CiAgICBjb25zdCByZXMgPSBhd2FpdCBmZXRjaCgKICAgICAgYCR7UkVHSVNUUllfVVJMfS9mdW5jdGlvbnMvdjEvaW5zdGFuY2UtaGVhcnRiZWF0YCwKICAgICAgewogICAgICAgIG1ldGhvZDogJ1BPU1QnLAogICAgICAgIGhlYWRlcnM6IHsKICAgICAgICAgIGFwaWtleTogUkVHSVNUUllfQU5PTl9LRVkgYXMgc3RyaW5nLAogICAgICAgICAgQXV0aG9yaXphdGlvbjogYEJlYXJlciAke1JFR0lTVFJZX0FOT05fS0VZIGFzIHN0cmluZ31gLAogICAgICAgICAgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJywKICAgICAgICB9LAogICAgICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KHsKICAgICAgICAgIGluc3RhbmNlX2lkOiBJTlNUQU5DRV9JRCwKICAgICAgICAgIHRva2VuOiBJTlNUQU5DRV9UT0tFTiwKICAgICAgICAgIHZlcnNpb246IEFQUF9WRVJTSU9OLAogICAgICAgICAgZG9tYWluOiB3aW5kb3cubG9jYXRpb24uaG9zdG5hbWUsCiAgICAgICAgfSksCiAgICAgIH0sCiAgICApCiAgICBpZiAoIXJlcy5vaykgcmV0dXJuIGZhbHNlCiAgICBjb25zdCBkYXRhID0gKGF3YWl0IHJlcy5qc29uKCkpIGFzIHsKICAgICAgc2VydmVyX3RpbWU6IHN0cmluZwogICAgICBjbGllbnRfc3RhdHVzOiBEZXZDbGllbnRTdGF0dXMKICAgICAgbGljZW5zZTogSGVhcnRiZWF0TGljZW5zZSB8IG51bGwKICAgICAgZmVhdHVyZXM6IFJlY29yZDxEZXZGZWF0dXJlS2V5LCBib29sZWFuPgogICAgICBsYXRlc3RfcmVsZWFzZTogSGVhcnRiZWF0UmVsZWFzZSB8IG51bGwKICAgIH0KICAgIGNvbnN0IGNhY2hlOiBMaWNlbnNlU3RhdGVDYWNoZSA9IHsKICAgICAgZmV0Y2hlZF9hdDogbmV3IERhdGUoKS50b0lTT1N0cmluZygpLAogICAgICBzZXJ2ZXJfdGltZTogZGF0YS5zZXJ2ZXJfdGltZSwKICAgICAgY2xpZW50X3N0YXR1czogZGF0YS5jbGllbnRfc3RhdHVzLAogICAgICBsaWNlbnNlOiBkYXRhLmxpY2Vuc2UsCiAgICAgIGZlYXR1cmVzOiBkYXRhLmZlYXR1cmVzLAogICAgICBsYXRlc3RfcmVsZWFzZTogZGF0YS5sYXRlc3RfcmVsZWFzZSwKICAgIH0KICAgIHRyeSB7CiAgICAgIHdpbmRvdy5sb2NhbFN0b3JhZ2Uuc2V0SXRlbShDQUNIRV9LRVksIEpTT04uc3RyaW5naWZ5KGNhY2hlKSkKICAgIH0gY2F0Y2ggewogICAgICAvLyBTdG9yYWdlIGZ1bGwvYmxvY2tlZCDigJQgdGhlIHZpZXcganVzdCBzdGF5cyBVTktOT1dOIHRoaXMgc2Vzc2lvbi4KICAgIH0KICAgIHdpbmRvdy5kaXNwYXRjaEV2ZW50KG5ldyBFdmVudChMSUNFTlNFX1VQREFURURfRVZFTlQpKQogICAgcmV0dXJuIHRydWUKICB9IGNhdGNoIHsKICAgIHJldHVybiBmYWxzZQogIH0KfQoKLy8gTWluaW1hbCBzZW12ZXIgY29tcGFyZSAoeC55LnosIG1pc3NpbmcgcGFydHMgPSAwKS4gTWlycm9ycwovLyBjb21wYXJlVmVyc2lvbnMgaW4gc3JjL3NlcnZpY2VzL2RldnBhbmVsLnRzIGFuZCB0aGUgRWRnZSBGdW5jdGlvbi4KZXhwb3J0IGZ1bmN0aW9uIGNvbXBhcmVWZXJzaW9ucyhhOiBzdHJpbmcsIGI6IHN0cmluZyk6IG51bWJlciB7CiAgY29uc3QgcGEgPSBhLnNwbGl0KCcuJykubWFwKChuKSA9PiBOdW1iZXIucGFyc2VJbnQobiwgMTApIHx8IDApCiAgY29uc3QgcGIgPSBiLnNwbGl0KCcuJykubWFwKChuKSA9PiBOdW1iZXIucGFyc2VJbnQobiwgMTApIHx8IDApCiAgZm9yIChsZXQgaSA9IDA7IGkgPCBNYXRoLm1heChwYS5sZW5ndGgsIHBiLmxlbmd0aCk7IGkrKykgewogICAgY29uc3QgZGlmZiA9IChwYVtpXSA/PyAwKSAtIChwYltpXSA/PyAwKQogICAgaWYgKGRpZmYgIT09IDApIHJldHVybiBkaWZmCiAgfQogIHJldHVybiAwCn0KCi8qKiBEZXJpdmUgd2hhdCB0aGUgVUkgc2hvdWxkIHNob3cgZnJvbSB0aGUgY2FjaGUgKyB0aGUgbG9jYWwgY2xvY2suICovCmV4cG9ydCBmdW5jdGlvbiBnZXRMaWNlbnNlVmlldyhub3c6IERhdGUgPSBuZXcgRGF0ZSgpKTogTGljZW5zZVZpZXcgewogIGlmICghaXNIZWFydGJlYXRDb25maWd1cmVkKCkpIHsKICAgIHJldHVybiB7CiAgICAgIGRpc3BsYXk6ICdVTkNPTkZJR1VSRUQnLAogICAgICByZWFzb246IG51bGwsCiAgICAgIGNhY2hlOiBudWxsLAogICAgICB1cGRhdGVBdmFpbGFibGU6IGZhbHNlLAogICAgfQogIH0KICBjb25zdCBjYWNoZSA9IHJlYWRMaWNlbnNlQ2FjaGUoKQogIGlmICghY2FjaGUpIHsKICAgIHJldHVybiB7IGRpc3BsYXk6ICdVTktOT1dOJywgcmVhc29uOiBudWxsLCBjYWNoZTogbnVsbCwgdXBkYXRlQXZhaWxhYmxlOiBmYWxzZSB9CiAgfQogIGNvbnN0IHVwZGF0ZUF2YWlsYWJsZSA9CiAgICBjYWNoZS5sYXRlc3RfcmVsZWFzZSAhPT0gbnVsbCAmJgogICAgY29tcGFyZVZlcnNpb25zKGNhY2hlLmxhdGVzdF9yZWxlYXNlLnZlcnNpb24sIEFQUF9WRVJTSU9OKSA+IDAKICBpZiAoY2FjaGUuY2xpZW50X3N0YXR1cyA9PT0gJ1NVU1BFTkRFRCcpIHsKICAgIHJldHVybiB7IGRpc3BsYXk6ICdXQVJOSU5HJywgcmVhc29uOiAnY2xpZW50X3N1c3BlbmRlZCcsIGNhY2hlLCB1cGRhdGVBdmFpbGFibGUgfQogIH0KICBpZiAoIWNhY2hlLmxpY2Vuc2UpIHsKICAgIHJldHVybiB7IGRpc3BsYXk6ICdXQVJOSU5HJywgcmVhc29uOiAnbm9fbGljZW5zZScsIGNhY2hlLCB1cGRhdGVBdmFpbGFibGUgfQogIH0KICBpZiAoY2FjaGUubGljZW5zZS5zdGF0dXMgPT09ICdTVVNQRU5ERUQnKSB7CiAgICByZXR1cm4geyBkaXNwbGF5OiAnV0FSTklORycsIHJlYXNvbjogJ3N1c3BlbmRlZCcsIGNhY2hlLCB1cGRhdGVBdmFpbGFibGUgfQogIH0KICBpZiAoY2FjaGUubGljZW5zZS5zdGF0dXMgPT09ICdFWFBJUkVEJykgewogICAgcmV0dXJuIHsgZGlzcGxheTogJ1dBUk5JTkcnLCByZWFzb246ICdleHBpcmVkJywgY2FjaGUsIHVwZGF0ZUF2YWlsYWJsZSB9CiAgfQogIGNvbnN0IGFnZU1zID0gbm93LmdldFRpbWUoKSAtIG5ldyBEYXRlKGNhY2hlLmZldGNoZWRfYXQpLmdldFRpbWUoKQogIGlmIChhZ2VNcyA+IFNUQUxFX0FGVEVSX01TKSB7CiAgICByZXR1cm4geyBkaXNwbGF5OiAnV0FSTklORycsIHJlYXNvbjogJ3N0YWxlJywgY2FjaGUsIHVwZGF0ZUF2YWlsYWJsZSB9CiAgfQogIGlmIChjYWNoZS5saWNlbnNlLnN0YXR1cyA9PT0gJ0FDVElWRScgJiYgY2FjaGUubGljZW5zZS5leHBpcnlfZGF0ZSkgewogICAgY29uc3QgZGF5c0xlZnQgPSBNYXRoLmNlaWwoCiAgICAgIChuZXcgRGF0ZShgJHtjYWNoZS5saWNlbnNlLmV4cGlyeV9kYXRlfVQwMDowMDowMGApLmdldFRpbWUoKSAtCiAgICAgICAgbm93LmdldFRpbWUoKSkgLwogICAgICAgICgyNCAqIDYwICogNjAgKiAxMDAwKSwKICAgICkKICAgIGlmIChkYXlzTGVmdCA8PSBFWFBJUklOR19XSVRISU5fREFZUykgewogICAgICByZXR1cm4geyBkaXNwbGF5OiAnRVhQSVJJTkcnLCByZWFzb246IG51bGwsIGNhY2hlLCB1cGRhdGVBdmFpbGFibGUgfQogICAgfQogIH0KICByZXR1cm4geyBkaXNwbGF5OiAnT0snLCByZWFzb246IG51bGwsIGNhY2hlLCB1cGRhdGVBdmFpbGFibGUgfQp9CgovKioKICogVmVuZG9yIGZlYXR1cmUgZ2F0ZSBmb3IgYSBtb2R1bGUgKMKnNjApLiBVbmNvbmZpZ3VyZWQgZGVwbG95bWVudHMgYW5kCiAqICJubyBzdWNjZXNzZnVsIGhlYXJ0YmVhdCB5ZXQiIG5ldmVyIGdhdGUg4oCUIG9ubHkgYW4gZXhwbGljaXQgZmFsc2UKICogZnJvbSB0aGUgcmVnaXN0cnkgY2xvc2VzIGEgbW9kdWxlLgogKi8KZXhwb3J0IGZ1bmN0aW9uIGlzTW9kdWxlRW5hYmxlZCgKICB2aWV3OiBMaWNlbnNlVmlldywKICBrZXk6IERldkZlYXR1cmVLZXksCik6IGJvb2xlYW4gewogIGlmICghdmlldy5jYWNoZSkgcmV0dXJuIHRydWUKICByZXR1cm4gdmlldy5jYWNoZS5mZWF0dXJlc1trZXldID09PSB0cnVlCn0K
+// FoodX — instance heartbeat + license state (Phase 8 step 2).
+//
+// A deployment configured with the VITE_FOODX_* env values phones home
+// to the vendor registry (the instance-heartbeat Edge Function, see
+// supabase/functions/instance-heartbeat): it reports its version and
+// receives its license state, feature flags and the latest release.
+// The response is cached in localStorage so the panel works fully
+// offline (§5); validation is advisory — per §53 a license problem
+// raises warnings but never blocks POS or other local operations.
+//
+// Unconfigured deployments (no env values — local/dev builds, or a
+// client not yet provisioned) skip everything: no calls, no banners,
+// no module gates.
+
+import { APP_VERSION } from '@/lib/version'
+import type {
+  DevClientStatus,
+  DevFeatureKey,
+  LicensePlan,
+  LicenseStatus,
+} from '@/types'
+
+const REGISTRY_URL = import.meta.env.VITE_FOODX_REGISTRY_URL as
+  | string
+  | undefined
+const REGISTRY_ANON_KEY = import.meta.env.VITE_FOODX_REGISTRY_ANON_KEY as
+  | string
+  | undefined
+const INSTANCE_ID = import.meta.env.VITE_FOODX_INSTANCE_ID as
+  | string
+  | undefined
+const INSTANCE_TOKEN = import.meta.env.VITE_FOODX_INSTANCE_TOKEN as
+  | string
+  | undefined
+
+const CACHE_KEY = 'foodx.license_state'
+export const LICENSE_UPDATED_EVENT = 'foodx-license-updated'
+const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000
+const EXPIRING_WITHIN_DAYS = 7
+
+export interface HeartbeatLicense {
+  status: LicenseStatus
+  plan: LicensePlan
+  start_date: string
+  expiry_date: string | null
+}
+
+export interface HeartbeatRelease {
+  version: string
+  release_notes: string
+  required_migrations: string[]
+}
+
+export interface LicenseStateCache {
+  fetched_at: string
+  server_time: string
+  client_status: DevClientStatus
+  license: HeartbeatLicense | null
+  features: Record<DevFeatureKey, boolean>
+  latest_release: HeartbeatRelease | null
+}
+
+export type LicenseWarningReason =
+  | 'expired'
+  | 'suspended'
+  | 'no_license'
+  | 'client_suspended'
+  | 'stale'
+
+export interface LicenseView {
+  display: 'UNCONFIGURED' | 'UNKNOWN' | 'OK' | 'EXPIRING' | 'WARNING'
+  reason: LicenseWarningReason | null
+  cache: LicenseStateCache | null
+  updateAvailable: boolean
+}
+
+export function isHeartbeatConfigured(): boolean {
+  return Boolean(
+    REGISTRY_URL && REGISTRY_ANON_KEY && INSTANCE_ID && INSTANCE_TOKEN,
+  )
+}
+
+export function heartbeatInstanceId(): string | null {
+  return INSTANCE_ID ?? null
+}
+
+export function readLicenseCache(): LicenseStateCache | null {
+  try {
+    const raw = window.localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as LicenseStateCache
+    if (typeof parsed.fetched_at !== 'string' || !parsed.features) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+/**
+ * POST one heartbeat to the registry and cache the response. Returns
+ * true on success; on any failure the previous cache is kept untouched
+ * (offline-first) and false is returned.
+ */
+export async function runHeartbeat(): Promise<boolean> {
+  if (!isHeartbeatConfigured()) return false
+  try {
+    const res = await fetch(
+      `${REGISTRY_URL}/functions/v1/instance-heartbeat`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: REGISTRY_ANON_KEY as string,
+          Authorization: `Bearer ${REGISTRY_ANON_KEY as string}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instance_id: INSTANCE_ID,
+          token: INSTANCE_TOKEN,
+          version: APP_VERSION,
+          domain: window.location.hostname,
+        }),
+      },
+    )
+    if (!res.ok) return false
+    const data = (await res.json()) as {
+      server_time: string
+      client_status: DevClientStatus
+      license: HeartbeatLicense | null
+      features: Record<DevFeatureKey, boolean>
+      latest_release: HeartbeatRelease | null
+    }
+    const cache: LicenseStateCache = {
+      fetched_at: new Date().toISOString(),
+      server_time: data.server_time,
+      client_status: data.client_status,
+      license: data.license,
+      features: data.features,
+      latest_release: data.latest_release,
+    }
+    try {
+      window.localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
+    } catch {
+      // Storage full/blocked — the view just stays UNKNOWN this session.
+    }
+    window.dispatchEvent(new Event(LICENSE_UPDATED_EVENT))
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Minimal semver compare (x.y.z, missing parts = 0). Mirrors
+// compareVersions in src/services/devpanel.ts and the Edge Function.
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => Number.parseInt(n, 10) || 0)
+  const pb = b.split('.').map((n) => Number.parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+/** Derive what the UI should show from the cache + the local clock. */
+export function getLicenseView(now: Date = new Date()): LicenseView {
+  if (!isHeartbeatConfigured()) {
+    return {
+      display: 'UNCONFIGURED',
+      reason: null,
+      cache: null,
+      updateAvailable: false,
+    }
+  }
+  const cache = readLicenseCache()
+  if (!cache) {
+    return { display: 'UNKNOWN', reason: null, cache: null, updateAvailable: false }
+  }
+  const updateAvailable =
+    cache.latest_release !== null &&
+    compareVersions(cache.latest_release.version, APP_VERSION) > 0
+  if (cache.client_status === 'SUSPENDED') {
+    return { display: 'WARNING', reason: 'client_suspended', cache, updateAvailable }
+  }
+  if (!cache.license) {
+    return { display: 'WARNING', reason: 'no_license', cache, updateAvailable }
+  }
+  if (cache.license.status === 'SUSPENDED') {
+    return { display: 'WARNING', reason: 'suspended', cache, updateAvailable }
+  }
+  if (cache.license.status === 'EXPIRED') {
+    return { display: 'WARNING', reason: 'expired', cache, updateAvailable }
+  }
+  const ageMs = now.getTime() - new Date(cache.fetched_at).getTime()
+  if (ageMs > STALE_AFTER_MS) {
+    return { display: 'WARNING', reason: 'stale', cache, updateAvailable }
+  }
+  if (cache.license.status === 'ACTIVE' && cache.license.expiry_date) {
+    const daysLeft = Math.ceil(
+      (new Date(`${cache.license.expiry_date}T00:00:00`).getTime() -
+        now.getTime()) /
+        (24 * 60 * 60 * 1000),
+    )
+    if (daysLeft <= EXPIRING_WITHIN_DAYS) {
+      return { display: 'EXPIRING', reason: null, cache, updateAvailable }
+    }
+  }
+  return { display: 'OK', reason: null, cache, updateAvailable }
+}
+
+/**
+ * Vendor feature gate for a module (§60). Unconfigured deployments and
+ * "no successful heartbeat yet" never gate — only an explicit false
+ * from the registry closes a module.
+ */
+export function isModuleEnabled(
+  view: LicenseView,
+  key: DevFeatureKey,
+): boolean {
+  if (!view.cache) return true
+  return view.cache.features[key] === true
+}
