@@ -24,6 +24,7 @@ import {
   fetchStorefront,
   fetchStorefrontAvailability,
   fetchStorefrontMenu,
+  fetchPublicZones,
   getOnlineOrderStatus,
   placeOnlineOrder,
 } from '@/services/storefront'
@@ -31,6 +32,7 @@ import { computeOrderTotals, type PricedLine } from '@/services/pos'
 import {
   TERMINAL_ORDER_STATUSES,
   type Category,
+  type DeliveryZone,
   type OrderStatus,
   type OrderType,
   type ProductWithDetails,
@@ -167,6 +169,8 @@ export default function StorefrontPage({
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [zones, setZones] = useState<DeliveryZone[]>([])
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
   const [placing, setPlacing] = useState(false)
   const [placeErrorKey, setPlaceErrorKey] = useState<string | null>(null)
   const [placed, setPlaced] = useState<PlacedOrder | null>(null)
@@ -178,6 +182,16 @@ export default function StorefrontPage({
   const deliveryEnabled = info?.delivery_enabled ?? false
   const deliveryFee = Number(info?.delivery_fee ?? 0)
   const minOrder = Number(info?.min_order_amount ?? 0)
+  // Zone picker (migration 0012): when the restaurant has zones, the
+  // selected zone's fee + minimum replace the settings values below.
+  const selectedZone =
+    zones.find((zone) => zone.id === selectedZoneId) ?? null
+  const effectiveDeliveryFee = selectedZone
+    ? Number(selectedZone.fee)
+    : deliveryFee
+  const effectiveMinOrder = selectedZone
+    ? Number(selectedZone.min_order_amount)
+    : minOrder
   const displayName = info?.branding_name?.trim() || info?.name || slug
   const tableDisplayName = tableCode
     ? tableCode.startsWith(`${slug}-`)
@@ -201,15 +215,20 @@ export default function StorefrontPage({
           setPageState('notFound')
           return
         }
-        const [menu, loadedAvailability] = await Promise.all([
+        const [menu, loadedAvailability, loadedZones] = await Promise.all([
           fetchStorefrontMenu(loadedInfo.restaurant_id),
           fetchStorefrontAvailability(loadedInfo.restaurant_id),
+          fetchPublicZones(loadedInfo.restaurant_id).catch(
+            () => [] as DeliveryZone[],
+          ),
         ])
         if (cancelled) return
         setInfo(loadedInfo)
         setCategories(menu.categories)
         setProducts(menu.products)
         setAvailability(loadedAvailability)
+        setZones(loadedZones)
+        setSelectedZoneId(loadedZones[0]?.id ?? null)
         setPageState('ready')
       } catch (error) {
         console.error('[Storefront] load failed', error)
@@ -275,12 +294,14 @@ export default function StorefrontPage({
     [previewLines, taxRate, serviceChargeRate],
   )
   const deliveryFeeCharged =
-    deliveryType === 'delivery' ? roundMoney(deliveryFee) : 0
+    deliveryType === 'delivery' ? roundMoney(effectiveDeliveryFee) : 0
   const grandTotal = roundMoney(totals.totalAmount + deliveryFeeCharged)
+  const activeMinOrder =
+    deliveryType === 'delivery' ? effectiveMinOrder : minOrder
   const minOrderShort =
-    minOrder > 0 &&
+    activeMinOrder > 0 &&
     (deliveryType === 'delivery' || deliveryType === 'pickup') &&
-    totals.subtotal < minOrder
+    totals.subtotal < activeMinOrder
 
   const visibleProducts = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -401,6 +422,8 @@ export default function StorefrontPage({
         customerPhone,
         deliveryAddress:
           deliveryType === 'delivery' ? deliveryAddress : null,
+        zoneId:
+          deliveryType === 'delivery' ? (selectedZone?.id ?? null) : null,
         items: cart,
       })
       setPlaced({
@@ -832,7 +855,7 @@ export default function StorefrontPage({
                     {deliveryType === 'delivery' && (
                       <p className="text-xs text-muted-foreground">
                         {t('storefront.deliveryFeeNote', {
-                          fee: formatMoney(deliveryFee, currency),
+                          fee: formatMoney(effectiveDeliveryFee, currency),
                         })}
                       </p>
                     )}
@@ -842,7 +865,7 @@ export default function StorefrontPage({
                         className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900"
                       >
                         {t('storefront.minOrderNote', {
-                          amount: formatMoney(minOrder, currency),
+                          amount: formatMoney(activeMinOrder, currency),
                         })}
                       </p>
                     )}
@@ -884,6 +907,31 @@ export default function StorefrontPage({
                           placeholder={t('storefront.addressPlaceholder')}
                           required
                         />
+                      </div>
+                    )}
+                    {deliveryType === 'delivery' && zones.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="storefrontZone">
+                          {t('storefront.zone')}
+                        </Label>
+                        <select
+                          id="storefrontZone"
+                          value={selectedZone?.id ?? ''}
+                          onChange={(e) => setSelectedZoneId(e.target.value)}
+                          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                        >
+                          {zones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name} —{' '}
+                              {formatMoney(Number(zone.fee), currency)}
+                              {zone.estimated_minutes != null
+                                ? ` · ${t('storefront.zoneEta', {
+                                    minutes: zone.estimated_minutes,
+                                  })}`
+                                : ''}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     )}
 
