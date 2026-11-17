@@ -18,6 +18,7 @@ import {
   Table2,
   Truck,
   Users,
+  Wallet,
   UtensilsCrossed,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { to: '/tables', key: 'nav.tables', icon: Table2, end: false },
   { to: '/customers', key: 'nav.customers', icon: Users, end: false },
   { to: '/delivery', key: 'nav.delivery', icon: Truck, end: false },
+  { to: '/business', key: 'nav.business', icon: Wallet, end: false },
   { to: '/settings', key: 'nav.settings', icon: Settings, end: false },
   { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false },
 ] as const
