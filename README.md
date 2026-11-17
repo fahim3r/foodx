@@ -6,7 +6,7 @@ self-contained deployment model, **not multi-tenant SaaS**: each restaurant
 runs its own app instance against its own Supabase project, and no
 restaurant's data ever shares a database with another's.
 
-> **Status: Phase 6 — Delivery.** This repository contains the
+> **Status: Phase 7 — Business.** This repository contains the
 > app shell, authentication, restaurant setup, branding settings, a
 > read-only roles & permissions view, the full core restaurant flow
 > (menu, tables, POS, orders, KDS), inventory with recipes and
@@ -16,7 +16,9 @@ restaurant's data ever shares a database with another's.
 > get real QR codes + NFC values, and online/QR orders flow into
 > Orders/KDS), and now delivery management: drivers, zones, a
 > delivery board with driver assignment and a tracked delivery
-> status lifecycle. See [What Phase 6 adds](#what-phase-6-adds)
+> status lifecycle, and now business: expenses with categories,
+> cashier shifts with daily closing, reports and a live profit &
+> loss. See [What Phase 7 adds](#what-phase-7-adds)
 > and [What is not built yet](#what-is-not-built-yet).
 
 ## Tech stack
@@ -80,9 +82,10 @@ The schema lives in `supabase/migrations/` — `0001_foundation.sql`
 `0007_digital_ordering.sql` (Phase 5), `0008` / `0009`
 (place_online_order corrective fixes), `0010_remove_orphan_trigger_functions.sql`
 (drift cleanup — two orphan trigger functions dropped), and
-`0011_delivery.sql` (Phase 6) and
-`0012_storefront_zone_picker.sql` (Phase 6 step 2). **Migrations
-0001–0012 have been applied to the live Supabase project**
+`0011_delivery.sql` (Phase 6),
+`0012_storefront_zone_picker.sql` (Phase 6 step 2) and
+`0013_business.sql` (Phase 7). **Migrations
+0001–0013 have been applied to the live Supabase project**
 (verified 2026-11-17: all tables, functions and RLS policies match
 this repo). Pages that need
 tables from a migration that has not been applied yet degrade
@@ -99,7 +102,7 @@ supabase db push
 ```
 
 Apply migrations in filename order. For a new restaurant, apply all of
-`0001_foundation.sql` through `0012_storefront_zone_picker.sql`.
+`0001_foundation.sql` through `0013_business.sql`.
 
 ### Option B — Dashboard SQL editor
 
@@ -484,6 +487,43 @@ There is no automated provisioning yet — that is later-phase work.
   are managed from the panel and `fetchDriverDeliveries` backs a
   simple driver view.
 
+## What Phase 7 adds
+
+- **Business tables** (`0013_business.sql`) — `expense_categories`
+  (the §36 twelve, seeded per restaurant by the service on first
+  use), `expenses` (category, amount, date, payment method, branch,
+  notes; **voided, never hard-deleted** — there is deliberately no
+  DELETE policy on the table), `cashier_shifts` (opening cash,
+  expected cash computed at close, counted actual, difference),
+  `shift_cash_movements` (append-only CASH_IN / CASH_OUT /
+  ADJUSTMENT, reason required) and `daily_closings` (one snapshot
+  per restaurant per day). Standard repo isolation.
+- **Business service** (`src/services/business.ts`) — expense CRUD +
+  void, category management, shift open/close (expected cash =
+  opening + cash payments received in the shift window − non-voided
+  cash expenses recorded in the window + movements, always
+  recomputed from DB rows, never client-passed), daily closing
+  snapshots, and the report queries: P&L, daily sales series,
+  product / category sales, payment breakdown, expense-by-category,
+  delivery summary, supplier payables (RECEIVED purchase totals;
+  supplier payment recording is not built yet).
+- **Business page** (`/panel/business`) — tabs: Expenses (period /
+  category filters, add / edit / void, category manager), Shifts &
+  Closing (open shift, live expected cash, movements, close with
+  the difference shown, shift history, daily closing), Reports
+  (Recharts daily-sales chart, product / category / payment /
+  delivery tables, CSV export of exactly what is on screen) and
+  Profit & Loss (sales − purchases − expenses − refunds, computed
+  live). Sidebar entry + EN/BN i18n.
+- **Dashboard** — today's expenses and net-today cards, a 7-day
+  sales chart, today's payment breakdown and top products (the
+  widgets stay hidden until the Phase 7 tables exist, like the
+  earlier phase widgets).
+- **Not in this phase (Step 2):** the remaining §39 reports
+  (cashier, waiter, kitchen, tax, refund/void detail), PDF export,
+  supplier payment recording, branch management UI, receipt
+  printing.
+
 ## What is not built yet
 
 Everything below is planned for later phases and is **not** in this repo.
@@ -491,12 +531,12 @@ Do not assume it exists.
 
 | Area | Status |
 | --- | --- |
-| Kitchen display (KDS), inventory, purchases, expenses | KDS built (Phase 2); inventory + purchases built (Phase 3); expenses not started |
+| Kitchen display (KDS), inventory, purchases, expenses | KDS built (Phase 2); inventory + purchases built (Phase 3); expenses built (Phase 7) |
 | Customers, loyalty, coupons | Built (Phase 4); delivery settings + online ordering built (Phase 5); online payment not started |
 | Delivery management | Built (Phase 6): drivers, zones, board, assignment, status history, storefront zone picker; separate driver app not started |
 | Online payment | Not started — v1 is pay at the restaurant |
 | Rate limiting / anti-spam on the public order endpoint | Not started (later work) |
-| Reports / analytics | Not started (recharts is installed but unused) |
+| Reports / analytics | Built (Phase 7): P&L, daily sales, product/category sales, payment breakdown, expense reports, delivery summary, CSV export; remaining §39 reports + PDF export not started |
 | Role editing / assigning permissions to roles | Read-only view only; the `role_permissions` table is seeded **empty** — the matrix shows all dashes until assignments are made (a later phase) |
 | Branch management UI | The `branches` table exists; no UI or service touches it yet |
 | Staff/user management UI | Not started |
@@ -507,7 +547,7 @@ Do not assume it exists.
 | Docker packaging | Not started |
 
 The 9-phase plan is: 1 Foundation → 2 Core Restaurant → 3 Inventory
-→ 4 Customers → 5 Digital Ordering → 6 Delivery (this repo) → 7 Business
+→ 4 Customers → 5 Digital Ordering → 6 Delivery → 7 Business (this repo)
 → 8 Developer Platform → 9 Production Hardening. Phase numbers in code
 comments refer to this plan.
 
