@@ -6,15 +6,17 @@ self-contained deployment model, **not multi-tenant SaaS**: each restaurant
 runs its own app instance against its own Supabase project, and no
 restaurant's data ever shares a database with another's.
 
-> **Status: Phase 5 — Digital Ordering.** This repository contains the
+> **Status: Phase 6 — Delivery.** This repository contains the
 > app shell, authentication, restaurant setup, branding settings, a
 > read-only roles & permissions view, the full core restaurant flow
 > (menu, tables, POS, orders, KDS), inventory with recipes and
-> purchases, customers with loyalty and coupons, and now digital
-> ordering: each restaurant gets its own domain serving a public
-> menu + online ordering, the admin runs under `/panel` on the same
-> domain, tables get real QR codes + NFC values, and online/QR orders
-> flow into Orders/KDS. See [What Phase 5 adds](#what-phase-5-adds)
+> purchases, customers with loyalty and coupons, digital ordering
+> (each restaurant gets its own domain serving a public menu + online
+> ordering, the admin runs under `/panel` on the same domain, tables
+> get real QR codes + NFC values, and online/QR orders flow into
+> Orders/KDS), and now delivery management: drivers, zones, a
+> delivery board with driver assignment and a tracked delivery
+> status lifecycle. See [What Phase 6 adds](#what-phase-6-adds)
 > and [What is not built yet](#what-is-not-built-yet).
 
 ## Tech stack
@@ -25,7 +27,7 @@ restaurant's data ever shares a database with another's.
 | Styling | Tailwind CSS v4 (via `@tailwindcss/vite`), shadcn-style UI components (Radix primitives, `class-variance-authority`, `clsx`, `tailwind-merge`) |
 | Routing | react-router-dom 7 |
 | Backend / database | Supabase (Postgres + Auth + PostgREST), `@supabase/supabase-js` v2 |
-| i18n | i18next + react-i18next — English (`en`) and Bangla (`bn`), 681 keys each |
+| i18n | i18next + react-i18next — English (`en`) and Bangla (`bn`), 744 keys each |
 | Icons | lucide-react |
 | PWA | vite-plugin-pwa — **manifest only** in Phase 1 (see below) |
 | Lint | oxlint (`npm run lint`) |
@@ -75,12 +77,14 @@ The schema lives in `supabase/migrations/` — `0001_foundation.sql`
 `0004_cancel_restock.sql` (cancel-restock fix), `0005_customers.sql`
 (Phase 4), `0006_fix_customers_schema.sql` (corrective — see
 [DATABASE.md](DATABASE.md#phase-4-tables-customers)), and
-`0007_digital_ordering.sql` (Phase 5). **Migrations 0001–0006 have
-been applied to the live Supabase project; migration 0007 has not yet
-been applied**, so until it is, the storefront / domains / online
-ordering show a friendly error instead of crashing — pages that need
-the tables degrade gracefully. Apply migration 0007 to make Phase 5
-fully functional. When applying a migration from the dashboard, always
+`0007_digital_ordering.sql` (Phase 5), `0008` / `0009`
+(place_online_order corrective fixes), `0010_remove_orphan_trigger_functions.sql`
+(drift cleanup — two orphan trigger functions dropped), and
+`0011_delivery.sql` (Phase 6). **Migrations 0001–0011 have been
+applied to the live Supabase project** (verified 2026-11-17: all
+tables, functions and RLS policies match this repo). Pages that need
+tables from a migration that has not been applied yet degrade
+gracefully instead of crashing. When applying a migration from the dashboard, always
 paste from the **fresh raw GitHub URL** and verify the new tables'
 **columns** afterwards, not just their names (a stale paste once
 applied a draft of 0005 — fixed by 0006).
@@ -93,7 +97,7 @@ supabase db push
 ```
 
 Apply migrations in filename order. For a new restaurant, apply all of
-`0001_foundation.sql` through `0007_digital_ordering.sql`.
+`0001_foundation.sql` through `0011_delivery.sql`.
 
 ### Option B — Dashboard SQL editor
 
@@ -131,14 +135,16 @@ payments**. Run it after `seed.sql`, only against a local/development
 project. **Never run it against production.** Removal SQL is in the file
 header.
 
-### Demo seed data, Phase 3 / 4 / 5 (development only)
+### Demo seed data, Phase 3 / 4 / 5 / 6 (development only)
 
 `supabase/seed_phase3.sql` (demo stock, recipes + supplier),
 `supabase/seed_phase4.sql` (demo customers + coupon) and
 `supabase/seed_phase5.sql` (one demo domain row,
 `demo.foodx.bond`, for the demo restaurant — not a real DNS record,
-for code-path testing only) follow the same rule: demo restaurant
-only, local/development only, **never run against production**.
+for code-path testing only) and `supabase/seed_phase6.sql` (two demo
+drivers + two demo zones for the demo restaurant) follow the same
+rule: demo restaurant only, local/development only, **never run
+against production**.
 
 ## Deploy
 
@@ -441,6 +447,37 @@ There is no automated provisioning yet — that is later-phase work.
   functions above (see
   [DATABASE.md](DATABASE.md#phase-5-tables-digital-ordering)).
 
+## What Phase 6 adds
+
+- **Delivery tables** (`0011_delivery.sql`) — `delivery_drivers`
+  (restaurant-scoped, optional branch / profile link, status
+  AVAILABLE / ON_DELIVERY / OFFLINE), `delivery_zones` (fee,
+  minimum order, estimated minutes), `delivery_orders` (the 1:1
+  dispatch record for an order: driver, zone, COD amount snapshot,
+  per-step timestamps) and `delivery_status_history` (append-only).
+  Standard repo isolation: RLS with `restaurant_id =
+  current_restaurant_id()`, child rows scoped through the parent
+  order with EXISTS. Existing delivery orders are backfilled a
+  PENDING row (cod_amount = order total).
+- **Delivery service** (`src/services/delivery.ts`) — driver / zone
+  CRUD, the board query (creates the PENDING dispatch row on first
+  sight so POS and pre-Phase-6 delivery orders are never invisible),
+  `assignDriver` and `advanceDeliveryStatus`, validated against
+  `DELIVERY_TRANSITIONS` with a history row per change. DELIVERED
+  frees the driver and completes the linked order through the
+  orders service (READY → SERVED → COMPLETED as needed); FAILED /
+  CANCELLED free the driver but never auto-cancel the order.
+- **Delivery page** (`/panel/delivery`) — board with customer,
+  address, COD, driver and zone per order; assign / re-assign a
+  driver (with optional zone); advance buttons per status; Drivers
+  and Zones tabs with full CRUD (money as text + decimal, two-step
+  delete). Sidebar entry + EN/BN i18n.
+- **Not in Phase 6:** the storefront checkout does not pick a zone
+  yet (zone fee still comes from settings — the zone picker is the
+  next step, it needs a `place_online_order` migration), and there
+  is no separate driver app — drivers are managed from the panel
+  and `fetchDriverDeliveries` backs a simple driver view.
+
 ## What is not built yet
 
 Everything below is planned for later phases and is **not** in this repo.
@@ -450,6 +487,7 @@ Do not assume it exists.
 | --- | --- |
 | Kitchen display (KDS), inventory, purchases, expenses | KDS built (Phase 2); inventory + purchases built (Phase 3); expenses not started |
 | Customers, loyalty, coupons | Built (Phase 4); delivery settings + online ordering built (Phase 5); online payment not started |
+| Delivery management | Built (Phase 6): drivers, zones, board, assignment, status history; storefront zone picker + separate driver app not started |
 | Online payment | Not started — v1 is pay at the restaurant |
 | Rate limiting / anti-spam on the public order endpoint | Not started (later work) |
 | Reports / analytics | Not started (recharts is installed but unused) |
@@ -463,7 +501,7 @@ Do not assume it exists.
 | Docker packaging | Not started |
 
 The 9-phase plan is: 1 Foundation → 2 Core Restaurant → 3 Inventory
-→ 4 Customers → 5 Digital Ordering (this repo) → 6 Delivery → 7 Business
+→ 4 Customers → 5 Digital Ordering → 6 Delivery (this repo) → 7 Business
 → 8 Developer Platform → 9 Production Hardening. Phase numbers in code
 comments refer to this plan.
 
