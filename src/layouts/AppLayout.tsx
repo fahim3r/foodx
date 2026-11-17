@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Table2,
+  Truck,
   Users,
   UtensilsCrossed,
 } from 'lucide-react'
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { to: '/inventory', key: 'nav.inventory', icon: Boxes, end: false },
   { to: '/tables', key: 'nav.tables', icon: Table2, end: false },
   { to: '/customers', key: 'nav.customers', icon: Users, end: false },
+  { to: '/delivery', key: 'nav.delivery', icon: Truck, end: false },
   { to: '/settings', key: 'nav.settings', icon: Settings, end: false },
   { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false },
 ] as const
