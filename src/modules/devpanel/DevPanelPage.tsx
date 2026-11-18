@@ -38,6 +38,9 @@ import {
   fetchDevClientFeatures,
   fetchDevHeartbeats,
   fetchDevBackupReports,
+  setDeployHookUrl,
+  triggerClientUpdate,
+  TriggerUpdateError,
   fetchDevClients,
   fetchDevLicenses,
   fetchDevReleases,
@@ -82,8 +85,32 @@ const TEXTAREA_CLASS =
 
 type Tab = 'dashboard' | 'clients' | 'licenses' | 'releases'
 
-function todayLocal(): string {
-  const d = new Date()
+/**
+ * §72 "last update": when the client's current version first
+ * appeared in its heartbeat history (Phase 8 R4). Heartbeats are
+ * newest-first; the update moment is the oldest heartbeat of the
+ * current version's consecutive run — but only when an older,
+ * different version is visible below it. If the whole fetched
+ * window already runs the current version, the transition is
+ * older than the window and null is returned (shown as —) rather
+ * than inventing a date.
+ */
+function lastUpdateFromHeartbeats(
+  client: DevClient,
+  beats: DevHeartbeat[],
+): string | null {
+  let oldestOfRun: string | null = null
+  for (const h of beats) {
+    if (h.version === client.version) {
+      oldestOfRun = h.created_at
+      continue
+    }
+    return oldestOfRun
+  }
+  return null
+}
+
+function todayLocal(): string {  const d = new Date()
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${mm}-${dd}`
@@ -224,6 +251,10 @@ export default function DevPanelPage() {
   const [backupReports, setBackupReports] = useState<DevBackupReport[]>([])
   const [issuedToken, setIssuedToken] = useState<string | null>(null)
   const [tokenBusy, setTokenBusy] = useState(false)
+  const [hookDraft, setHookDraft] = useState('')
+  const [hookBusy, setHookBusy] = useState(false)
+  const [deployBusy, setDeployBusy] = useState(false)
+  const [deployNotice, setDeployNotice] = useState<string | null>(null)
   const [noteText, setNoteText] = useState('')
   const [noteBusy, setNoteBusy] = useState(false)
 
@@ -321,7 +352,7 @@ export default function DevPanelPage() {
     Promise.all([
       fetchDevClientFeatures(selectedClientId),
       fetchDevSupportNotes(selectedClientId),
-      fetchDevHeartbeats(selectedClientId),
+      fetchDevHeartbeats(selectedClientId, 50),
       fetchDevBackupReports(selectedClientId),
     ])
       .then(([features, notes, beats, backups]) => {
@@ -343,6 +374,13 @@ export default function DevPanelPage() {
     () => clients.find((c) => c.id === selectedClientId) ?? null,
     [clients, selectedClientId],
   )
+
+  // The deploy-hook draft follows the selected client's stored
+  // value; typing only changes the draft, never the stored value.
+  useEffect(() => {
+    setHookDraft(selectedClient?.deploy_hook_url ?? '')
+    setDeployNotice(null)
+  }, [selectedClient?.id, selectedClient?.deploy_hook_url])
 
   const latestRelease = useMemo(
     () => latestPublishedRelease(releases),
@@ -460,6 +498,47 @@ export default function DevPanelPage() {
       setActionError(t('devpanel.actionError'))
     } finally {
       setTokenBusy(false)
+    }
+  }
+
+  async function handleSaveHook() {
+    if (!selectedClient) return
+    setHookBusy(true)
+    setActionError(null)
+    try {
+      const value = hookDraft.trim()
+      await setDeployHookUrl(selectedClient.id, value === '' ? null : value)
+      await loadAll()
+    } catch {
+      setActionError(t('devpanel.actionError'))
+    } finally {
+      setHookBusy(false)
+    }
+  }
+
+  async function handleDeployUpdate() {
+    if (!selectedClient) return
+    setDeployBusy(true)
+    setDeployNotice(null)
+    setActionError(null)
+    try {
+      await triggerClientUpdate(selectedClient.id)
+      setDeployNotice(t('devpanel.updateStarted'))
+    } catch (err) {
+      if (err instanceof TriggerUpdateError && err.code === 'no_deploy_hook') {
+        setDeployNotice(t('devpanel.updateNoHook'))
+      } else if (
+        err instanceof TriggerUpdateError &&
+        err.code === 'hook_failed'
+      ) {
+        setDeployNotice(
+          t('devpanel.updateHookFailed', { status: err.hookStatus ?? '' }),
+        )
+      } else {
+        setActionError(t('devpanel.actionError'))
+      }
+    } finally {
+      setDeployBusy(false)
     }
   }
 
@@ -1371,6 +1450,18 @@ export default function DevPanelPage() {
                           t('devpanel.noBackupYet')
                         )}
                       </p>
+                      <p>
+                        <span className="text-muted-foreground">
+                          {t('devpanel.lastUpdateLabel')}:{' '}
+                        </span>
+                        {(() => {
+                          const at = lastUpdateFromHeartbeats(
+                            selectedClient,
+                            heartbeats,
+                          )
+                          return at ? new Date(at).toLocaleString() : '—'
+                        })()}
+                      </p>
                       <Button
                         size="sm"
                         variant="outline"
@@ -1395,6 +1486,44 @@ export default function DevPanelPage() {
                           </p>
                         </div>
                       )}
+                      <div className="mt-3 border-t pt-3">
+                        <h4 className="text-xs font-semibold text-muted-foreground">
+                          {t('devpanel.deployHookLabel')}
+                        </h4>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {t('devpanel.deployHookNote')}
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          <Input
+                            value={hookDraft}
+                            onChange={(e) => setHookDraft(e.target.value)}
+                            placeholder="https://api.vercel.com/v1/integrations/deploy/…"
+                            className="font-mono text-xs"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={hookBusy}
+                            onClick={() => void handleSaveHook()}
+                          >
+                            {t('devpanel.deployHookSave')}
+                          </Button>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            disabled={
+                              deployBusy || !selectedClient.deploy_hook_url
+                            }
+                            onClick={() => void handleDeployUpdate()}
+                          >
+                            {t('devpanel.deployUpdate')}
+                          </Button>
+                          {deployNotice && (
+                            <span className="text-xs">{deployNotice}</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     {heartbeats.length > 0 && (
                       <div className="mt-3">
@@ -1402,7 +1531,7 @@ export default function DevPanelPage() {
                           {t('devpanel.recentHeartbeats')}
                         </h4>
                         <ul className="mt-1 space-y-1 text-xs">
-                          {heartbeats.map((h) => (
+                          {heartbeats.slice(0, 10).map((h) => (
                             <li key={h.id}>
                               {new Date(h.created_at).toLocaleString()} — v
                               {h.version}

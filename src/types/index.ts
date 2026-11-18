@@ -943,6 +943,11 @@ export interface DevClient {
    * the report-backup function (instance-token authenticated). */
   last_backup_at: string | null
   last_backup_status: 'success' | 'failed' | null
+  /** The client's Vercel Deploy Hook URL (Phase 8 R4). A
+   * capability secret that lives ONLY in the registry: the
+   * trigger-update / request-update functions POST it server-side
+   * and it is never sent to a client deployment's browser. */
+  deploy_hook_url: string | null
   created_at: string
   updated_at: string
 }

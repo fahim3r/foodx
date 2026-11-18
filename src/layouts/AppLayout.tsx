@@ -33,6 +33,8 @@ import { useLicenseState } from '@/hooks/useLicenseState'
 import {
   isModuleEnabled,
   runHeartbeat,
+  requestUpdate,
+  type UpdateRequestResult,
 } from '@/services/heartbeat'
 import { refreshInstanceConfig } from '@/services/activation'
 import type { DevFeatureKey } from '@/types'
@@ -236,6 +238,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const [updateBusy, setUpdateBusy] = useState(false)
+  const [updateResult, setUpdateResult] =
+    useState<UpdateRequestResult | null>(null)
+
+  const handleUpdateNow = async () => {
+    setUpdateBusy(true)
+    setUpdateResult(null)
+    const result = await requestUpdate()
+    setUpdateResult(result)
+    setUpdateBusy(false)
+  }
 
   const displayName =
     settings?.branding_name ?? restaurant?.name ?? t('app.name')
@@ -408,14 +421,38 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                     version: licenseView.cache.latest_release.version,
                   })}
                 </p>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="mt-1 h-auto p-0 text-sky-900"
-                  onClick={() => void navigate('/settings')}
-                >
-                  {t('layout.goToSettings')}
-                </Button>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <Button
+                    size="sm"
+                    onClick={() => void handleUpdateNow()}
+                    disabled={updateBusy || updateResult === 'triggered'}
+                  >
+                    {updateBusy
+                      ? t('license.updateBusy')
+                      : t('license.updateNow')}
+                  </Button>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-sky-900"
+                    onClick={() => void navigate('/settings')}
+                  >
+                    {t('layout.goToSettings')}
+                  </Button>
+                </div>
+                {updateResult && (
+                  <p className="mt-2">
+                    {updateResult === 'triggered'
+                      ? t('license.updateTriggered')
+                      : updateResult === 'backup_required'
+                        ? t('license.updateBackupRequired')
+                        : updateResult === 'no_deploy_hook'
+                          ? t('license.updateNoHook')
+                          : updateResult === 'client_not_active'
+                            ? t('license.updateNotActive')
+                            : t('license.updateFailed')}
+                  </p>
+                )}
               </div>
             )}
             {children}

@@ -487,3 +487,65 @@ export async function fetchDevBackupReports(
   if (error) throw error
   return (data ?? []) as unknown as DevBackupReport[]
 }
+
+/** Store (or clear, with null) a client's Vercel Deploy Hook URL
+ * (Phase 8 R4). Registry-only data — the URL is a capability
+ * secret and is never forwarded to the client's deployment. */
+export async function setDeployHookUrl(
+  clientId: string,
+  url: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('dev_clients')
+    .update({ deploy_hook_url: url })
+    .eq('id', clientId)
+  if (error) throw error
+}
+
+export class TriggerUpdateError extends Error {
+  code: string
+  hookStatus?: number
+  constructor(code: string, hookStatus?: number) {
+    super(code)
+    this.code = code
+    this.hookStatus = hookStatus
+  }
+}
+
+/** Ask the registry's trigger-update function to fire the
+ * client's deploy hook (Phase 8 R4). The call carries the
+ * developer's own registry session JWT; the function re-checks
+ * the dev_developers allow-list server-side and POSTs the hook
+ * itself, so the hook URL never passes through this browser. */
+export async function triggerClientUpdate(clientId: string): Promise<void> {
+  const registryUrl = import.meta.env.VITE_FOODX_REGISTRY_URL as
+    | string
+    | undefined
+  const registryAnonKey = import.meta.env.VITE_FOODX_REGISTRY_ANON_KEY as
+    | string
+    | undefined
+  if (!registryUrl || !registryAnonKey) {
+    throw new TriggerUpdateError('registry_unconfigured')
+  }
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session) throw new TriggerUpdateError('unauthenticated')
+  const res = await fetch(`${registryUrl}/functions/v1/trigger-update`, {
+    method: 'POST',
+    headers: {
+      apikey: registryAnonKey,
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ client_id: clientId }),
+  })
+  if (res.ok) return
+  const data = (await res
+    .json()
+    .catch(() => null)) as { error?: string; hook_status?: number } | null
+  throw new TriggerUpdateError(
+    data?.error ?? 'trigger_failed',
+    data?.hook_status,
+  )
+}

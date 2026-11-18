@@ -660,6 +660,44 @@ There is no automated provisioning yet — that is later-phase work.
   There is deliberately no "Backup now" button in the panel —
   it could not run one honestly.
 
+- **Update execution + rollback** (Phase 8 remainder R4) —
+  version 1.0.0 is the first real release. How an update flows
+  (§56): the vendor promotes `main` → `release/stable` on GitHub
+  when a release is ready (real client Vercel projects track
+  `release/stable` as their production branch, so half-finished
+  work on `main` never reaches a restaurant); each client
+  project has a Vercel Deploy Hook whose URL is stored ONLY in
+  the registry (`dev_clients.deploy_hook_url`). Two trigger
+  paths, both server-side via registry Edge Functions so the
+  hook URL never reaches a client browser: the Developer Panel's
+  **Deploy update** button (`trigger-update`, developer-JWT
+  authenticated, allow-list re-checked in the function) and the
+  client panel's **Update now** button on the update banner
+  (`request-update`, instance-token authenticated). The client
+  path enforces the §56 order: it refuses with `backup_required`
+  unless the client's last reported backup is a success no older
+  than 7 days — backup first, then update. The vendor path
+  reports the last backup state in its response instead, since
+  the vendor owns the backups. Confirmation is the next
+  heartbeat reporting the new version; the Developer Panel shows
+  the client as update-pending until then and derives "Last
+  update" (§72) from the heartbeat history. **Rollback (§58):**
+  application rollback is Vercel's instant rollback to the
+  previous deployment in the client's project (Deployments →
+  ⋯ → Rollback — seconds, no rebuild); database rollback is
+  restoring the pre-update backup (§59: run the backup script
+  before every update; restore with `psql < dump.sql` against
+  the client database, then roll the application back to the
+  matching version). If the post-update heartbeat does not
+  report the new version within the expected window, treat the
+  update as failed: roll the application back first, restore
+  the database only if a migration is implicated, and note the
+  failure on the client's support record. There is deliberately
+  no in-app rollback button — rollback is a vendor operation on
+  vendor infrastructure. (The demo project itself keeps tracking
+  `main` — it is the development deployment; the hook on it
+  points at `main`.)
+
 
 - **Developer registry tables** (`0014_devpanel.sql`) — `dev_clients`
   (the §51 client record: code, restaurant, owner, contact, domain,

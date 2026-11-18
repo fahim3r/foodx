@@ -353,3 +353,52 @@ export function getLicenseLimitsFromCache(): LicenseLimits | null {
   return readLicenseCache()?.limits ?? null
 }
 
+export type UpdateRequestResult =
+  | 'triggered'
+  | 'backup_required'
+  | 'no_deploy_hook'
+  | 'client_not_active'
+  | 'unconfigured'
+  | 'error'
+
+/**
+ * §56 "Update Now" (Phase 8 R4): asks the registry to fire this
+ * deployment's Vercel deploy hook. The registry enforces the
+ * §56 order server-side — a successful backup no older than 7
+ * days must be on record first (backup_required) — and the hook
+ * URL itself never reaches this browser. Success only means the
+ * deploy started; the new version is confirmed when a later
+ * heartbeat reports it.
+ */
+export async function requestUpdate(): Promise<UpdateRequestResult> {
+  const config = resolveConfig()
+  if (!config) return 'unconfigured'
+  try {
+    const res = await fetch(
+      `${config.registryUrl}/functions/v1/request-update`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: config.anonKey,
+          Authorization: `Bearer ${config.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instance_id: config.instanceId,
+          token: config.token,
+        }),
+      },
+    )
+    if (res.ok) return 'triggered'
+    const data = (await res
+      .json()
+      .catch(() => null)) as { error?: string } | null
+    if (data?.error === 'backup_required') return 'backup_required'
+    if (data?.error === 'no_deploy_hook') return 'no_deploy_hook'
+    if (data?.error === 'client_not_active') return 'client_not_active'
+    return 'error'
+  } catch {
+    return 'error'
+  }
+}
+

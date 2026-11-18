@@ -377,3 +377,12 @@ create policy dev_backup_reports_select_developer on public.dev_backup_reports
   for select to authenticated using (public.is_developer());
 grant select on public.dev_backup_reports to authenticated;
 grant select, insert, update, delete on public.dev_backup_reports to service_role;
+
+-- ----------------------------------------------------------------------------
+-- R4 amendment (Phase 8 update execution, 2026-11-18): each client
+-- Vercel project gets a Deploy Hook; its URL is a capability secret
+-- stored ONLY here in the registry. It is never sent to client
+-- browsers: the panel talks to it through the trigger-update /
+-- request-update Edge Functions, which POST it server-side.
+-- ----------------------------------------------------------------------------
+alter table public.dev_clients add column if not exists deploy_hook_url text;
