@@ -33,6 +33,7 @@ import { fetchBranches, type Branch } from '@/services/restaurant'
 import { fetchOrderDetail } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { loadPosCache, savePosCache } from '@/services/catalogCache'
 import {
   addQueuedPayment,
   enqueueOrder,
@@ -182,6 +183,13 @@ export default function PosPage() {
   const [queueOpen, setQueueOpen] = useState(false)
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null)
 
+  // --- Phase 9 v2: catalog cache --------------------------------------------
+  // savedAt of the POS cache the page is currently running on, or
+  // null when the catalog on screen came from the server.
+  const [cacheSavedAt, setCacheSavedAt] = useState<string | null>(null)
+  // True when a load failed offline and this device has no cache yet.
+  const [cacheMissing, setCacheMissing] = useState(false)
+
   const isBn = i18n.language === 'bn'
   const taxRate = Number(settings?.tax_rate ?? 0)
   const serviceChargeRate = Number(settings?.service_charge_rate ?? 0)
@@ -216,11 +224,41 @@ export default function PosPage() {
         setTables(loadedTables)
         setBranches(loadedBranches)
         setAvailability(loadedAvailability)
+        savePosCache(restaurant.id, {
+          categories: loadedCategories,
+          products: loadedProducts,
+          tables: loadedTables,
+          branches: loadedBranches,
+          availability: loadedAvailability,
+        })
+        setCacheSavedAt(null)
+        setCacheMissing(false)
         setLoadState('ok')
       } catch (error) {
         console.error('[POS] load failed', error)
         if (cancelled) return
-        setLoadState(isMissingTableError(error) ? 'missing' : 'failed')
+        if (isMissingTableError(error)) {
+          setLoadState('missing')
+          return
+        }
+        // Phase 9 v2: a network failure falls back to the saved
+        // catalog, so a cold offline start can still sell. Any
+        // other failure keeps the load-failed card.
+        if (isNetworkError(error) || !navigator.onLine) {
+          const cached = loadPosCache(restaurant.id)
+          if (cached) {
+            setCategories(cached.categories)
+            setProducts(cached.products)
+            setTables(cached.tables)
+            setBranches(cached.branches)
+            setAvailability(cached.availability)
+            setCacheSavedAt(cached.savedAt)
+            setLoadState('ok')
+            return
+          }
+          setCacheMissing(true)
+        }
+        setLoadState('failed')
       } finally {
         if (!cancelled) setLoaded(true)
       }
@@ -230,6 +268,47 @@ export default function PosPage() {
       cancelled = true
     }
   }, [restaurant])
+
+  // Phase 9 v2: when connectivity returns while the page is running
+  // on a cached catalog, refresh from the server — but only with an
+  // empty cart, so an open cart's preview is never re-priced
+  // mid-order. With items in the cart the cached catalog stays
+  // until the next mount; online placements re-price server-side
+  // anyway, and offline placements use the snapshot (v1 D1).
+  useEffect(() => {
+    if (!online || !cacheSavedAt || !restaurant || cart.length > 0) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const [c, p, tb, b, a] = await Promise.all([
+          fetchCategories(restaurant.id),
+          fetchProductsWithDetails(restaurant.id),
+          fetchTables(restaurant.id),
+          fetchBranches(restaurant.id),
+          fetchProductAvailability(restaurant.id),
+        ])
+        if (cancelled) return
+        setCategories(c)
+        setProducts(p)
+        setTables(tb)
+        setBranches(b)
+        setAvailability(a)
+        savePosCache(restaurant.id, {
+          categories: c,
+          products: p,
+          tables: tb,
+          branches: b,
+          availability: a,
+        })
+        setCacheSavedAt(null)
+      } catch {
+        // Still effectively offline — keep selling from the cache.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [online, cacheSavedAt, cart.length, restaurant])
 
   const displayName = useCallback(
     (name: string, nameBn: string | null): string =>
@@ -931,6 +1010,11 @@ export default function PosPage() {
           <CardDescription>{t('pos.loadFailed')}</CardDescription>
         </CardHeader>
         <CardContent>
+          {cacheMissing && (
+            <p className="mb-3 text-sm text-muted-foreground">
+              {t('offline.firstVisitOffline')}
+            </p>
+          )}
           <Button onClick={() => window.location.reload()}>
             {t('common.retry')}
           </Button>
@@ -1360,6 +1444,17 @@ export default function PosPage() {
           {!online && (
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
               {t('offline.badge')}
+            </span>
+          )}
+          {cacheSavedAt && (
+            <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-900">
+              {t(
+                Date.now() - new Date(cacheSavedAt).getTime() >
+                  24 * 60 * 60 * 1000
+                  ? 'offline.cacheStale'
+                  : 'offline.cacheNote',
+                { time: new Date(cacheSavedAt).toLocaleString() },
+              )}
             </span>
           )}
           {queueCounts(queueEntries).waiting > 0 && (

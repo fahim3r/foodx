@@ -1,4 +1,4 @@
-# FoodX — Offline sync (Phase 9 v1)
+# FoodX — Offline sync (Phase 9)
 
 Master prompt §5 requires core POS work to continue during a
 temporary internet outage and to reconcile on reconnect without
@@ -72,11 +72,58 @@ tampered queue entry fails validation instead of posting.
 ## The app shell
 
 The PWA precaches the built app shell (vite.config.ts), so the
-panel opens offline and the queue survives reloads. Menu and
-other data are still fetched live: a POS opened cold while
-offline shows the shell but cannot start an order until it has
-loaded its catalog once. Caching the catalog for a fully
-offline cold start is v2.
+panel opens offline and the queue survives reloads.
+
+## v2 — catalog cache for offline cold start
+
+v1 still needed one online catalog load per session: a POS
+opened cold while offline (browser fully closed, phone
+restarted, first open of the day during an outage) could not
+start an order. v2 (`src/services/catalogCache.ts`) saves the
+two datasets a cold start needs, in localStorage, on every
+successful online load (write-through):
+
+- **Workspace cache** — `foodx.workspace_cache.<userId>`:
+  profile, restaurant and settings (incl. tax / service-charge
+  rates). `AuthProvider` restores it when `loadWorkspace` fails
+  with a network error, so the panel opens with its workspace
+  instead of a "no profile" dead end. It is read only for the
+  signed-in session's own user id.
+- **POS cache** — `foodx.pos_cache.<restaurantId>`: categories,
+  products with variants + modifiers, tables, branches and the
+  availability map (stored as entry pairs). The POS load is
+  network-first; only a network failure falls back to the
+  cache. Missing-table errors are never masked by a cache.
+
+Both blobs are versioned (`version: 1`); a corrupt,
+wrong-version or wrong-scope blob is deleted and treated as
+absent, which falls back to the previous load-failed card.
+Neither cache is cleared on sign-out — same rule as the queue:
+an outage must not be able to strand a counter device.
+
+While running on a cached catalog the POS header shows when
+the menu was saved ("showing the menu saved at <time>"), with
+stronger wording once the copy is over a day old. There is no
+hard expiry — a day-old menu during an outage is worth more
+than a dead POS. When the internet returns, the POS refreshes
+from the server automatically if the cart is empty (an open
+cart is never re-priced mid-order). A device that has never
+loaded the menu online has no cache: the load-failed card then
+says the menu has not been saved on this device yet.
+
+Sync is unchanged: `syncQueuedOrder` validates against the
+server and the entry's own snapshot, never against this cache.
+A price changed on the server while the device was offline is
+charged at the cached price the customer saw (D1); a deleted
+product fails validation and parks in the queue panel, exactly
+as in v1.
+
+Two honest degradations: cached **table statuses** and cached
+**availability counts** are as of the moment the menu was
+saved — a table another terminal freed still shows occupied,
+and an item that sold out elsewhere may still be addable.
+Stock is deducted authoritatively at sync and may go negative,
+the same server rule as online.
 
 ## Limits (honest list)
 
@@ -88,6 +135,9 @@ offline cold start is v2.
   disabled while offline (they need live validation); manual
   discounts work. An order carrying those extras is not queued —
   the cashier is told to remove them first.
+- Offline cold start covers the POS only; other panel pages
+  (Orders, KDS, Inventory, Business, Settings) keep their
+  online behaviour and load errors.
 - The queue lives in one browser's localStorage. Clearing site
   data deletes unsynced orders — do not clear it during an
   outage. Two POS tabs on one device share the queue file;

@@ -759,8 +759,15 @@ slice. Full design + rationale: OFFLINE_SYNC.md.
   while offline (they need live validation).
 - **App shell precache**: the PWA now precaches the built shell,
   so the panel opens offline and the queue survives reloads.
-  Menu data is still fetched live — a fully offline cold start
-  is v2, as are LAN mode and multi-device sync (§4).
+- **Catalog cache (v2)** (`src/services/catalogCache.ts`): the
+  workspace (profile / restaurant / settings) and the POS
+  catalog (categories, products with variants + modifiers,
+  tables, branches, availability) are saved to localStorage on
+  every successful online load. A POS opened cold while offline
+  restores both and sells from the saved menu, with a
+  "menu saved at <time>" note (stronger wording past 24 hours);
+  sync validation stays server-side, exactly as in v1. LAN
+  mode and multi-device sync (§4) remain future work.
 
 ## Landing page, demo subdomain & client onboarding
 
@@ -821,7 +828,7 @@ Do not assume it exists.
 | Staff/user management UI | Built (Landing Step 3): `/panel/staff` via the manage-staff Edge Function (create, role, activate/deactivate, password reset) |
 | Feature flags UI | The `feature_flags` table exists; nothing reads or writes it yet |
 | Audit log UI | The `audit_logs` table exists (insert-only); nothing writes to it yet |
-| Offline-first / LAN mode / cloud sync | v1 built (Phase 9): offline POS order queue + sync + app-shell precache (see OFFLINE_SYNC.md); LAN mode / multi-device sync not started |
+| Offline-first / LAN mode / cloud sync | v1+v2 built (Phase 9): offline POS order queue + sync, app-shell precache, workspace + catalog cache for offline cold start (see OFFLINE_SYNC.md); LAN mode / multi-device sync not started |
 | Developer Panel (separate from Restaurant Admin) | Built (Phase 8 complete): registry in its own Supabase project, heartbeat validation, feature flags + license limits enforced, backup reporting, deploy-hook updates with a backup gate, rollback runbook above |
 | Docker packaging | Not started |
 

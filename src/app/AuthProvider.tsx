@@ -14,9 +14,13 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { isMissingTableError } from '@/lib/errors'
+import { isMissingTableError, isNetworkError } from '@/lib/errors'
 import { supabase } from '@/lib/supabase'
 import { onAuthStateChange, signOut as authSignOut } from '@/services/auth'
+import {
+  loadWorkspaceCache,
+  saveWorkspaceCache,
+} from '@/services/catalogCache'
 import {
   fetchProfile,
   fetchRestaurant,
@@ -59,6 +63,37 @@ async function loadWorkspace(
   return { profile, restaurant, settings }
 }
 
+/**
+ * loadWorkspace + the Phase 9 v2 workspace cache: a successful live
+ * load is written through to the cache; a network-error failure
+ * falls back to the cached workspace for THIS user, so a cold
+ * offline start restores the panel instead of landing on a
+ * "no profile" dead end. Missing-table errors are never masked
+ * by the cache.
+ */
+async function loadWorkspaceWithCache(
+  userId: string,
+): Promise<{
+  profile: Profile | null
+  restaurant: Restaurant | null
+  settings: RestaurantSettings | null
+}> {
+  try {
+    const workspace = await loadWorkspace(userId)
+    saveWorkspaceCache(userId, workspace)
+    return workspace
+  } catch (error) {
+    if (
+      !isMissingTableError(error) &&
+      (isNetworkError(error) || !navigator.onLine)
+    ) {
+      const cached = loadWorkspaceCache(userId)
+      if (cached) return cached
+    }
+    throw error
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -77,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshWorkspace = useCallback(async () => {
     if (!user) return
     try {
-      const workspace = await loadWorkspace(user.id)
+      const workspace = await loadWorkspaceWithCache(user.id)
       setProfile(workspace.profile)
       setRestaurant(workspace.restaurant)
       setSettings(workspace.settings)
@@ -104,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(sessionUser)
         if (sessionUser) {
           try {
-            const workspace = await loadWorkspace(sessionUser.id)
+            const workspace = await loadWorkspaceWithCache(sessionUser.id)
             if (cancelled) return
             setProfile(workspace.profile)
             setRestaurant(workspace.restaurant)
@@ -127,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
       setLoading(true)
-      void loadWorkspace(nextUser.id)
+      void loadWorkspaceWithCache(nextUser.id)
         .then((workspace) => {
           setProfile(workspace.profile)
           setRestaurant(workspace.restaurant)
