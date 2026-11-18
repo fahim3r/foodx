@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/useAuth'
 import { isMissingTableError } from '@/lib/errors'
 import { fetchBranches, type Branch } from '@/services/restaurant'
+import { getLicenseLimitsFromCache } from '@/services/heartbeat'
 import { fetchRoles } from '@/services/roles'
 import {
   StaffError,
@@ -117,6 +118,15 @@ export default function StaffPage() {
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault()
     if (creating) return
+    // §52 license limit (Phase 8 R2): creating beyond max_users is
+    // refused before the Auth user is made. The staff list is the
+    // restaurant's full profile list, the same basis the heartbeat
+    // reports. No cached limit = no enforcement.
+    const limits = getLicenseLimitsFromCache()
+    if (limits?.max_users != null && staff.length >= limits.max_users) {
+      setActionError('user_limit')
+      return
+    }
     setCreating(true)
     setActionError(null)
     setCreatedOk(false)
@@ -226,7 +236,9 @@ export default function StaffPage() {
 
       {actionError && (
         <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {t(`staff.error_${actionError}`)}
+          {t(`staff.error_${actionError}`, {
+            max: getLicenseLimitsFromCache()?.max_users ?? '',
+          })}
         </p>
       )}
 
@@ -478,3 +490,4 @@ export default function StaffPage() {
     </main>
   )
 }
+

@@ -1247,6 +1247,24 @@ export default function DevPanelPage() {
                       </span>
                       {selectedClient.plan ?? '—'}
                     </p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        {t('devpanel.usageBranches')}:{' '}
+                      </span>
+                      {selectedClient.last_branch_count ?? '—'}
+                      {' / '}
+                      {currentLicenseFor(licenses, selectedClient.id)
+                        ?.max_branches ?? t('devpanel.unlimited')}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        {t('devpanel.usageUsers')}:{' '}
+                      </span>
+                      {selectedClient.last_user_count ?? '—'}
+                      {' / '}
+                      {currentLicenseFor(licenses, selectedClient.id)
+                        ?.max_users ?? t('devpanel.unlimited')}
+                    </p>
                   </div>
                   {selectedClient.notes && (
                     <p className="text-sm text-muted-foreground">
@@ -1895,3 +1913,4 @@ export default function DevPanelPage() {
     </main>
   )
 }
+

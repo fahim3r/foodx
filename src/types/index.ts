@@ -933,6 +933,11 @@ export interface DevClient {
   instance_token_hash: string | null
   /** Last accepted heartbeat (migration 0015). Null = never checked in. */
   last_seen_at: string | null
+  /** Self-reported branch/user counts from the latest heartbeat
+   * (Phase 8 R2); null = never reported. The Developer Panel shows
+   * them against the license limits in the support view (§72). */
+  last_branch_count: number | null
+  last_user_count: number | null
   created_at: string
   updated_at: string
 }
@@ -1044,3 +1049,4 @@ export interface DevHeartbeat {
   user_agent: string | null
   created_at: string
 }
+

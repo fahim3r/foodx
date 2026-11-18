@@ -1,17 +1,21 @@
 // FoodX instance-heartbeat Edge Function (Phase 8 step 2).
 //
 // Deployed on the REGISTRY Supabase project. A client installation POSTs
-// { instance_id, token, version, domain? } with the registry project's
-// anon key in the apikey/Authorization headers. The function:
+// { instance_id, token, version, domain?, branch_count?, user_count? }
+// with the registry project's anon key in the apikey/Authorization
+// headers. The function:
 //   1. finds the client by client_code and compares SHA-256(token) with
 //      dev_clients.instance_token_hash (constant-time compare),
 //   2. appends a dev_heartbeats row and stamps last_seen_at + the
 //      reported version on the client (service role — RLS bypassed,
-//      which is why the token check above must be exact),
+//      which is why the token check above must be exact); since R2 it
+//      also stores the self-reported branch/user counts there when
+//      the instance sends them,
 //   3. answers with everything the instance caches locally: effective
 //      license status (computed expiry, same rule as the Developer
-//      Panel), the client's feature flags, and the newest published
-//      release targeted at it.
+//      Panel), the license limits (§52 max branches / max users),
+//      the client's feature flags, and the newest published release
+//      targeted at it.
 //
 // Suspension is data, not a transport error: a suspended client still
 // gets HTTP 200 with its license state in the body. Unknown instance,
@@ -78,6 +82,19 @@ interface HeartbeatBody {
   token?: unknown
   version?: unknown
   domain?: unknown
+  branch_count?: unknown
+  user_count?: unknown
+}
+
+/** A self-reported count: a non-negative integer, else null (absent —
+ * older instances do not send counts, and a missing count must never
+ * overwrite a previously reported one). */
+function parseCount(value: unknown): number | null {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 0
+    ? value
+    : null
 }
 
 Deno.serve(async (req) => {
@@ -96,6 +113,8 @@ Deno.serve(async (req) => {
   const token = typeof body.token === 'string' ? body.token : ''
   const version = typeof body.version === 'string' ? body.version : ''
   const domain = typeof body.domain === 'string' ? body.domain : null
+  const branchCount = parseCount(body.branch_count)
+  const userCount = parseCount(body.user_count)
   if (!instanceId || !token || !version) {
     return json({ error: 'missing_fields' }, 400)
   }
@@ -127,16 +146,19 @@ Deno.serve(async (req) => {
     user_agent: req.headers.get('user-agent'),
   })
   if (insertError) return json({ error: 'registry_error' }, 500)
-  await admin
-    .from('dev_clients')
-    .update({ last_seen_at: now.toISOString(), version })
-    .eq('id', client.id)
+  const clientUpdate: Record<string, unknown> = {
+    last_seen_at: now.toISOString(),
+    version,
+  }
+  if (branchCount !== null) clientUpdate.last_branch_count = branchCount
+  if (userCount !== null) clientUpdate.last_user_count = userCount
+  await admin.from('dev_clients').update(clientUpdate).eq('id', client.id)
 
   // Current license: newest row that is not CANCELLED/RENEWED, with the
   // panel's computed-expiry rule applied (ACTIVE past expiry = EXPIRED).
   const { data: licenseRows } = await admin
     .from('dev_licenses')
-    .select('status, plan, start_date, expiry_date')
+    .select('status, plan, start_date, expiry_date, max_branches, max_users')
     .eq('client_id', client.id)
     .not('status', 'in', '(CANCELLED,RENEWED)')
     .order('created_at', { ascending: false })
@@ -148,6 +170,11 @@ Deno.serve(async (req) => {
     start_date: string
     expiry_date: string | null
   } | null = null
+  // §52 limits ride along with the current license row (null field =
+  // unlimited). No license row at all → limits is null and the panel
+  // enforces nothing, same as its no-license warning behaviour.
+  let limits: { max_branches: number | null; max_users: number | null } | null =
+    null
   if (licenseRow) {
     const today = now.toISOString().slice(0, 10)
     const effective =
@@ -161,6 +188,10 @@ Deno.serve(async (req) => {
       plan: licenseRow.plan,
       start_date: licenseRow.start_date,
       expiry_date: licenseRow.expiry_date,
+    }
+    limits = {
+      max_branches: licenseRow.max_branches,
+      max_users: licenseRow.max_users,
     }
   }
 
@@ -207,7 +238,9 @@ Deno.serve(async (req) => {
     server_time: now.toISOString(),
     client_status: client.status,
     license,
+    limits,
     features,
     latest_release: latestRelease,
   })
 })
+

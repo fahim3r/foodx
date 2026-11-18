@@ -622,6 +622,25 @@ There is no automated provisioning yet — that is later-phase work.
   vendor registry again. The registry project never applies
   client migrations.
 
+- **License limits enforced** (Phase 8 remainder R2) — the §52
+  `max_branches` / `max_users` on a license (columns exist since
+  migration 0014; editable in the Developer Panel license form)
+  now take effect. Each heartbeat also reports the deployment's
+  branch and user counts; the registry stores the latest counts
+  on the client record (`last_branch_count` / `last_user_count`,
+  added by the R2 amendment in `supabase/registry/bootstrap.sql`)
+  and returns the active license's limits, which the panel
+  caches with the rest of the license state. Enforcement is soft
+  and creation-only (§53): the Branches page refuses to create a
+  branch beyond `max_branches` and the Staff page refuses to
+  create an account beyond `max_users`, each with a clear
+  message; existing data above a lowered limit is never deleted,
+  editing is never blocked, and a deployment that has not
+  checked in enforces nothing. The Developer Panel client detail
+  shows reported usage against the limits (§72). `max_devices`
+  remains a recorded license field only — the app keeps no
+  device registry, so nothing enforces it.
+
 
 - **Developer registry tables** (`0014_devpanel.sql`) — `dev_clients`
   (the §51 client record: code, restaurant, owner, contact, domain,

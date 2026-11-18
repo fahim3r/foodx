@@ -20,6 +20,7 @@
 // no module gates.
 
 import { APP_VERSION } from '@/lib/version'
+import { supabase } from '@/lib/supabase'
 import type {
   DevClientStatus,
   DevFeatureKey,
@@ -129,11 +130,20 @@ export interface HeartbeatRelease {
   required_migrations: string[]
 }
 
+/** §52 license limits as reported by the registry (Phase 8 R2).
+ * A null field means that dimension is unlimited; a null limits
+ * object means no license state is known and nothing is enforced. */
+export interface LicenseLimits {
+  max_branches: number | null
+  max_users: number | null
+}
+
 export interface LicenseStateCache {
   fetched_at: string
   server_time: string
   client_status: DevClientStatus
   license: HeartbeatLicense | null
+  limits: LicenseLimits | null
   features: Record<DevFeatureKey, boolean>
   latest_release: HeartbeatRelease | null
 }
@@ -168,7 +178,9 @@ export function readLicenseCache(): LicenseStateCache | null {
     if (typeof parsed.fetched_at !== 'string' || !parsed.features) {
       return null
     }
-    return parsed
+    // Caches written before R2 have no limits field — normalize so
+    // consumers can rely on it always being present.
+    return { ...parsed, limits: parsed.limits ?? null }
   } catch {
     return null
   }
@@ -182,6 +194,23 @@ export function readLicenseCache(): LicenseStateCache | null {
 export async function runHeartbeat(): Promise<boolean> {
   const config = resolveConfig()
   if (!config) return false
+  // R2: report this deployment's branch/user counts so the vendor
+  // can show usage against the license limits (§72). Best-effort —
+  // RLS scopes both counts to the signed-in user's restaurant, and
+  // a failed count simply omits the field (the registry keeps the
+  // previously reported value).
+  let branchCount: number | undefined
+  let userCount: number | undefined
+  try {
+    const [branchesRes, profilesRes] = await Promise.all([
+      supabase.from('branches').select('id', { count: 'exact', head: true }),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    ])
+    if (typeof branchesRes.count === 'number') branchCount = branchesRes.count
+    if (typeof profilesRes.count === 'number') userCount = profilesRes.count
+  } catch {
+    // Counts are advisory; the heartbeat itself must not fail over them.
+  }
   try {
     const res = await fetch(
       `${config.registryUrl}/functions/v1/instance-heartbeat`,
@@ -197,6 +226,8 @@ export async function runHeartbeat(): Promise<boolean> {
           token: config.token,
           version: APP_VERSION,
           domain: window.location.hostname,
+          branch_count: branchCount,
+          user_count: userCount,
         }),
       },
     )
@@ -205,6 +236,7 @@ export async function runHeartbeat(): Promise<boolean> {
       server_time: string
       client_status: DevClientStatus
       license: HeartbeatLicense | null
+      limits: LicenseLimits | null
       features: Record<DevFeatureKey, boolean>
       latest_release: HeartbeatRelease | null
     }
@@ -213,6 +245,7 @@ export async function runHeartbeat(): Promise<boolean> {
       server_time: data.server_time,
       client_status: data.client_status,
       license: data.license,
+      limits: data.limits ?? null,
       features: data.features,
       latest_release: data.latest_release,
     }
@@ -310,3 +343,13 @@ export function isFeatureEnabledFromCache(key: DevFeatureKey): boolean {
   if (!cache) return true
   return cache.features[key] !== false
 }
+
+/**
+ * The license limits from the last successful heartbeat (Phase 8
+ * R2). Null when unconfigured or never checked in — in both cases
+ * nothing is enforced, mirroring the feature-flag rule.
+ */
+export function getLicenseLimitsFromCache(): LicenseLimits | null {
+  return readLicenseCache()?.limits ?? null
+}
+

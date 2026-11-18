@@ -337,3 +337,13 @@ grant select, insert, update, delete on public.dev_clients, public.dev_licenses,
 grant select on public.dev_developers, public.dev_heartbeats to authenticated;
 grant select, insert on public.dev_support_notes to authenticated;
 grant select, insert, update, delete on public.dev_clients, public.dev_licenses, public.dev_releases, public.dev_client_features, public.dev_support_notes, public.dev_developers, public.dev_heartbeats to service_role;
+
+-- ----------------------------------------------------------------------------
+-- R2 amendment (Phase 8 license limits, 2026-11-18): the heartbeat
+-- stores the instance's self-reported branch/user counts on the
+-- client row so the Developer Panel support view can show usage
+-- against the license limits (dev_licenses.max_branches /
+-- max_users, which exist since 0014). Null = never reported.
+-- ----------------------------------------------------------------------------
+alter table public.dev_clients add column if not exists last_branch_count int;
+alter table public.dev_clients add column if not exists last_user_count int;

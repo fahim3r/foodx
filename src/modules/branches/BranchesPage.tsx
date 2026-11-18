@@ -14,6 +14,7 @@ import {
   type Branch,
   type BranchInput,
 } from '@/services/restaurant'
+import { getLicenseLimitsFromCache } from '@/services/heartbeat'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -80,6 +81,22 @@ export default function BranchesPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (!restaurantId || saving) return
+    // §52 license limit (Phase 8 R2): creating beyond max_branches
+    // is refused with a clear message. Editing is never blocked,
+    // and existing branches above a lowered limit are untouched —
+    // only new creation stops. No cached limit = no enforcement.
+    if (!editingId) {
+      const limits = getLicenseLimitsFromCache()
+      if (
+        limits?.max_branches != null &&
+        branches.length >= limits.max_branches
+      ) {
+        setFormError(
+          t('branches.limitReached', { max: limits.max_branches }),
+        )
+        return
+      }
+    }
     setSaving(true)
     setFormError(null)
     setSaved(false)
@@ -328,3 +345,4 @@ export default function BranchesPage() {
     </div>
   )
 }
+
