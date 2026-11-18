@@ -17,6 +17,7 @@ import {
 } from '@/services/restaurant'
 import DomainSection from '@/modules/settings/DomainSection'
 import LicenseCard from './LicenseCard'
+import { Link } from 'react-router-dom'
 import type { RestaurantFormValues } from '@/types'
 import { Button } from '@/components/ui/button'
 import {
@@ -612,6 +613,20 @@ export default function SettingsPage() {
       </form>
 
       {restaurant && <DomainSection restaurantId={restaurant.id} />}
+
+      {restaurant && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('settings.wizardTitle')}</CardTitle>
+            <CardDescription>{t('settings.wizardBody')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link to="../setup">{t('settings.wizardOpen')}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <LicenseCard />
     </div>

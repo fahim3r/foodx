@@ -1,15 +1,22 @@
 // FoodX — instance heartbeat + license state (Phase 8 step 2).
 //
-// A deployment configured with the VITE_FOODX_* env values phones home
-// to the vendor registry (the instance-heartbeat Edge Function, see
-// supabase/functions/instance-heartbeat): it reports its version and
-// receives its license state, feature flags and the latest release.
-// The response is cached in localStorage so the panel works fully
-// offline (§5); validation is advisory — per §53 a license problem
-// raises warnings but never blocks POS or other local operations.
+// A configured deployment phones home to the vendor registry (the
+// instance-heartbeat Edge Function, see supabase/functions/instance-
+// heartbeat): it reports its version and receives its license state,
+// feature flags and the latest release. The response is cached in
+// localStorage so the panel works fully offline (§5); validation is
+// advisory — per §53 a license problem raises warnings but never
+// blocks POS or other local operations.
 //
-// Unconfigured deployments (no env values — local/dev builds, or a
-// client not yet provisioned) skip everything: no calls, no banners,
+// Configuration resolution (landing/onboarding step 2):
+//   1. the instance_config row, loaded after sign-in by
+//      src/services/activation.ts and cached in localStorage next to
+//      the license cache (deployments activated in-panel), then
+//   2. the VITE_FOODX_* env values (vendor-provisioned deployments).
+// The registry anon key always comes from env — it is a public key,
+// set once in the vendor's deploy template; activation stores only
+// the registry URL, instance id and token in instance_config.
+// Unconfigured deployments skip everything: no calls, no banners,
 // no module gates.
 
 import { APP_VERSION } from '@/lib/version'
@@ -32,6 +39,77 @@ const INSTANCE_ID = import.meta.env.VITE_FOODX_INSTANCE_ID as
 const INSTANCE_TOKEN = import.meta.env.VITE_FOODX_INSTANCE_TOKEN as
   | string
   | undefined
+
+const INSTANCE_CONFIG_KEY = 'foodx.instance_config'
+
+/** The activation-written config, cached by activation.ts. */
+export interface InstanceConfigCache {
+  registry_url: string
+  instance_id: string
+  instance_token: string
+}
+
+export function readInstanceConfigCache(): InstanceConfigCache | null {
+  try {
+    const raw = window.localStorage.getItem(INSTANCE_CONFIG_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as InstanceConfigCache
+    if (
+      typeof parsed.registry_url !== 'string' ||
+      typeof parsed.instance_id !== 'string' ||
+      typeof parsed.instance_token !== 'string'
+    ) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export function storeInstanceConfigCache(config: InstanceConfigCache): void {
+  try {
+    window.localStorage.setItem(INSTANCE_CONFIG_KEY, JSON.stringify(config))
+  } catch {
+    // Storage full/blocked — the DB row remains the source of truth and
+    // activation.ts reloads it on the next panel load.
+  }
+  window.dispatchEvent(new Event(LICENSE_UPDATED_EVENT))
+}
+
+interface ResolvedConfig {
+  registryUrl: string
+  anonKey: string
+  instanceId: string
+  token: string
+}
+
+/**
+ * Effective registry config: the activation-written instance_config
+ * cache wins; env provisioning is the fallback. The anon key is
+ * env-only in both modes (public key, part of the deploy template).
+ */
+function resolveConfig(): ResolvedConfig | null {
+  if (!REGISTRY_ANON_KEY) return null
+  const cached = readInstanceConfigCache()
+  if (cached) {
+    return {
+      registryUrl: cached.registry_url,
+      anonKey: REGISTRY_ANON_KEY,
+      instanceId: cached.instance_id,
+      token: cached.instance_token,
+    }
+  }
+  if (REGISTRY_URL && INSTANCE_ID && INSTANCE_TOKEN) {
+    return {
+      registryUrl: REGISTRY_URL,
+      anonKey: REGISTRY_ANON_KEY,
+      instanceId: INSTANCE_ID,
+      token: INSTANCE_TOKEN,
+    }
+  }
+  return null
+}
 
 const CACHE_KEY = 'foodx.license_state'
 export const LICENSE_UPDATED_EVENT = 'foodx-license-updated'
@@ -75,13 +153,11 @@ export interface LicenseView {
 }
 
 export function isHeartbeatConfigured(): boolean {
-  return Boolean(
-    REGISTRY_URL && REGISTRY_ANON_KEY && INSTANCE_ID && INSTANCE_TOKEN,
-  )
+  return resolveConfig() !== null
 }
 
 export function heartbeatInstanceId(): string | null {
-  return INSTANCE_ID ?? null
+  return resolveConfig()?.instanceId ?? null
 }
 
 export function readLicenseCache(): LicenseStateCache | null {
@@ -104,20 +180,21 @@ export function readLicenseCache(): LicenseStateCache | null {
  * (offline-first) and false is returned.
  */
 export async function runHeartbeat(): Promise<boolean> {
-  if (!isHeartbeatConfigured()) return false
+  const config = resolveConfig()
+  if (!config) return false
   try {
     const res = await fetch(
-      `${REGISTRY_URL}/functions/v1/instance-heartbeat`,
+      `${config.registryUrl}/functions/v1/instance-heartbeat`,
       {
         method: 'POST',
         headers: {
-          apikey: REGISTRY_ANON_KEY as string,
-          Authorization: `Bearer ${REGISTRY_ANON_KEY as string}`,
+          apikey: config.anonKey,
+          Authorization: `Bearer ${config.anonKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          instance_id: INSTANCE_ID,
-          token: INSTANCE_TOKEN,
+          instance_id: config.instanceId,
+          token: config.token,
           version: APP_VERSION,
           domain: window.location.hostname,
         }),

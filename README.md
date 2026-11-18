@@ -369,12 +369,12 @@ There is no automated provisioning yet — that is later-phase work.
   maps it in the system (see [DEPLOYMENT.md](DEPLOYMENT.md)).
 - **Hostname routing** (`src/app/App.tsx`) — platform hosts
   (`foodx.bond`, `www.foodx.bond`, `*.vercel.app`, `localhost`) run
-  one router: `/` serves the public storefront of the **FoodX Demo
-  restaurant** (the platform domain is the demo landing page —
-  `DEFAULT_DEMO_STORE_SLUG` in `src/services/storefront.ts`),
+  one router: `/` serves the **FoodX marketing landing page**
+  (the demo restaurant moved to `demo.foodx.bond`, a normal
+  restaurant-domain mapping — see the landing section below; a
+  `?store=<slug>` on the root still previews a storefront),
   `/panel/*` serves the admin app (signed in → Dashboard, signed out
-  → Login page), `/devpanel*` serves a placeholder page for the
-  Developer Panel (the real panel is Phase 8 work), and the old admin
+  → Login page), `/devpanel*` serves the Developer Panel (Phase 8), and the old admin
   URLs (`/login`, `/pos`, `/orders`, …) redirect to their `/panel/*`
   equivalents, query string included. Any other hostname is resolved
   with `resolve_restaurant_by_domain()` — a match serves the storefront
@@ -596,6 +596,37 @@ There is no automated provisioning yet — that is later-phase work.
   (§59) and client instances pulling their feature flags (§60).
   Until then, versions and statuses in the panel are **as
   registered** by the developer, and the UI says so.
+
+## Landing page, demo subdomain & client onboarding
+
+The sales/delivery flow on top of the 9 phases (owner's product
+decision, 2026-11-17/18; design: LANDING_ONBOARDING_DESIGN in the
+project notes):
+
+- **Step 1 — landing + demo subdomain.** `foodx.bond` root is the
+  FoodX marketing landing page (`src/modules/landing/LandingPage.tsx`,
+  EN/BN, honest content only — no invented pricing or testimonials).
+  The live demo moved to **demo.foodx.bond**: a `restaurant_domains`
+  row maps it to the demo restaurant, so the ordinary client-domain
+  machinery serves its storefront and its `/panel`. A public demo
+  account (demo@foodx.bond, restaurant_owner on the demo restaurant)
+  is printed on the landing page so prospects can explore the panel.
+- **Step 2 — license-key activation + onboarding wizard**
+  (migration `0016_instance_activation.sql`):
+  - Registry Edge Function `instance-activate` — POST a license key;
+    it validates the license (computed expiry) and client, refuses
+    re-activation (`already_activated` — rotation stays a vendor
+    action), generates the instance token, stores only its hash, and
+    returns `{ instance_id, token }` once.
+  - `instance_config` (single row, admin-role RLS only, anon denied)
+    stores the deployment's registry URL / client code / token;
+    `src/services/activation.ts` writes it and `heartbeat.ts` resolves
+    config as instance_config → env vars → inert.
+  - `/panel/setup` wizard — restaurants with
+    `restaurant_settings.onboarding_completed = false` are routed
+    here first (0016 marks all pre-existing restaurants true):
+    restaurant info → license activation (the same form also lives in
+    Settings → License) → done. Skippable; never a lock (§53).
 
 ## What is not built yet
 

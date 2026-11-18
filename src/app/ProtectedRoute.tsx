@@ -8,7 +8,7 @@
 // for another restaurant (or with no restaurant linked) sees an honest
 // notice instead of the admin — it can never see another restaurant's
 // data through this domain.
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import AppLayout from '@/layouts/AppLayout'
 import { useTranslation } from 'react-i18next'
@@ -26,8 +26,9 @@ export default function ProtectedRoute({
 }: {
   lockedRestaurantId?: string
 }) {
-  const { user, profile, loading, signOut } = useAuth()
+  const { user, profile, settings, loading, signOut } = useAuth()
   const { t } = useTranslation()
+  const location = useLocation()
 
   if (loading) {
     return (
@@ -81,6 +82,25 @@ export default function ProtectedRoute({
         </main>
       )
     }
+  }
+
+  // First-run setup gate (landing/onboarding step 2, migration 0016):
+  // a restaurant whose settings still carry onboarding_completed =
+  // false is sent to the setup wizard first. The wizard route itself
+  // is exempt, and the wizard can be finished without activating —
+  // it guides the first run, it does not lock the panel (§53).
+  const onSetupRoute =
+    location.pathname === '/setup' ||
+    location.pathname.endsWith('/panel/setup')
+  if (
+    settings &&
+    settings.onboarding_completed === false &&
+    !onSetupRoute
+  ) {
+    const setupPath = location.pathname.startsWith('/panel/')
+      ? '/panel/setup'
+      : '/setup'
+    return <Navigate to={setupPath} replace />
   }
 
   return (

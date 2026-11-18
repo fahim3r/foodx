@@ -177,3 +177,35 @@ export async function upsertSettings(
   if (error) throw error
   return data as RestaurantSettings
 }
+
+/** Partial settings update (onboarding wizard, migration 0016): only
+ * the given columns change, unlike upsertSettings which rewrites the
+ * whole settings form. */
+export async function updateSettingsPartial(
+  restaurantId: string,
+  patch: Partial<
+    Pick<
+      RestaurantSettings,
+      'currency' | 'tax_rate' | 'branding_name' | 'onboarding_completed'
+    >
+  >,
+): Promise<void> {
+  const { error } = await supabase
+    .from('restaurant_settings')
+    .update(patch)
+    .eq('restaurant_id', restaurantId)
+  if (error) throw error
+}
+
+/** Branch contact update (onboarding wizard step 1 writes the main
+ * branch's phone/address — branches are where contact fields live). */
+export async function updateBranchContact(
+  branchId: string,
+  patch: { phone: string | null; address: string | null },
+): Promise<void> {
+  const { error } = await supabase
+    .from('branches')
+    .update(patch)
+    .eq('id', branchId)
+  if (error) throw error
+}

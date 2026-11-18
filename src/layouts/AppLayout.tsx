@@ -32,6 +32,7 @@ import {
   isModuleEnabled,
   runHeartbeat,
 } from '@/services/heartbeat'
+import { refreshInstanceConfig } from '@/services/activation'
 import type { DevFeatureKey } from '@/types'
 import logoWordmark from '@/assets/brand/logo-wordmark.webp'
 import { cn } from '@/lib/utils'
@@ -206,9 +207,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const licenseView = useLicenseState()
 
   // Phone home on panel load and every 6 hours while open (Phase 8
-  // step 2). Inert on deployments without heartbeat env values.
+  // step 2). The activation-written instance_config is loaded first
+  // (landing/onboarding step 2), so heartbeats use it when present;
+  // env provisioning stays the fallback. Inert on unconfigured
+  // deployments.
   useEffect(() => {
-    void runHeartbeat()
+    void refreshInstanceConfig().then(() => runHeartbeat())
     const id = window.setInterval(
       () => {
         void runHeartbeat()

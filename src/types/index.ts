@@ -38,6 +38,7 @@ export interface RestaurantSettings {
   delivery_enabled: boolean
   delivery_fee: number
   min_order_amount: number
+  onboarding_completed: boolean
 }
 
 export interface Role {
