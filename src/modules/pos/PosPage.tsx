@@ -993,6 +993,8 @@ export default function PosPage() {
       source: entry.input.source ?? 'POS',
       external_order_id: entry.input.externalOrderId ?? null,
       third_party_company: entry.input.thirdPartyCompany ?? null,
+      token_number: null,
+      token_day: null,
       status: 'CONFIRMED',
       subtotal: entry.totals.subtotal,
       discount_amount: entry.totals.discountAmount,

@@ -147,6 +147,24 @@ export async function sendOrderToKitchen(
 }
 
 /** READY → SERVED: the food left the kitchen / was handed over. */
+/** The To Serve board (gap 2): today's token orders that are READY
+ * (waiting to be called) or SERVED (handed over), token order. */
+export async function fetchServeBoard(
+  restaurantId: string,
+  tokenDay: string,
+): Promise<Order[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('token_day', tokenDay)
+    .not('token_number', 'is', null)
+    .in('status', ['READY', 'SERVED'])
+    .order('token_number', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as Order[]
+}
+
 export async function markOrderServed(
   order: Order,
   userId: string,

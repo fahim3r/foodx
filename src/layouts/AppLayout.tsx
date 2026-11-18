@@ -13,6 +13,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Boxes,
   Building2,
+  BellRing,
   ChefHat,
   ClipboardList,
   LayoutDashboard,
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
   { to: '/pos', key: 'nav.pos', icon: ShoppingCart, end: false },
   { to: '/orders', key: 'nav.orders', icon: ClipboardList, end: false },
   { to: '/kds', key: 'nav.kds', icon: ChefHat, end: false },
+  { to: '/serve', key: 'nav.serve', icon: BellRing, end: false },
   { to: '/menu', key: 'nav.menu', icon: UtensilsCrossed, end: false },
   { to: '/inventory', key: 'nav.inventory', icon: Boxes, end: false },
   { to: '/tables', key: 'nav.tables', icon: Table2, end: false },

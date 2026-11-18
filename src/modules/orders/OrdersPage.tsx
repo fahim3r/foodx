@@ -231,6 +231,11 @@ export default function OrdersPage() {
                 <CardHeader className="flex flex-row items-center justify-between gap-2">
                   <CardTitle>
                     {t('orders.orderNumber', { number: order.order_number })}
+                    {order.token_number != null && (
+                      <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 align-middle text-xs font-semibold text-orange-700">
+                        {t('orders.token', { number: order.token_number })}
+                      </span>
+                    )}
                   </CardTitle>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                     {statusLabel(order.status)}

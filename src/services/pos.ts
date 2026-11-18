@@ -270,6 +270,45 @@ async function fetchOrderById(orderId: string): Promise<Order | null> {
  * Every write upserts on client-generated ids — replaying this
  * function for the same orderId can never double-post.
  */
+/** Next counter token for the restaurant's local day (migration
+ * 0023). Returns null when the day cannot be determined — an order
+ * must never fail because its token could not be assigned. */
+async function nextToken(
+  restaurantId: string,
+): Promise<{ tokenDay: string; tokenNumber: number } | null> {
+  const { data: restaurantRow, error } = await supabase
+    .from('restaurants')
+    .select('timezone')
+    .eq('id', restaurantId)
+    .single()
+  if (error) return null
+  const timeZone =
+    (restaurantRow as { timezone: string | null }).timezone ?? undefined
+  let tokenDay: string
+  try {
+    tokenDay = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
+  } catch {
+    tokenDay = new Date().toISOString().slice(0, 10)
+  }
+  const { data: latest, error: maxError } = await supabase
+    .from('orders')
+    .select('token_number')
+    .eq('restaurant_id', restaurantId)
+    .eq('token_day', tokenDay)
+    .order('token_number', { ascending: false })
+    .limit(1)
+  if (maxError) return null
+  const current =
+    (latest?.[0] as { token_number: number | null } | undefined)
+      ?.token_number ?? 0
+  return { tokenDay, tokenNumber: current + 1 }
+}
+
 async function persistPricedOrder(args: {
   orderId: string
   input: CreateOrderInput
@@ -286,6 +325,9 @@ async function persistPricedOrder(args: {
   // placement is retried after a dropped connection, the order already
   // exists under this id — reuse it instead of taking a new number.
   let orderNumber = await nextOrderNumber(input.restaurantId)
+  // Dine-in orders take no token (the table identifies them).
+  let token =
+    input.type !== 'dine_in' ? await nextToken(input.restaurantId) : null
   let order: Order | null = null
   for (let attempt = 0; attempt < 3 && !order; attempt++) {
     const { data, error } = await supabase
@@ -297,6 +339,8 @@ async function persistPricedOrder(args: {
           branch_id: input.branchId ?? null,
           table_id: input.tableId ?? null,
           order_number: orderNumber,
+          token_number: token?.tokenNumber ?? null,
+          token_day: token?.tokenDay ?? null,
           type: input.type,
           source: input.source ?? 'POS',
           external_order_id: input.externalOrderId?.trim() || null,
@@ -332,6 +376,8 @@ async function persistPricedOrder(args: {
         break
       }
       orderNumber = await nextOrderNumber(input.restaurantId)
+      token =
+        input.type !== 'dine_in' ? await nextToken(input.restaurantId) : null
       continue
     }
     throw error

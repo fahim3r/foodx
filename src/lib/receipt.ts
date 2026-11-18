@@ -88,7 +88,8 @@ export function buildReceiptHtml(
     ${ctx.branchAddress ? `<p class="center">${escapeHtml(ctx.branchAddress)}</p>` : ''}
     ${ctx.branchPhone ? `<p class="center">${escapeHtml(ctx.branchPhone)}</p>` : ''}
     <hr />
-    <div class="row"><span>${labels.order} ${ctx.orderRef ?? `#${detail.order_number}`}</span><span>${new Date(detail.created_at).toLocaleString()}</span></div>${ctx.channelLine ? `
+    <div class="row"><span>${labels.order} ${ctx.orderRef ?? `#${detail.order_number}`}</span><span>${new Date(detail.created_at).toLocaleString()}</span></div>${detail.token_number ? `
+    <div class="center" style="font-size:22px;font-weight:700">TOKEN #${detail.token_number}</div>` : ''}${ctx.channelLine ? `
     <div class="center">${escapeHtml(ctx.channelLine)}</div>` : ''}
     ${ctx.tableName ? `<div class="row"><span>${labels.table}</span><span>${escapeHtml(ctx.tableName)}</span></div>` : ''}
     <hr />
@@ -130,7 +131,8 @@ export function buildKitchenTicketHtml(
     .join('')
   const html = `
     <h1>${labels.kitchenTicket}</h1>
-    <div class="row"><span>${labels.order} #${detail.order_number}</span><span>${new Date(detail.created_at).toLocaleString()}</span></div>
+    <div class="row"><span>${labels.order} #${detail.order_number}</span><span>${new Date(detail.created_at).toLocaleString()}</span></div>${detail.token_number ? `
+    <div class="center" style="font-size:22px;font-weight:700">TOKEN #${detail.token_number}</div>` : ''}
     ${ctx.tableName ? `<div class="row"><span>${labels.table}</span><span>${escapeHtml(ctx.tableName)}</span></div>` : ''}
     <hr />
     ${items}

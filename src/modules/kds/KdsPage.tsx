@@ -232,6 +232,13 @@ export default function KdsPage() {
                     <CardHeader>
                       <CardTitle>
                         {t('kds.orderNumber', { number: order.order_number })}
+                        {order.token_number != null && (
+                          <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 align-middle text-xs font-semibold text-orange-700">
+                            {t('orders.token', {
+                              number: order.token_number,
+                            })}
+                          </span>
+                        )}
                       </CardTitle>
                       <CardDescription>{meta.join(' · ')}</CardDescription>
                     </CardHeader>

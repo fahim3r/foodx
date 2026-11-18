@@ -233,6 +233,11 @@ export interface Order {
    * the platform's own order id and the platform name. Null otherwise. */
   external_order_id: string | null
   third_party_company: string | null
+  /** Per-day counter token (migration 0023): set on every non-dine-in
+   * order, null for dine-in. token_day is the restaurant-local date
+   * the token belongs to (YYYY-MM-DD). */
+  token_number: number | null
+  token_day: string | null
   customer_id: string | null
   /** Guest contact for QR / online orders (the POS leaves these null —
    * its customers live on the customer record instead). */

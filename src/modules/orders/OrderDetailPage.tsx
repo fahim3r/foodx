@@ -405,6 +405,11 @@ export default function OrderDetailPage() {
           <p className="text-muted-foreground">
             {t('orders.source')}: {sourceLabel(detail.source)}
           </p>
+          {detail.token_number != null && (
+            <p className="font-medium">
+              {t('orders.token', { number: detail.token_number })}
+            </p>
+          )}
           {detail.source === 'THIRD_PARTY' && (
             <p className="text-muted-foreground">
               {t('orders.externalId')}: {detail.third_party_company} #
