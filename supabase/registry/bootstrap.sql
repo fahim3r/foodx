@@ -323,3 +323,17 @@ alter table public.dev_heartbeats enable row level security;
 drop policy if exists dev_heartbeats_select_developer on public.dev_heartbeats;
 create policy dev_heartbeats_select_developer on public.dev_heartbeats
   for select to authenticated using (public.is_developer());
+
+-- ----------------------------------------------------------------------------
+-- Data API privileges. Projects created under Supabase's newer
+-- defaults get NO privileges on SQL-created tables until granted —
+-- without these grants every PostgREST call (the Developer Panel as
+-- `authenticated`, the Edge Functions as `service_role`) fails with
+-- "permission denied for table" even though the RLS policies exist.
+-- The grants only open the door; the policies above still decide
+-- which rows each role can touch. anon gets nothing on purpose.
+-- ----------------------------------------------------------------------------
+grant select, insert, update, delete on public.dev_clients, public.dev_licenses, public.dev_releases, public.dev_client_features to authenticated;
+grant select on public.dev_developers, public.dev_heartbeats to authenticated;
+grant select, insert on public.dev_support_notes to authenticated;
+grant select, insert, update, delete on public.dev_clients, public.dev_licenses, public.dev_releases, public.dev_client_features, public.dev_support_notes, public.dev_developers, public.dev_heartbeats to service_role;
