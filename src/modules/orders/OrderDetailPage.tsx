@@ -146,6 +146,10 @@ export default function OrderDetailPage() {
         ? (tableNames[target.table_id] ?? null)
         : null,
       footer: settings?.receipt_footer ?? null,
+      channelLine:
+        target.source === 'THIRD_PARTY'
+          ? `${target.third_party_company ?? ''} #${target.external_order_id ?? ''}`
+          : undefined,
     }
   }
 
@@ -401,6 +405,12 @@ export default function OrderDetailPage() {
           <p className="text-muted-foreground">
             {t('orders.source')}: {sourceLabel(detail.source)}
           </p>
+          {detail.source === 'THIRD_PARTY' && (
+            <p className="text-muted-foreground">
+              {t('orders.externalId')}: {detail.third_party_company} #
+              {detail.external_order_id}
+            </p>
+          )}
           {detail.customer_name && (
             <p>
               <span className="font-medium">{t('orders.customerName')}: </span>

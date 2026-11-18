@@ -29,6 +29,7 @@ import {
   roundMoney,
   summarizePayments,
   type PricedLine,
+  THIRD_PARTY_COMPANIES,
 } from '@/services/pos'
 import { fetchBranches, type Branch } from '@/services/restaurant'
 import { fetchOrderDetail } from '@/services/orders'
@@ -164,6 +165,14 @@ export default function PosPage() {
   const [loadState, setLoadState] = useState<'ok' | 'missing' | 'failed'>('ok')
 
   const [orderType, setOrderType] = useState<OrderType>('dine_in')
+  // Third-party (aggregator) entry, gap 1: within the delivery type
+  // the worker picks our own delivery or an aggregator platform.
+  const [deliveryChannel, setDeliveryChannel] = useState<'own' | 'third_party'>('own')
+  const [thirdPartyCompany, setThirdPartyCompany] = useState<string>(THIRD_PARTY_COMPANIES[0])
+  const [externalOrderId, setExternalOrderId] = useState('')
+  const [guestName, setGuestName] = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
+  const isThirdParty = orderType === 'delivery' && deliveryChannel === 'third_party'
   const [selectedTableId, setSelectedTableId] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
   const [search, setSearch] = useState('')
@@ -641,6 +650,10 @@ export default function PosPage() {
     setNotes('')
     setSelectedTableId('')
     setOrderType('dine_in')
+    setDeliveryChannel('own')
+    setExternalOrderId('')
+    setGuestName('')
+    setGuestPhone('')
     setPlaceErrorKey(null)
     setPaymentErrorKey(null)
     setPaymentRecorded(false)
@@ -733,6 +746,10 @@ export default function PosPage() {
       setPlaceErrorKey('pos.tableRequired')
       return
     }
+    if (isThirdParty && !externalOrderId.trim()) {
+      setPlaceErrorKey('pos.externalIdRequired')
+      return
+    }
     const lines: PosOrderLineInput[] = cart.map((line) => ({
       productId: line.productId,
       variantId: line.variantId,
@@ -744,7 +761,15 @@ export default function PosPage() {
       restaurantId: restaurant.id,
       branchId: defaultBranch?.id ?? null,
       tableId: orderType === 'dine_in' ? selectedTableId : null,
-      type: orderType,
+      // Aggregator orders are counter pickups by the platform rider:
+      // stored as takeaway + source THIRD_PARTY, never dispatched on
+      // the delivery board (gap 1 design).
+      type: isThirdParty ? 'takeaway' : orderType,
+      source: isThirdParty ? 'THIRD_PARTY' : undefined,
+      externalOrderId: isThirdParty ? externalOrderId : undefined,
+      thirdPartyCompany: isThirdParty ? thirdPartyCompany : undefined,
+      customerName: isThirdParty ? guestName : undefined,
+      customerPhone: isThirdParty ? guestPhone : undefined,
       notes,
       discountAmount: discount,
       customerId: selectedCustomer?.id ?? null,
@@ -850,6 +875,10 @@ export default function PosPage() {
           branchPhone: branch?.phone ?? null,
           tableName: table?.name ?? null,
           footer: settings?.receipt_footer ?? null,
+          channelLine:
+            detail.source === 'THIRD_PARTY'
+              ? `${detail.third_party_company ?? ''} #${detail.external_order_id ?? ''}`
+              : undefined,
         },
         {
           order: t('print.order'),
@@ -961,7 +990,9 @@ export default function PosPage() {
       table_id: entry.input.tableId ?? null,
       order_number: 0,
       type: entry.input.type,
-      source: 'POS',
+      source: entry.input.source ?? 'POS',
+      external_order_id: entry.input.externalOrderId ?? null,
+      third_party_company: entry.input.thirdPartyCompany ?? null,
       status: 'CONFIRMED',
       subtotal: entry.totals.subtotal,
       discount_amount: entry.totals.discountAmount,
@@ -971,8 +1002,8 @@ export default function PosPage() {
       delivery_fee: 0,
       delivery_zone_id: null,
       customer_id: null,
-      customer_name: null,
-      customer_phone: null,
+      customer_name: entry.input.customerName ?? null,
+      customer_phone: entry.input.customerPhone ?? null,
       delivery_address: null,
       coupon_id: null,
       coupon_discount: 0,
@@ -1029,6 +1060,10 @@ export default function PosPage() {
         tableName: table?.name ?? null,
         footer: settings?.receipt_footer ?? null,
         orderRef: localRef(entry.id),
+        channelLine:
+          detail.source === 'THIRD_PARTY'
+            ? `${detail.third_party_company ?? ''} #${detail.external_order_id ?? ''}`
+            : undefined,
       },
       {
         order: t('print.order'),
@@ -1692,6 +1727,76 @@ export default function PosPage() {
               ))}
             </div>
           </div>
+          {orderType === 'delivery' && (
+            <div className="flex flex-col gap-2">
+              <Label>{t('pos.deliveryChannel')}</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={deliveryChannel === 'own' ? 'default' : 'outline'}
+                  onClick={() => setDeliveryChannel('own')}
+                >
+                  {t('pos.channelOwn')}
+                </Button>
+                <Button
+                  type="button"
+                  variant={deliveryChannel === 'third_party' ? 'default' : 'outline'}
+                  onClick={() => setDeliveryChannel('third_party')}
+                >
+                  {t('pos.channelThirdParty')}
+                </Button>
+              </div>
+              {isThirdParty && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="tp-company">{t('pos.thirdPartyCompany')}</Label>
+                    <select
+                      id="tp-company"
+                      value={thirdPartyCompany}
+                      onChange={(e) => setThirdPartyCompany(e.target.value)}
+                      className={SELECT_CLASSNAME}
+                    >
+                      {THIRD_PARTY_COMPANIES.map((company) => (
+                        <option key={company} value={company}>
+                          {company}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="tp-external-id">{t('pos.externalOrderId')}</Label>
+                    <Input
+                      id="tp-external-id"
+                      value={externalOrderId}
+                      onChange={(e) => setExternalOrderId(e.target.value)}
+                      placeholder={t('pos.externalOrderIdPlaceholder')}
+                      maxLength={64}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="tp-guest-name">{t('pos.guestName')}</Label>
+                      <Input
+                        id="tp-guest-name"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        maxLength={120}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="tp-guest-phone">{t('pos.guestPhone')}</Label>
+                      <Input
+                        id="tp-guest-phone"
+                        value={guestPhone}
+                        onChange={(e) => setGuestPhone(e.target.value)}
+                        maxLength={32}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {orderType === 'dine_in' && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="table">{t('pos.selectTable')}</Label>

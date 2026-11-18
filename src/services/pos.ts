@@ -30,6 +30,16 @@ export function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
+/** Aggregator platforms a counter worker can pick for a third-party
+ * order (roadmap gap 1). A constant, not a table: the list changes
+ * rarely and 'Other' covers the long tail. */
+export const THIRD_PARTY_COMPANIES = [
+  'Foodpanda',
+  'Pathao Food',
+  'HungryNaki',
+  'Other',
+] as const
+
 export interface PricedLine {
   productId: string
   variantId: string | null
@@ -288,6 +298,11 @@ async function persistPricedOrder(args: {
           table_id: input.tableId ?? null,
           order_number: orderNumber,
           type: input.type,
+          source: input.source ?? 'POS',
+          external_order_id: input.externalOrderId?.trim() || null,
+          third_party_company: input.thirdPartyCompany ?? null,
+          customer_name: input.customerName?.trim() || null,
+          customer_phone: input.customerPhone?.trim() || null,
           status: 'CONFIRMED',
           subtotal: totals.subtotal,
           discount_amount: totals.discountAmount,

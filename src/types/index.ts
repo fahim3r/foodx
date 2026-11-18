@@ -101,7 +101,7 @@ export type OrderType = 'dine_in' | 'takeaway' | 'delivery' | 'pickup'
 
 /** Where an order came from: the counter POS, a table QR scan, or the
  * public online storefront. */
-export type OrderSource = 'POS' | 'QR' | 'ONLINE'
+export type OrderSource = 'POS' | 'QR' | 'ONLINE' | 'THIRD_PARTY'
 
 export type PaymentMethod = 'cash' | 'card' | 'bkash' | 'nagad' | 'bank' | 'due'
 
@@ -229,6 +229,10 @@ export interface Order {
    * orders and restaurants without zones. The delivery board pre-fills
    * its dispatch row from this. */
   delivery_zone_id?: string | null
+  /** Aggregator reference for THIRD_PARTY orders (migration 0022):
+   * the platform's own order id and the platform name. Null otherwise. */
+  external_order_id: string | null
+  third_party_company: string | null
   customer_id: string | null
   /** Guest contact for QR / online orders (the POS leaves these null —
    * its customers live on the customer record instead). */
@@ -318,6 +322,16 @@ export interface CreateOrderInput {
   branchId?: string | null
   tableId?: string | null
   type: OrderType
+  /** Defaults to 'POS' when omitted. Third-party entry passes
+   * 'THIRD_PARTY' with the aggregator fields below (migration 0022). */
+  source?: OrderSource
+  externalOrderId?: string | null
+  thirdPartyCompany?: string | null
+  /** Guest contact written to orders.customer_name / customer_phone
+   * (third-party entry; the normal POS flow leaves them null and
+   * attaches a customer record instead). */
+  customerName?: string | null
+  customerPhone?: string | null
   notes?: string
   discountAmount: number
   customerId?: string | null
