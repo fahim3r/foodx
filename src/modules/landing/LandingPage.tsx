@@ -19,6 +19,7 @@ import {
   Languages,
   LayoutGrid,
   Mail,
+  MessageCircle,
   MonitorSmartphone,
   Package,
   Rocket,
@@ -34,6 +35,7 @@ const DEMO_PANEL_URL = 'https://demo.foodx.bond/panel'
 const DEMO_LOGIN_EMAIL = 'demo@foodx.bond'
 const DEMO_LOGIN_PASSWORD = 'foodx123'
 const CONTACT_EMAIL = 'Foodx.bond@gmail.com'
+const WHATSAPP_URL = 'https://wa.me/8801930599600'
 
 function LanguageToggle() {
   const { i18n, t } = useTranslation()
@@ -252,12 +254,20 @@ export default function LandingPage() {
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
             {t('landing.contactBody')}
           </p>
-          <Button asChild size="lg" className="mt-6">
-            <a href={`mailto:${CONTACT_EMAIL}`}>
-              <Mail className="mr-2 h-5 w-5" />
-              {CONTACT_EMAIL}
-            </a>
-          </Button>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button asChild size="lg">
+              <a href={WHATSAPP_URL} target="_blank" rel="noreferrer">
+                <MessageCircle className="mr-2 h-5 w-5" />
+                {t('landing.contactWhatsapp')}
+              </a>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <a href={`mailto:${CONTACT_EMAIL}`}>
+                <Mail className="mr-2 h-5 w-5" />
+                {CONTACT_EMAIL}
+              </a>
+            </Button>
+          </div>
         </section>
       </main>
 
