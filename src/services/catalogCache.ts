@@ -17,6 +17,7 @@ import type {
   DiningTable,
   ProductWithDetails,
   Profile,
+  ResolvedDomain,
   Restaurant,
   RestaurantSettings,
 } from '@/types'
@@ -171,6 +172,67 @@ export function loadPosCache(
       branches: blob.branches,
       availability: new Map(blob.availability),
     }
+  } catch {
+    removeKey(key)
+    return null
+  }
+}
+
+// --- Domain resolution cache (v2.1) ---------------------------------------
+//
+// HostRouter resolves a restaurant domain with a live RPC before
+// anything else can render; offline, that call fails and a cold
+// start on the restaurant's own domain dead-ended on the
+// "domain not connected" page even though the workspace and POS
+// caches were saved. The successful resolution is therefore
+// cached per hostname and used as the fallback on network
+// errors — the same fail-safe rule as the other caches.
+
+interface DomainCacheBlob {
+  version: number
+  hostname: string
+  savedAt: string
+  resolved: ResolvedDomain
+}
+
+function domainKey(hostname: string): string {
+  return `foodx.domain_cache.${hostname.trim().toLowerCase()}`
+}
+
+export function saveDomainCache(
+  hostname: string,
+  resolved: ResolvedDomain,
+): void {
+  try {
+    const blob: DomainCacheBlob = {
+      version: CACHE_VERSION,
+      hostname: hostname.trim().toLowerCase(),
+      savedAt: new Date().toISOString(),
+      resolved,
+    }
+    window.localStorage.setItem(domainKey(hostname), JSON.stringify(blob))
+  } catch {
+    // Silent, like every cache write.
+  }
+}
+
+export function loadDomainCache(hostname: string): ResolvedDomain | null {
+  const key = domainKey(hostname)
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const blob = JSON.parse(raw) as DomainCacheBlob
+    if (
+      blob.version !== CACHE_VERSION ||
+      blob.hostname !== hostname.trim().toLowerCase() ||
+      typeof blob.savedAt !== 'string' ||
+      !blob.resolved ||
+      typeof blob.resolved.restaurant_id !== 'string'
+    ) {
+      removeKey(key)
+      return null
+    }
+    return blob.resolved
   } catch {
     removeKey(key)
     return null

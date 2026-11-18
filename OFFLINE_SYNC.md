@@ -101,6 +101,15 @@ absent, which falls back to the previous load-failed card.
 Neither cache is cleared on sign-out — same rule as the queue:
 an outage must not be able to strand a counter device.
 
+On a restaurant's own domain there is one more layer: the
+router resolves the domain with a live RPC before anything
+renders. The successful resolution is cached too
+(`foodx.domain_cache.<hostname>`, v2.1) and used when that
+call fails with a network error — otherwise a cold offline
+start on the restaurant's own domain would dead-end on the
+"domain not connected" page before the caches above ever get
+a chance. With no saved resolution, that page still shows.
+
 While running on a cached catalog the POS header shows when
 the menu was saved ("showing the menu saved at <time>"), with
 stronger wording once the copy is over a day old. There is no

@@ -35,6 +35,8 @@ import {
 } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AuthProvider } from './AuthProvider'
+import { isNetworkError } from '@/lib/errors'
+import { loadDomainCache, saveDomainCache } from '@/services/catalogCache'
 import ProtectedRoute from './ProtectedRoute'
 import LoginPage from '@/modules/auth/LoginPage'
 import ResetPasswordPage from '@/modules/auth/ResetPasswordPage'
@@ -220,11 +222,26 @@ function HostRouter() {
     let cancelled = false
     void resolveDomain(hostname)
       .then((result) => {
-        if (!cancelled) setResolved(result)
+        if (cancelled) return
+        if (result) saveDomainCache(hostname, result)
+        setResolved(result)
       })
       .catch((error: unknown) => {
         console.error('[App] domain resolution failed', error)
-        if (!cancelled) setResolveFailed(true)
+        if (cancelled) return
+        // Phase 9 v2.1: offline on a restaurant domain — fall
+        // back to the saved resolution so a cold start still
+        // opens the panel; the workspace + POS caches take it
+        // from there. No saved resolution → the honest
+        // load-failed page, as before.
+        if (isNetworkError(error) || !navigator.onLine) {
+          const cached = loadDomainCache(hostname)
+          if (cached) {
+            setResolved(cached)
+            return
+          }
+        }
+        setResolveFailed(true)
       })
     return () => {
       cancelled = true
