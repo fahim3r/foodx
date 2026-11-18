@@ -509,7 +509,10 @@ There is no automated provisioning yet — that is later-phase work.
   snapshots, and the report queries: P&L, daily sales series,
   product / category sales, payment breakdown, expense-by-category,
   delivery summary, supplier payables (RECEIVED purchase totals;
-  supplier payment recording is not built yet).
+  since Step 2A, recorded supplier payments are subtracted —
+  migration `0017_supplier_payments.sql` adds `supplier_payments`,
+  again with no DELETE policy, plus a manual `products.cost_price`
+  fallback for margin reporting).
 - **Business page** (`/panel/business`) — tabs: Expenses (period /
   category filters, add / edit / void, category manager), Shifts &
   Closing (open shift, live expected cash, movements, close with
@@ -522,10 +525,24 @@ There is no automated provisioning yet — that is later-phase work.
   sales chart, today's payment breakdown and top products (the
   widgets stay hidden until the Phase 7 tables exist, like the
   earlier phase widgets).
-- **Not in this phase (Step 2):** the remaining §39 reports
-  (cashier, waiter, kitchen, tax, refund/void detail), PDF export,
-  supplier payment recording, branch management UI, receipt
-  printing.
+- **Step 2A (2026-11-18):** the full §39 report list is now in the
+  Reports tab behind a picker — overview, cashier, waiter (orders
+  grouped by creator, filtered to the waiter role; orders record no
+  separate waiter field), branch, kitchen (items per station +
+  average completion time), customer, loyalty, inventory, purchase,
+  supplier balances (received − paid = due), tax & discounts,
+  refunds & voids, shifts — plus the §28 **item margin** report
+  (recipe cost first, manual `products.cost_price` as fallback, no
+  cost data shown honestly). Every table prints via the browser
+  print flow (Save-as-PDF covers §39's "PDF where appropriate") and
+  still exports CSV. Supplier payments are recorded from the
+  Inventory → Suppliers tab. **Receipt + kitchen ticket printing**
+  (§62) is built: POS prints the placed order's receipt, the order
+  detail page reprints receipt and kitchen ticket — restaurant logo
+  on top, small "Powered by FoodX" underneath (branding rule below);
+  the browser print dialog picks the printer (no per-device printer
+  routing yet). **Still open (Step 2B):** branch management UI and
+  branch inventory / transfers (§40–§41).
 
 ## What Phase 8 adds
 
@@ -650,7 +667,7 @@ Do not assume it exists.
 | Delivery management | Built (Phase 6): drivers, zones, board, assignment, status history, storefront zone picker; separate driver app not started |
 | Online payment | Not started — v1 is pay at the restaurant |
 | Rate limiting / anti-spam on the public order endpoint | Not started (later work) |
-| Reports / analytics | Built (Phase 7): P&L, daily sales, product/category sales, payment breakdown, expense reports, delivery summary, CSV export; remaining §39 reports + PDF export not started |
+| Reports / analytics | Built (Phase 7 + Step 2A): full §39 list (P&L, sales, cashier, waiter, branch, kitchen, customer, loyalty, inventory, purchase, supplier balances, tax, discounts, refunds/voids, shifts), §28 item margins, CSV export + print/PDF |
 | Role editing / assigning permissions to roles | Read-only view only; the `role_permissions` table is seeded **empty** — the matrix shows all dashes until assignments are made (a later phase) |
 | Branch management UI | The `branches` table exists; no UI or service touches it yet |
 | Staff/user management UI | Not started |
@@ -802,9 +819,9 @@ Performance rules for the logo (so it never slows the site down):
   FoodX **wordmark image** + tagline (never the X icon + typed "FoodX").
 - **Receipt & invoice branding (Fahim's rule, 2026-11-16):** on every
   receipt and invoice, the restaurant's logo goes on top and the FoodX
-  mark sits small underneath it ("Powered by FoodX"). Build this in when
-  receipt printing / invoicing lands (Phase 7); POS printing is not
-  implemented yet.
+  mark sits small underneath it ("Powered by FoodX"). Receipt and
+  kitchen-ticket printing landed in Phase 7 Step 2A following this
+  rule (restaurant logo on top, the Powered-by line underneath).
 - **The FoodX logo is immutable for restaurants:** it is a bundled asset
   in `src/assets/brand/` — there is no setting anywhere that can change
   it. Only the developer (a code change) can ever swap it. Restaurant

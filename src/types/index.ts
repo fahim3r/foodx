@@ -183,6 +183,9 @@ export interface Product {
   name_bn: string | null
   description: string | null
   price: number
+  /** Manual cost (migration 0017) — margin-report fallback when the
+   * product has no recipe; null = no manual cost recorded. */
+  cost_price: number | null
   image_url: string | null
   is_available: boolean
   sort_order: number
@@ -783,6 +786,23 @@ export interface Expense {
   is_voided: boolean
   voided_at: string | null
   voided_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Money paid to a supplier (migration 0017). No delete by design —
+ * corrections are edits, like expenses (§46 pattern). */
+export interface SupplierPayment {
+  id: string
+  restaurant_id: string
+  supplier_id: string
+  purchase_order_id: string | null
+  amount: number
+  payment_method: PaymentMethod
+  /** date (yyyy-mm-dd) the payment was made. */
+  paid_on: string
+  note: string | null
+  created_by: string | null
   created_at: string
   updated_at: string
 }

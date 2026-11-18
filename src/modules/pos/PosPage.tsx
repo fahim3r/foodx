@@ -3,7 +3,8 @@
 // loaded catalog with the same computeOrderTotals() the server-side
 // createOrder() uses, and placement sends only ids + quantities —
 // services/pos.ts re-reads prices from the database before storing.
-// Printing is not implemented; the summary says so honestly.
+// Receipt printing (§62, Phase 7 Step 2A) prints the placed order
+// from the summary card via lib/receipt + lib/print.
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -29,7 +30,10 @@ import {
   type PricedLine,
 } from '@/services/pos'
 import { fetchBranches, type Branch } from '@/services/restaurant'
+import { fetchOrderDetail } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
+import { printHtml } from '@/lib/print'
+import { buildReceiptHtml } from '@/lib/receipt'
 import type {
   Category,
   Coupon,
@@ -590,6 +594,47 @@ export default function PosPage() {
     }
   }
 
+  const handlePrintReceipt = async () => {
+    if (!placedOrder || !restaurant) return
+    try {
+      const detail = await fetchOrderDetail(placedOrder.id)
+      const branch =
+        branches.find((b) => b.id === detail.branch_id) ?? defaultBranch
+      const table = tables.find((tb) => tb.id === detail.table_id)
+      const { title, html, css } = buildReceiptHtml(
+        detail,
+        {
+          restaurantName: settings?.branding_name || restaurant.name,
+          logoUrl: settings?.logo_url ?? null,
+          branchName: branch?.name ?? null,
+          branchAddress: branch?.address ?? null,
+          branchPhone: branch?.phone ?? null,
+          tableName: table?.name ?? null,
+          footer: settings?.receipt_footer ?? null,
+        },
+        {
+          order: t('print.order'),
+          table: t('print.table'),
+          subtotal: t('print.subtotal'),
+          discount: t('print.discount'),
+          tax: t('print.tax'),
+          serviceCharge: t('print.serviceCharge'),
+          deliveryFee: t('print.deliveryFee'),
+          total: t('print.total'),
+          payment: t('print.payment'),
+          kitchenTicket: t('print.kitchenTicket'),
+          notes: t('print.notes'),
+          poweredBy: t('print.poweredBy'),
+        },
+        (n) => formatMoney(n, currency),
+        (method) => t(PAYMENT_METHOD_KEYS[method as PaymentMethod]),
+      )
+      printHtml(title, html, css)
+    } catch {
+      // Printing is best-effort; the order itself is unaffected.
+    }
+  }
+
   const handleRecordPayment = async (event: FormEvent) => {
     event.preventDefault()
     if (!user || !placedOrder) return
@@ -774,9 +819,15 @@ export default function PosPage() {
                 </span>
               </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              {t('pos.printNotImplemented')}
-            </p>
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handlePrintReceipt()}
+              >
+                {t('print.receiptButton')}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

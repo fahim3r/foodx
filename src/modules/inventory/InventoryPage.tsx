@@ -8,7 +8,7 @@
 // needs a reason where the user causes it (adjust / waste).
 // Receiving a purchase order is FULL receipt only — partial receiving
 // is not implemented and the page says so.
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isMissingTableError, isUniqueViolationError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
@@ -45,8 +45,16 @@ import {
   fetchSuppliers,
   updateSupplier,
 } from '@/services/suppliers'
+import {
+  createSupplierPayment,
+  fetchSupplierBalances,
+  fetchSupplierPayments,
+  type SupplierBalanceRow,
+  type SupplierPaymentRow,
+} from '@/services/business'
 import type {
   InventoryItem,
+  PaymentMethod,
   Product,
   ProductRecipeWithItem,
   PurchaseOrder,
@@ -147,7 +155,7 @@ interface PoLineForm {
 
 export default function InventoryPage() {
   const { t } = useTranslation()
-  const { loading: authLoading, restaurant, settings } = useAuth()
+  const { loading: authLoading, user, restaurant, settings } = useAuth()
   const restaurantId = restaurant?.id
   const currency = settings?.currency ?? 'BDT'
 
@@ -525,6 +533,78 @@ export default function InventoryPage() {
           ? 'inventory.nameTaken'
           : 'inventory.saveFailed',
       )
+    }
+  }
+
+  // --- supplier payments (Phase 7 Step 2A, migration 0017) -------------------
+  const [supplierBalances, setSupplierBalances] = useState<
+    SupplierBalanceRow[]
+  >([])
+  const [supplierPayments, setSupplierPayments] = useState<
+    SupplierPaymentRow[]
+  >([])
+  const [paySupplierId, setPaySupplierId] = useState('')
+  const [payPoId, setPayPoId] = useState('')
+  const [payAmount, setPayAmount] = useState('')
+  const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
+  const [payDate, setPayDate] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  )
+  const [payNote, setPayNote] = useState('')
+  const [payError, setPayError] = useState<string | null>(null)
+  const [paySaved, setPaySaved] = useState(false)
+  const [paying, setPaying] = useState(false)
+
+  const loadSupplierPayments = useCallback(async () => {
+    if (!restaurantId) return
+    try {
+      const [balances, payments] = await Promise.all([
+        fetchSupplierBalances(restaurantId),
+        fetchSupplierPayments(restaurantId),
+      ])
+      setSupplierBalances(balances)
+      setSupplierPayments(payments)
+    } catch {
+      // Balances are a summary; the suppliers tab itself still works
+      // if this fails (e.g. migration 0017 not applied yet).
+      setSupplierBalances([])
+      setSupplierPayments([])
+    }
+  }, [restaurantId])
+
+  useEffect(() => {
+    void loadSupplierPayments()
+  }, [loadSupplierPayments])
+
+  const handleRecordSupplierPayment = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!restaurantId || !user || paying) return
+    const amount = Number(payAmount)
+    if (!paySupplierId || !Number.isFinite(amount) || amount <= 0) {
+      setPayError('inventory.paymentInvalid')
+      return
+    }
+    setPaying(true)
+    setPayError(null)
+    setPaySaved(false)
+    try {
+      await createSupplierPayment(restaurantId, user.id, {
+        supplierId: paySupplierId,
+        purchaseOrderId: payPoId || null,
+        amount,
+        method: payMethod,
+        paidOn: payDate,
+        note: payNote,
+      })
+      setPayAmount('')
+      setPayNote('')
+      setPayPoId('')
+      setPaySaved(true)
+      await loadSupplierPayments()
+    } catch {
+      setPayError('inventory.paymentFailed')
+    } finally {
+      setPaying(false)
     }
   }
 
@@ -1475,6 +1555,213 @@ export default function InventoryPage() {
                           {t('inventory.deleteConfirm')}
                         </span>
                       )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('inventory.supplierPaymentsTitle')}</CardTitle>
+              <CardDescription>
+                {t('inventory.supplierPaymentsHint')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-6">
+              {supplierBalances.length > 0 && (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-2 font-medium">
+                        {t('inventory.supplierName')}
+                      </th>
+                      <th className="py-2 pr-2 font-medium">
+                        {t('inventory.receivedLabel')}
+                      </th>
+                      <th className="py-2 pr-2 font-medium">
+                        {t('inventory.paidLabel')}
+                      </th>
+                      <th className="py-2 pr-2 font-medium">
+                        {t('inventory.dueLabel')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {supplierBalances.map((b) => (
+                      <tr key={b.supplierId} className="border-b last:border-0">
+                        <td className="py-2 pr-2">{b.name}</td>
+                        <td className="py-2 pr-2">
+                          {formatMoney(b.receivedTotal, currency)}
+                        </td>
+                        <td className="py-2 pr-2">
+                          {formatMoney(b.paidTotal, currency)}
+                        </td>
+                        <td className="py-2 pr-2 font-medium">
+                          {formatMoney(b.due, currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              <form
+                onSubmit={handleRecordSupplierPayment}
+                className="flex flex-col gap-4"
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="paySupplier">
+                      {t('inventory.supplierName')}
+                    </Label>
+                    <select
+                      id="paySupplier"
+                      value={paySupplierId}
+                      onChange={(e) => {
+                        setPaySupplierId(e.target.value)
+                        setPayPoId('')
+                      }}
+                      className={SELECT_CLASS}
+                      required
+                    >
+                      <option value="" disabled>
+                        {t('inventory.supplierName')}
+                      </option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="payPo">{t('inventory.paymentPo')}</Label>
+                    <select
+                      id="payPo"
+                      value={payPoId}
+                      onChange={(e) => setPayPoId(e.target.value)}
+                      className={SELECT_CLASS}
+                    >
+                      <option value="">{t('inventory.paymentOnAccount')}</option>
+                      {purchaseOrders
+                        .filter(
+                          (po) =>
+                            po.supplier_id === paySupplierId &&
+                            po.status === 'RECEIVED',
+                        )
+                        .map((po) => (
+                          <option key={po.id} value={po.id}>
+                            {po.order_date} ·{' '}
+                            {formatMoney(Number(po.total_amount), currency)}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="payAmount">
+                      {t('inventory.paymentAmount')}
+                    </Label>
+                    <Input
+                      id="payAmount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="payMethod">
+                      {t('inventory.paymentMethod')}
+                    </Label>
+                    <select
+                      id="payMethod"
+                      value={payMethod}
+                      onChange={(e) =>
+                        setPayMethod(e.target.value as PaymentMethod)
+                      }
+                      className={SELECT_CLASS}
+                    >
+                      {(['cash', 'card', 'bkash', 'nagad', 'bank', 'due'] as PaymentMethod[]).map(
+                        (m) => (
+                          <option key={m} value={m}>
+                            {t(
+                              `pos.method${m.charAt(0).toUpperCase()}${m.slice(1)}`,
+                            )}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="payDate">{t('inventory.paymentDate')}</Label>
+                    <Input
+                      id="payDate"
+                      type="date"
+                      value={payDate}
+                      onChange={(e) => setPayDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="payNote">{t('inventory.paymentNote')}</Label>
+                    <Input
+                      id="payNote"
+                      value={payNote}
+                      onChange={(e) => setPayNote(e.target.value)}
+                    />
+                  </div>
+                </div>
+                {payError && (
+                  <p
+                    role="alert"
+                    className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                  >
+                    {t(payError)}
+                  </p>
+                )}
+                {paySaved && (
+                  <p
+                    role="status"
+                    className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+                  >
+                    {t('inventory.paymentSaved')}
+                  </p>
+                )}
+                <div>
+                  <Button type="submit" disabled={paying || !paySupplierId}>
+                    {t('inventory.recordPayment')}
+                  </Button>
+                </div>
+              </form>
+
+              {supplierPayments.length > 0 && (
+                <ul className="flex flex-col divide-y text-sm">
+                  {supplierPayments.slice(0, 20).map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex flex-wrap items-center justify-between gap-2 py-2"
+                    >
+                      <span>
+                        {suppliers.find((s) => s.id === p.supplier_id)?.name ??
+                          p.supplier_id.slice(0, 8)}
+                        {p.note ? (
+                          <span className="text-muted-foreground">
+                            {' '}
+                            · {p.note}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {p.paid_on} ·{' '}
+                        {t(
+                          `pos.method${p.payment_method.charAt(0).toUpperCase()}${p.payment_method.slice(1)}`,
+                        )}{' '}
+                        · {formatMoney(Number(p.amount), currency)}
+                      </span>
                     </li>
                   ))}
                 </ul>

@@ -172,10 +172,18 @@ export default function BusinessPage() {
         />
       )}
       {tab === 'reports' && (
-        <ReportsPanel restaurantId={restaurantId} currency={currency} />
+        <ReportsPanel
+          restaurantId={restaurantId}
+          currency={currency}
+          restaurantName={restaurant?.name ?? ''}
+        />
       )}
       {tab === 'pl' && (
-        <ProfitLossPanel restaurantId={restaurantId} currency={currency} />
+        <ProfitLossPanel
+          restaurantId={restaurantId}
+          currency={currency}
+          restaurantName={restaurant?.name ?? ''}
+        />
       )}
     </div>
   )

@@ -256,6 +256,7 @@ export async function createProduct(
     nameBn?: string
     description?: string
     price: number
+    costPrice?: number | null
     imageUrl?: string
     sortOrder?: number
   },
@@ -271,6 +272,10 @@ export async function createProduct(
       name_bn: values.nameBn?.trim() || null,
       description: values.description?.trim() || null,
       price: roundMoney(values.price),
+      cost_price:
+        values.costPrice === undefined || values.costPrice === null
+          ? null
+          : roundMoney(values.costPrice),
       image_url: values.imageUrl?.trim() || null,
       sort_order: values.sortOrder ?? 0,
     })
@@ -291,6 +296,7 @@ export async function updateProduct(
       | 'name_bn'
       | 'description'
       | 'price'
+      | 'cost_price'
       | 'image_url'
       | 'is_available'
       | 'sort_order'

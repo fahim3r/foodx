@@ -990,3 +990,909 @@ export async function fetchTodayExpenseTotal(
     ),
   )
 }
+
+// ---------------------------------------------------------------------------
+// Phase 7 Step 2A — remaining §39 reports + supplier payments (0017)
+// ---------------------------------------------------------------------------
+
+async function fetchProfileNames(
+  restaurantId: string,
+): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .eq('restaurant_id', restaurantId)
+  if (error) throw error
+  return new Map(
+    ((data ?? []) as { id: string; full_name: string | null }[]).map((p) => [
+      p.id,
+      p.full_name ?? p.id.slice(0, 8),
+    ]),
+  )
+}
+
+export interface StaffSalesRow {
+  userId: string
+  name: string
+  orders: number
+  sales: number
+  avgTicket: number
+}
+
+/**
+ * Orders grouped by who created them (§39 Cashier report). With
+ * `waiterOnly`, only creators holding the waiter role are listed —
+ * orders record created_by only; there is no separate waiter field,
+ * so this is honestly "orders taken by waiters".
+ */
+export async function fetchStaffSales(
+  restaurantId: string,
+  range: ReportRange,
+  waiterOnly = false,
+): Promise<StaffSalesRow[]> {
+  let allowed: Set<string> | null = null
+  if (waiterOnly) {
+    const { data: waiterRoles, error: roleError } = await supabase
+      .from('roles')
+      .select('id')
+      .eq('name', 'waiter')
+    if (roleError) throw roleError
+    const roleIds = ((waiterRoles ?? []) as { id: string }[]).map((r) => r.id)
+    allowed = new Set<string>()
+    if (roleIds.length > 0) {
+      const { data: assignments, error: assignError } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .in('role_id', roleIds)
+      if (assignError) throw assignError
+      for (const a of (assignments ?? []) as { user_id: string }[]) {
+        allowed.add(a.user_id)
+      }
+    }
+  }
+  const { data, error } = await supabase
+    .from('orders')
+    .select('created_by, total_amount')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+    .not('status', 'in', NON_SALE_STATUSES)
+    .not('created_by', 'is', null)
+  if (error) throw error
+  const names = await fetchProfileNames(restaurantId)
+  const byUser = new Map<string, { orders: number; sales: number }>()
+  for (const o of (data ?? []) as {
+    created_by: string
+    total_amount: number
+  }[]) {
+    if (allowed && !allowed.has(o.created_by)) continue
+    const entry = byUser.get(o.created_by) ?? { orders: 0, sales: 0 }
+    entry.orders += 1
+    entry.sales += Number(o.total_amount)
+    byUser.set(o.created_by, entry)
+  }
+  return [...byUser.entries()]
+    .map(([userId, v]) => ({
+      userId,
+      name: names.get(userId) ?? userId.slice(0, 8),
+      orders: v.orders,
+      sales: roundMoney(v.sales),
+      avgTicket: v.orders > 0 ? roundMoney(v.sales / v.orders) : 0,
+    }))
+    .sort((a, b) => b.sales - a.sales)
+}
+
+export interface BranchSalesRow {
+  branchId: string | null
+  name: string
+  orders: number
+  sales: number
+}
+
+export async function fetchBranchSales(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<BranchSalesRow[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('branch_id, total_amount')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+    .not('status', 'in', NON_SALE_STATUSES)
+  if (error) throw error
+  const { data: branches, error: branchError } = await supabase
+    .from('branches')
+    .select('id, name')
+    .eq('restaurant_id', restaurantId)
+  if (branchError) throw branchError
+  const nameById = new Map(
+    ((branches ?? []) as { id: string; name: string }[]).map((b) => [
+      b.id,
+      b.name,
+    ]),
+  )
+  const byBranch = new Map<string | null, { orders: number; sales: number }>()
+  for (const o of (data ?? []) as {
+    branch_id: string | null
+    total_amount: number
+  }[]) {
+    const entry = byBranch.get(o.branch_id) ?? { orders: 0, sales: 0 }
+    entry.orders += 1
+    entry.sales += Number(o.total_amount)
+    byBranch.set(o.branch_id, entry)
+  }
+  return [...byBranch.entries()]
+    .map(([branchId, v]) => ({
+      branchId,
+      name: branchId ? (nameById.get(branchId) ?? branchId.slice(0, 8)) : '—',
+      orders: v.orders,
+      sales: roundMoney(v.sales),
+    }))
+    .sort((a, b) => b.sales - a.sales)
+}
+
+export interface KitchenReport {
+  stations: { name: string; items: number; orders: number }[]
+  avgCompletionMinutes: number | null
+  completedOrders: number
+}
+
+export async function fetchKitchenReport(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<KitchenReport> {
+  const { data: items, error } = await supabase
+    .from('order_items')
+    .select('quantity, product_id, order_id, orders!inner (restaurant_id, status, created_at)')
+    .eq('orders.restaurant_id', restaurantId)
+    .gte('orders.created_at', range.fromIso)
+    .lt('orders.created_at', range.toIso)
+    .not('orders.status', 'in', NON_SALE_STATUSES)
+  if (error) throw error
+  const rows = (items ?? []) as unknown as {
+    quantity: number
+    product_id: string | null
+    order_id: string
+  }[]
+
+  const { data: products, error: productError } = await supabase
+    .from('products')
+    .select('id, kitchen_station_id')
+    .eq('restaurant_id', restaurantId)
+  if (productError) throw productError
+  const stationByProduct = new Map<string, string | null>(
+    ((products ?? []) as { id: string; kitchen_station_id: string | null }[]).map(
+      (p) => [p.id, p.kitchen_station_id],
+    ),
+  )
+  const { data: stations, error: stationError } = await supabase
+    .from('kitchen_stations')
+    .select('id, name')
+    .eq('restaurant_id', restaurantId)
+  if (stationError) throw stationError
+  const stationName = new Map(
+    ((stations ?? []) as { id: string; name: string }[]).map((s) => [
+      s.id,
+      s.name,
+    ]),
+  )
+
+  const byStation = new Map<string, { items: number; orders: Set<string> }>()
+  for (const row of rows) {
+    const stationId = row.product_id
+      ? (stationByProduct.get(row.product_id) ?? null)
+      : null
+    const name = stationId
+      ? (stationName.get(stationId) ?? stationId.slice(0, 8))
+      : '—'
+    const entry = byStation.get(name) ?? { items: 0, orders: new Set<string>() }
+    entry.items += Number(row.quantity)
+    entry.orders.add(row.order_id)
+    byStation.set(name, entry)
+  }
+
+  // Average completion: order created_at → first SERVED/COMPLETED
+  // transition in order_status_history.
+  const { data: servedOrders, error: servedError } = await supabase
+    .from('orders')
+    .select('id, created_at')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+    .in('status', ['SERVED', 'COMPLETED'])
+  if (servedError) throw servedError
+  const createdById = new Map(
+    ((servedOrders ?? []) as { id: string; created_at: string }[]).map((o) => [
+      o.id,
+      o.created_at,
+    ]),
+  )
+  let avgCompletionMinutes: number | null = null
+  let completedOrders = 0
+  if (createdById.size > 0) {
+    const { data: history, error: historyError } = await supabase
+      .from('order_status_history')
+      .select('order_id, to_status, created_at')
+      .in('order_id', [...createdById.keys()])
+      .in('to_status', ['SERVED', 'COMPLETED'])
+      .order('created_at', { ascending: true })
+    if (historyError) throw historyError
+    const firstDoneAt = new Map<string, string>()
+    for (const h of (history ?? []) as {
+      order_id: string
+      created_at: string
+    }[]) {
+      if (!firstDoneAt.has(h.order_id)) firstDoneAt.set(h.order_id, h.created_at)
+    }
+    let totalMinutes = 0
+    for (const [orderId, doneAt] of firstDoneAt) {
+      const created = createdById.get(orderId)
+      if (!created) continue
+      totalMinutes +=
+        (new Date(doneAt).getTime() - new Date(created).getTime()) / 60000
+      completedOrders += 1
+    }
+    if (completedOrders > 0) {
+      avgCompletionMinutes = roundMoney(totalMinutes / completedOrders)
+    }
+  }
+
+  return {
+    stations: [...byStation.entries()]
+      .map(([name, v]) => ({ name, items: v.items, orders: v.orders.size }))
+      .sort((a, b) => b.items - a.items),
+    avgCompletionMinutes,
+    completedOrders,
+  }
+}
+
+export interface CustomerReportRow {
+  customerId: string
+  name: string
+  orders: number
+  spent: number
+  pointsBalance: number
+}
+
+export async function fetchCustomerReport(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<CustomerReportRow[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('customer_id, total_amount')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+    .not('status', 'in', NON_SALE_STATUSES)
+    .not('customer_id', 'is', null)
+  if (error) throw error
+  const byCustomer = new Map<string, { orders: number; spent: number }>()
+  for (const o of (data ?? []) as {
+    customer_id: string
+    total_amount: number
+  }[]) {
+    const entry = byCustomer.get(o.customer_id) ?? { orders: 0, spent: 0 }
+    entry.orders += 1
+    entry.spent += Number(o.total_amount)
+    byCustomer.set(o.customer_id, entry)
+  }
+  if (byCustomer.size === 0) return []
+  const ids = [...byCustomer.keys()]
+  const { data: customers, error: customerError } = await supabase
+    .from('customers')
+    .select('id, name')
+    .in('id', ids)
+  if (customerError) throw customerError
+  const nameById = new Map(
+    ((customers ?? []) as { id: string; name: string }[]).map((c) => [
+      c.id,
+      c.name,
+    ]),
+  )
+  const { data: loyalty, error: loyaltyError } = await supabase
+    .from('loyalty_transactions')
+    .select('customer_id, points')
+    .eq('restaurant_id', restaurantId)
+    .in('customer_id', ids)
+  if (loyaltyError) throw loyaltyError
+  const pointsByCustomer = new Map<string, number>()
+  for (const row of (loyalty ?? []) as {
+    customer_id: string
+    points: number
+  }[]) {
+    pointsByCustomer.set(
+      row.customer_id,
+      (pointsByCustomer.get(row.customer_id) ?? 0) + Number(row.points),
+    )
+  }
+  return ids
+    .map((customerId) => ({
+      customerId,
+      name: nameById.get(customerId) ?? customerId.slice(0, 8),
+      orders: byCustomer.get(customerId)?.orders ?? 0,
+      spent: roundMoney(byCustomer.get(customerId)?.spent ?? 0),
+      pointsBalance: pointsByCustomer.get(customerId) ?? 0,
+    }))
+    .sort((a, b) => b.spent - a.spent)
+}
+
+export interface LoyaltyReport {
+  earned: number
+  redeemed: number
+  adjustments: number
+  topHolders: { name: string; balance: number }[]
+}
+
+export async function fetchLoyaltyReport(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<LoyaltyReport> {
+  const { data, error } = await supabase
+    .from('loyalty_transactions')
+    .select('customer_id, type, points')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+  if (error) throw error
+  let earned = 0
+  let redeemed = 0
+  let adjustments = 0
+  for (const row of (data ?? []) as {
+    type: string
+    points: number
+  }[]) {
+    const points = Number(row.points)
+    if (row.type === 'EARN') earned += points
+    else if (row.type === 'REDEEM') redeemed += Math.abs(points)
+    else adjustments += points
+  }
+  const { data: allTx, error: allError } = await supabase
+    .from('loyalty_transactions')
+    .select('customer_id, points')
+    .eq('restaurant_id', restaurantId)
+  if (allError) throw allError
+  const balanceByCustomer = new Map<string, number>()
+  for (const row of (allTx ?? []) as {
+    customer_id: string
+    points: number
+  }[]) {
+    balanceByCustomer.set(
+      row.customer_id,
+      (balanceByCustomer.get(row.customer_id) ?? 0) + Number(row.points),
+    )
+  }
+  const top = [...balanceByCustomer.entries()]
+    .filter(([, balance]) => balance > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+  let topHolders: LoyaltyReport['topHolders'] = []
+  if (top.length > 0) {
+    const { data: customers, error: customerError } = await supabase
+      .from('customers')
+      .select('id, name')
+      .in(
+        'id',
+        top.map(([id]) => id),
+      )
+    if (customerError) throw customerError
+    const nameById = new Map(
+      ((customers ?? []) as { id: string; name: string }[]).map((c) => [
+        c.id,
+        c.name,
+      ]),
+    )
+    topHolders = top.map(([id, balance]) => ({
+      name: nameById.get(id) ?? id.slice(0, 8),
+      balance,
+    }))
+  }
+  return { earned, redeemed, adjustments, topHolders }
+}
+
+export interface InventoryReport {
+  stockValue: number
+  lowStock: { name: string; quantity: number; threshold: number }[]
+  movements: { type: string; count: number; quantity: number }[]
+}
+
+export async function fetchInventoryReport(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<InventoryReport> {
+  const { data: items, error } = await supabase
+    .from('inventory_items')
+    .select('name, current_quantity, cost_price, low_stock_threshold')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+  if (error) throw error
+  let stockValue = 0
+  const lowStock: InventoryReport['lowStock'] = []
+  for (const item of (items ?? []) as {
+    name: string
+    current_quantity: number
+    cost_price: number
+    low_stock_threshold: number
+  }[]) {
+    stockValue += Number(item.current_quantity) * Number(item.cost_price)
+    if (Number(item.current_quantity) <= Number(item.low_stock_threshold)) {
+      lowStock.push({
+        name: item.name,
+        quantity: Number(item.current_quantity),
+        threshold: Number(item.low_stock_threshold),
+      })
+    }
+  }
+  const { data: movements, error: movementError } = await supabase
+    .from('stock_movements')
+    .select('movement_type, quantity_change')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+  if (movementError) throw movementError
+  const byType = new Map<string, { count: number; quantity: number }>()
+  for (const m of (movements ?? []) as {
+    movement_type: string
+    quantity_change: number
+  }[]) {
+    const entry = byType.get(m.movement_type) ?? { count: 0, quantity: 0 }
+    entry.count += 1
+    entry.quantity += Number(m.quantity_change)
+    byType.set(m.movement_type, entry)
+  }
+  return {
+    stockValue: roundMoney(stockValue),
+    lowStock,
+    movements: [...byType.entries()].map(([type, v]) => ({
+      type,
+      count: v.count,
+      quantity: roundMoney(v.quantity),
+    })),
+  }
+}
+
+export interface PurchaseReportRow {
+  supplierId: string
+  name: string
+  status: string
+  orders: number
+  total: number
+}
+
+export async function fetchPurchaseReport(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<PurchaseReportRow[]> {
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .select('supplier_id, status, total_amount')
+    .eq('restaurant_id', restaurantId)
+    .gte('order_date', range.fromDate)
+    .lte('order_date', range.toDate)
+  if (error) throw error
+  const names = new Map<string, string>()
+  const { data: suppliers, error: supplierError } = await supabase
+    .from('suppliers')
+    .select('id, name')
+    .eq('restaurant_id', restaurantId)
+  if (supplierError) throw supplierError
+  for (const s of (suppliers ?? []) as { id: string; name: string }[]) {
+    names.set(s.id, s.name)
+  }
+  const byKey = new Map<string, PurchaseReportRow>()
+  for (const po of (data ?? []) as {
+    supplier_id: string
+    status: string
+    total_amount: number
+  }[]) {
+    const key = `${po.supplier_id}|${po.status}`
+    const entry = byKey.get(key) ?? {
+      supplierId: po.supplier_id,
+      name: names.get(po.supplier_id) ?? po.supplier_id.slice(0, 8),
+      status: po.status,
+      orders: 0,
+      total: 0,
+    }
+    entry.orders += 1
+    entry.total += Number(po.total_amount)
+    byKey.set(key, entry)
+  }
+  return [...byKey.values()]
+    .map((r) => ({ ...r, total: roundMoney(r.total) }))
+    .sort((a, b) => b.total - a.total)
+}
+
+export interface SupplierBalanceRow {
+  supplierId: string
+  name: string
+  receivedTotal: number
+  paidTotal: number
+  due: number
+}
+
+export async function fetchSupplierBalances(
+  restaurantId: string,
+): Promise<SupplierBalanceRow[]> {
+  const payables = await fetchSupplierPayables(restaurantId)
+  const { data: payments, error } = await supabase
+    .from('supplier_payments')
+    .select('supplier_id, amount')
+    .eq('restaurant_id', restaurantId)
+  if (error) throw error
+  const paidBySupplier = new Map<string, number>()
+  for (const p of (payments ?? []) as { supplier_id: string; amount: number }[]) {
+    paidBySupplier.set(
+      p.supplier_id,
+      (paidBySupplier.get(p.supplier_id) ?? 0) + Number(p.amount),
+    )
+  }
+  const seen = new Set<string>()
+  const rows: SupplierBalanceRow[] = []
+  for (const row of payables) {
+    seen.add(row.supplierId)
+    const paid = roundMoney(paidBySupplier.get(row.supplierId) ?? 0)
+    rows.push({
+      supplierId: row.supplierId,
+      name: row.name,
+      receivedTotal: row.receivedTotal,
+      paidTotal: paid,
+      due: roundMoney(row.receivedTotal - paid),
+    })
+  }
+  const { data: allSuppliers, error: nameError } = await supabase
+    .from('suppliers')
+    .select('id, name')
+    .eq('restaurant_id', restaurantId)
+  if (nameError) throw nameError
+  const nameById = new Map(
+    ((allSuppliers ?? []) as { id: string; name: string }[]).map((s) => [
+      s.id,
+      s.name,
+    ]),
+  )
+  for (const [supplierId, paid] of paidBySupplier) {
+    if (seen.has(supplierId)) continue
+    rows.push({
+      supplierId,
+      name: nameById.get(supplierId) ?? supplierId.slice(0, 8),
+      receivedTotal: 0,
+      paidTotal: roundMoney(paid),
+      due: roundMoney(-paid),
+    })
+  }
+  return rows.sort((a, b) => b.due - a.due)
+}
+
+export interface SupplierPaymentRow {
+  id: string
+  supplier_id: string
+  purchase_order_id: string | null
+  amount: number
+  payment_method: PaymentMethod
+  paid_on: string
+  note: string | null
+  created_at: string
+}
+
+export async function fetchSupplierPayments(
+  restaurantId: string,
+  supplierId?: string,
+): Promise<SupplierPaymentRow[]> {
+  let query = supabase
+    .from('supplier_payments')
+    .select(
+      'id, supplier_id, purchase_order_id, amount, payment_method, paid_on, note, created_at',
+    )
+    .eq('restaurant_id', restaurantId)
+    .order('paid_on', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (supplierId) query = query.eq('supplier_id', supplierId)
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as SupplierPaymentRow[]
+}
+
+export interface CreateSupplierPaymentInput {
+  supplierId: string
+  purchaseOrderId?: string | null
+  amount: number
+  method: PaymentMethod
+  paidOn: string
+  note?: string
+}
+
+export async function createSupplierPayment(
+  restaurantId: string,
+  userId: string,
+  input: CreateSupplierPaymentInput,
+): Promise<void> {
+  const { error } = await supabase.from('supplier_payments').insert({
+    id: crypto.randomUUID(),
+    restaurant_id: restaurantId,
+    supplier_id: input.supplierId,
+    purchase_order_id: input.purchaseOrderId ?? null,
+    amount: roundMoney(input.amount),
+    payment_method: input.method,
+    paid_on: input.paidOn,
+    note: input.note?.trim() ? input.note.trim() : null,
+    created_by: userId,
+  })
+  if (error) throw error
+}
+
+export interface TaxDiscountReport {
+  orders: number
+  taxCollected: number
+  serviceChargeCollected: number
+  orderDiscounts: number
+  couponRedemptions: number
+  couponDiscount: number
+}
+
+export async function fetchTaxDiscountReport(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<TaxDiscountReport> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('tax_amount, service_charge_amount, discount_amount')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+    .not('status', 'in', NON_SALE_STATUSES)
+  if (error) throw error
+  let tax = 0
+  let service = 0
+  let discounts = 0
+  let count = 0
+  for (const o of (data ?? []) as {
+    tax_amount: number
+    service_charge_amount: number
+    discount_amount: number
+  }[]) {
+    tax += Number(o.tax_amount)
+    service += Number(o.service_charge_amount)
+    discounts += Number(o.discount_amount)
+    count += 1
+  }
+  const { data: redemptions, error: redemptionError } = await supabase
+    .from('coupon_redemptions')
+    .select('discount_amount, orders!inner (restaurant_id)')
+    .eq('orders.restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+  if (redemptionError) throw redemptionError
+  let couponDiscount = 0
+  for (const r of (redemptions ?? []) as { discount_amount: number }[]) {
+    couponDiscount += Number(r.discount_amount)
+  }
+  return {
+    orders: count,
+    taxCollected: roundMoney(tax),
+    serviceChargeCollected: roundMoney(service),
+    orderDiscounts: roundMoney(discounts),
+    couponRedemptions: (redemptions ?? []).length,
+    couponDiscount: roundMoney(couponDiscount),
+  }
+}
+
+export interface RefundVoidReport {
+  refunded: { orderNumber: number; total: number; at: string }[]
+  refundedTotal: number
+  cancelled: { orderNumber: number; total: number; at: string }[]
+  cancelledTotal: number
+  voidedExpenses: number
+  voidedExpenseTotal: number
+}
+
+export async function fetchRefundVoidReport(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<RefundVoidReport> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('order_number, total_amount, status, created_at')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', range.fromIso)
+    .lt('created_at', range.toIso)
+    .in('status', ['REFUNDED', 'CANCELLED'])
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const refunded: RefundVoidReport['refunded'] = []
+  const cancelled: RefundVoidReport['cancelled'] = []
+  let refundedTotal = 0
+  let cancelledTotal = 0
+  for (const o of (data ?? []) as {
+    order_number: number
+    total_amount: number
+    status: string
+    created_at: string
+  }[]) {
+    const row = {
+      orderNumber: o.order_number,
+      total: Number(o.total_amount),
+      at: o.created_at,
+    }
+    if (o.status === 'REFUNDED') {
+      refunded.push(row)
+      refundedTotal += row.total
+    } else {
+      cancelled.push(row)
+      cancelledTotal += row.total
+    }
+  }
+  const { data: voided, error: voidError } = await supabase
+    .from('expenses')
+    .select('amount')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_voided', true)
+    .gte('voided_at', range.fromIso)
+    .lt('voided_at', range.toIso)
+  if (voidError) throw voidError
+  let voidedTotal = 0
+  for (const e of (voided ?? []) as { amount: number }[]) {
+    voidedTotal += Number(e.amount)
+  }
+  return {
+    refunded,
+    refundedTotal: roundMoney(refundedTotal),
+    cancelled,
+    cancelledTotal: roundMoney(cancelledTotal),
+    voidedExpenses: (voided ?? []).length,
+    voidedExpenseTotal: roundMoney(voidedTotal),
+  }
+}
+
+export interface ShiftReportRow {
+  cashier: string
+  openedAt: string
+  closedAt: string | null
+  expected: number | null
+  actual: number | null
+  difference: number | null
+}
+
+export async function fetchShiftReport(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<ShiftReportRow[]> {
+  const { data, error } = await supabase
+    .from('cashier_shifts')
+    .select('opened_by, opened_at, closed_at, expected_cash, actual_cash, difference')
+    .eq('restaurant_id', restaurantId)
+    .eq('status', 'CLOSED')
+    .gte('closed_at', range.fromIso)
+    .lt('closed_at', range.toIso)
+    .order('closed_at', { ascending: false })
+  if (error) throw error
+  const names = await fetchProfileNames(restaurantId)
+  return ((data ?? []) as {
+    opened_by: string | null
+    opened_at: string
+    closed_at: string | null
+    expected_cash: number | null
+    actual_cash: number | null
+    difference: number | null
+  }[]).map((s) => ({
+    cashier: s.opened_by
+      ? (names.get(s.opened_by) ?? s.opened_by.slice(0, 8))
+      : '—',
+    openedAt: s.opened_at,
+    closedAt: s.closed_at,
+    expected: s.expected_cash === null ? null : Number(s.expected_cash),
+    actual: s.actual_cash === null ? null : Number(s.actual_cash),
+    difference: s.difference === null ? null : Number(s.difference),
+  }))
+}
+
+export interface ItemMarginRow {
+  productId: string
+  name: string
+  price: number
+  cost: number | null
+  costSource: 'recipe' | 'manual' | 'none'
+  margin: number | null
+  marginPct: number | null
+  soldQty: number
+}
+
+/**
+ * §28 food cost per product: recipe cost (Σ quantity_per_unit ×
+ * ingredient cost_price) wins; the manual products.cost_price is the
+ * fallback for bought-in items; neither → cost stays unknown and the
+ * UI says so instead of inventing a margin.
+ */
+export async function fetchItemMargins(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<ItemMarginRow[]> {
+  const { data: products, error } = await supabase
+    .from('products')
+    .select('id, name, price, cost_price')
+    .eq('restaurant_id', restaurantId)
+    .order('name', { ascending: true })
+  if (error) throw error
+  const { data: recipes, error: recipeError } = await supabase
+    .from('product_recipes')
+    .select('product_id, inventory_item_id, quantity_per_unit')
+    .eq('restaurant_id', restaurantId)
+  if (recipeError) throw recipeError
+  const { data: invItems, error: invError } = await supabase
+    .from('inventory_items')
+    .select('id, cost_price')
+    .eq('restaurant_id', restaurantId)
+  if (invError) throw invError
+  const invCost = new Map(
+    ((invItems ?? []) as { id: string; cost_price: number }[]).map((i) => [
+      i.id,
+      Number(i.cost_price),
+    ]),
+  )
+  const recipeCostByProduct = new Map<string, number>()
+  for (const r of (recipes ?? []) as {
+    product_id: string
+    inventory_item_id: string
+    quantity_per_unit: number
+  }[]) {
+    const unitCost = invCost.get(r.inventory_item_id)
+    if (unitCost === undefined) continue
+    recipeCostByProduct.set(
+      r.product_id,
+      (recipeCostByProduct.get(r.product_id) ?? 0) +
+        Number(r.quantity_per_unit) * unitCost,
+    )
+  }
+  const { data: soldItems, error: soldError } = await supabase
+    .from('order_items')
+    .select('product_id, quantity, orders!inner (restaurant_id, status, created_at)')
+    .eq('orders.restaurant_id', restaurantId)
+    .gte('orders.created_at', range.fromIso)
+    .lt('orders.created_at', range.toIso)
+    .not('orders.status', 'in', NON_SALE_STATUSES)
+  if (soldError) throw soldError
+  const soldByProduct = new Map<string, number>()
+  for (const row of (soldItems ?? []) as {
+    product_id: string | null
+    quantity: number
+  }[]) {
+    if (!row.product_id) continue
+    soldByProduct.set(
+      row.product_id,
+      (soldByProduct.get(row.product_id) ?? 0) + Number(row.quantity),
+    )
+  }
+  return ((products ?? []) as {
+    id: string
+    name: string
+    price: number
+    cost_price: number | null
+  }[]).map((p) => {
+    const price = Number(p.price)
+    const recipeCost = recipeCostByProduct.get(p.id)
+    let cost: number | null = null
+    let costSource: ItemMarginRow['costSource'] = 'none'
+    if (recipeCost !== undefined) {
+      cost = roundMoney(recipeCost)
+      costSource = 'recipe'
+    } else if (p.cost_price !== null) {
+      cost = Number(p.cost_price)
+      costSource = 'manual'
+    }
+    const margin = cost === null ? null : roundMoney(price - cost)
+    const marginPct =
+      cost === null || price <= 0
+        ? null
+        : roundMoney(((price - cost) / price) * 100)
+    return {
+      productId: p.id,
+      name: p.name,
+      price,
+      cost,
+      costSource,
+      margin,
+      marginPct,
+      soldQty: soldByProduct.get(p.id) ?? 0,
+    }
+  })
+}

@@ -17,6 +17,14 @@ import {
   sendOrderToKitchen,
 } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
+import { fetchBranches, type Branch } from '@/services/restaurant'
+import { printHtml } from '@/lib/print'
+import {
+  buildKitchenTicketHtml,
+  buildReceiptHtml,
+  type ReceiptContext,
+  type ReceiptLabels,
+} from '@/lib/receipt'
 import {
   ORDER_TRANSITIONS,
   TERMINAL_ORDER_STATUSES,
@@ -76,6 +84,7 @@ export default function OrderDetailPage() {
   } = useAuth()
   const [detail, setDetail] = useState<OrderDetail | null>(null)
   const [tableNames, setTableNames] = useState<Record<string, string>>({})
+  const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [missingTables, setMissingTables] = useState(false)
@@ -105,17 +114,74 @@ export default function OrderDetailPage() {
 
   const sourceLabel = (source: OrderSource) => t(`orders.source${source}`)
 
+  const receiptLabels: ReceiptLabels = {
+    order: t('print.order'),
+    table: t('print.table'),
+    subtotal: t('print.subtotal'),
+    discount: t('print.discount'),
+    tax: t('print.tax'),
+    serviceCharge: t('print.serviceCharge'),
+    deliveryFee: t('print.deliveryFee'),
+    total: t('print.total'),
+    payment: t('print.payment'),
+    kitchenTicket: t('print.kitchenTicket'),
+    notes: t('print.notes'),
+    poweredBy: t('print.poweredBy'),
+  }
+
+  const receiptContext = (target: OrderDetail): ReceiptContext => {
+    const branch =
+      branches.find((b) => b.id === target.branch_id) ??
+      branches.find((b) => b.is_main) ??
+      null
+    return {
+      restaurantName: settings?.branding_name || restaurant?.name || '',
+      logoUrl: settings?.logo_url ?? null,
+      branchName: branch?.name ?? null,
+      branchAddress: branch?.address ?? null,
+      branchPhone: branch?.phone ?? null,
+      tableName: target.table_id
+        ? (tableNames[target.table_id] ?? null)
+        : null,
+      footer: settings?.receipt_footer ?? null,
+    }
+  }
+
+  const handlePrintReceipt = () => {
+    if (!detail) return
+    const { title, html, css } = buildReceiptHtml(
+      detail,
+      receiptContext(detail),
+      receiptLabels,
+      (n) => formatMoney(n, currency),
+      (method) => t(PAYMENT_METHOD_KEYS[method as PaymentMethod]),
+    )
+    printHtml(title, html, css)
+  }
+
+  const handlePrintKitchen = () => {
+    if (!detail) return
+    const { title, html, css } = buildKitchenTicketHtml(
+      detail,
+      receiptContext(detail),
+      receiptLabels,
+    )
+    printHtml(title, html, css)
+  }
+
   const load = useCallback(async () => {
     if (!restaurant || !id) return
     setLoading(true)
     setLoadError(false)
     setMissingTables(false)
     try {
-      const [fetchedDetail, tables] = await Promise.all([
+      const [fetchedDetail, tables, branchRows] = await Promise.all([
         fetchOrderDetail(id),
         fetchTables(restaurant.id),
+        fetchBranches(restaurant.id),
       ])
       setDetail(fetchedDetail)
+      setBranches(branchRows)
       const names: Record<string, string> = {}
       for (const table of tables) {
         names[table.id] = table.name
@@ -299,9 +365,27 @@ export default function OrderDetailPage() {
           <CardTitle>
             {t('orders.orderNumber', { number: detail.order_number })}
           </CardTitle>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            {statusLabel(detail.status)}
-          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handlePrintReceipt}
+            >
+              {t('print.receiptButton')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handlePrintKitchen}
+            >
+              {t('print.kitchenButton')}
+            </Button>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {statusLabel(detail.status)}
+            </span>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-1 text-sm">
           <p>{typeLabel(detail.type)}</p>

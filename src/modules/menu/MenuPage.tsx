@@ -80,6 +80,7 @@ interface ProductForm {
   nameBn: string
   description: string
   price: string
+  costPrice: string
   categoryId: string
   stationId: string
   imageUrl: string
@@ -94,6 +95,7 @@ const EMPTY_PRODUCT: ProductForm = {
   nameBn: '',
   description: '',
   price: '',
+  costPrice: '',
   categoryId: '',
   stationId: '',
   imageUrl: '',
@@ -274,6 +276,10 @@ export default function MenuPage() {
       nameBn: product.name_bn ?? '',
       description: product.description ?? '',
       price: String(product.price),
+      costPrice:
+        product.cost_price === null || product.cost_price === undefined
+          ? ''
+          : String(product.cost_price),
       categoryId: product.category_id ?? '',
       stationId: product.kitchen_station_id ?? '',
       imageUrl: product.image_url ?? '',
@@ -300,6 +306,10 @@ export default function MenuPage() {
         nameBn: productForm.nameBn.trim() || undefined,
         description: productForm.description.trim() || undefined,
         price: roundMoney(parseFloat(productForm.price) || 0),
+        costPrice:
+          productForm.costPrice.trim() === ''
+            ? null
+            : roundMoney(parseFloat(productForm.costPrice) || 0),
         imageUrl: productForm.imageUrl.trim() || undefined,
         sortOrder: productForm.sortOrder,
       }
@@ -315,6 +325,7 @@ export default function MenuPage() {
           name_bn: values.nameBn,
           description: values.description,
           price: values.price,
+          cost_price: values.costPrice,
           image_url: values.imageUrl,
           sort_order: values.sortOrder,
         })
@@ -931,6 +942,22 @@ export default function MenuPage() {
                       }))
                     }
                     required
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="product-cost">{t('menu.costPrice')}</Label>
+                  <Input
+                    id="product-cost"
+                    type="text"
+                    inputMode="decimal"
+                    value={productForm.costPrice}
+                    onChange={(e) =>
+                      setProductForm((prev) => ({
+                        ...prev,
+                        costPrice: e.target.value,
+                      }))
+                    }
+                    placeholder={t('menu.costPriceHint')}
                   />
                 </div>
                 <div className="flex flex-col gap-2">
