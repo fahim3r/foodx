@@ -24,9 +24,8 @@ import {
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { Session } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { registrySupabase as supabase } from '@/lib/registry'
 import { authErrorKey } from '@/lib/errors'
-import { signIn, signOut } from '@/services/auth'
 import {
   addDevSupportNote,
   checkIsDeveloper,
@@ -193,6 +192,8 @@ export default function DevPanelPage() {
   const [password, setPassword] = useState('')
   const [signInBusy, setSignInBusy] = useState(false)
   const [signInError, setSignInError] = useState<string | null>(null)
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
+  const [signUpNotice, setSignUpNotice] = useState<string | null>(null)
 
   // Registry data
   const [clients, setClients] = useState<DevClient[]>([])
@@ -368,12 +369,31 @@ export default function DevPanelPage() {
   )
 
   // --- Handlers --------------------------------------------------------------
+  // The Developer Panel authenticates against the REGISTRY project
+  // (Phase 8 R5), not the deployment's own project: the developer
+  // allow-list lives there. Sign-up exists so the vendor can create
+  // their registry account from this gate; a fresh account still
+  // sees the locked notice until it is added to dev_developers.
   async function handleSignIn(e: FormEvent) {
     e.preventDefault()
     setSignInBusy(true)
     setSignInError(null)
+    setSignUpNotice(null)
     try {
-      await signIn(email.trim(), password)
+      if (authMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+        })
+        if (error) throw error
+        if (!data.session) setSignUpNotice(t('devpanel.signUpCheckEmail'))
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        })
+        if (error) throw error
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : undefined
       setSignInError(t(authErrorKey(message)))
@@ -383,7 +403,7 @@ export default function DevPanelPage() {
   }
 
   async function handleSignOut() {
-    await signOut()
+    await supabase.auth.signOut()
     setIsDev(null)
     setClients([])
     setLicenses([])
@@ -556,7 +576,9 @@ export default function DevPanelPage() {
           <CardHeader className="items-center text-center">
             <CardTitle className="text-2xl">{t('devpanel.title')}</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {t('devpanel.signInBody')}
+              {authMode === 'signup'
+                ? t('devpanel.signUpBody')
+                : t('devpanel.signInBody')}
             </p>
           </CardHeader>
           <CardContent>
@@ -584,10 +606,34 @@ export default function DevPanelPage() {
               {signInError && (
                 <p className="text-sm text-destructive">{signInError}</p>
               )}
+              {signUpNotice && (
+                <p className="text-sm text-muted-foreground">{signUpNotice}</p>
+              )}
               <Button type="submit" className="w-full" disabled={signInBusy}>
-                {signInBusy ? t('devpanel.signingIn') : t('devpanel.signIn')}
+                {signInBusy
+                  ? authMode === 'signup'
+                    ? t('devpanel.signingUp')
+                    : t('devpanel.signingIn')
+                  : authMode === 'signup'
+                    ? t('devpanel.signUp')
+                    : t('devpanel.signIn')}
               </Button>
             </form>
+            <p className="mt-4 text-center text-sm">
+              <button
+                type="button"
+                className="font-medium text-primary hover:underline"
+                onClick={() => {
+                  setAuthMode(authMode === 'signup' ? 'signin' : 'signup')
+                  setSignInError(null)
+                  setSignUpNotice(null)
+                }}
+              >
+                {authMode === 'signup'
+                  ? t('devpanel.switchToSignIn')
+                  : t('devpanel.switchToSignUp')}
+              </button>
+            </p>
             <p className="mt-4 text-center text-sm">
               <Link to="/" className="font-medium text-primary hover:underline">
                 {t('devpanel.backToStore')}

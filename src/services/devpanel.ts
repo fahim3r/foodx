@@ -15,7 +15,7 @@
 // cron-driven: an ACTIVE license past its expiry_date reads as EXPIRED
 // (see effectiveLicenseStatus).
 
-import { supabase } from '@/lib/supabase'
+import { registrySupabase as supabase } from '@/lib/registry'
 import {
   DEV_FEATURE_KEYS,
   type DevClient,

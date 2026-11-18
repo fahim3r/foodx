@@ -604,6 +604,24 @@ There is no automated provisioning yet — that is later-phase work.
   informational and the Developer Panel says so next to the
   toggles.
 
+- **Registry moved to a vendor-only project** (Phase 8 remainder
+  R5) — the registry no longer lives inside the demo deployment's
+  database. A separate Supabase project (`foodx-registry`) holds
+  the `dev_*` tables, the developer allow-list and the
+  `instance-heartbeat` / `instance-activate` functions; its schema
+  is `supabase/registry/bootstrap.sql` (migrations 0014 + 0015
+  adapted: developer identities reference `auth.users`, since the
+  registry project has no restaurant `profiles` table). The
+  Developer Panel and its sign-in gate use a dedicated registry
+  client (`src/lib/registry.ts`, built from the
+  `VITE_FOODX_REGISTRY_*` env vars every deployment already
+  carries); the gate also offers sign-up, though an account alone
+  grants nothing until it is added to `dev_developers`. Migration
+  `0020_remove_registry_schema.sql` drops the `dev_*` tables from
+  client deployments, so a client database never carries the
+  vendor registry again. The registry project never applies
+  client migrations.
+
 
 - **Developer registry tables** (`0014_devpanel.sql`) — `dev_clients`
   (the §51 client record: code, restaurant, owner, contact, domain,
