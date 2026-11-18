@@ -67,7 +67,6 @@ import type {
   PurchaseOrder,
   PurchaseOrderWithDetails,
   StockMovementType,
-  StockMovementType,
   StockMovementWithItem,
   StockTransferWithItems,
   Supplier,
