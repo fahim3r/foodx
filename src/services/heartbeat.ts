@@ -298,3 +298,15 @@ export function isModuleEnabled(
   if (!view.cache) return true
   return view.cache.features[key] === true
 }
+
+/**
+ * Cache-only feature check for surfaces outside the panel's React
+ * tree (the public storefront). Same rule as the panel gates: only
+ * an explicit false from the registry disables a feature — no cache
+ * (the panel has never checked in on this browser) means enabled.
+ */
+export function isFeatureEnabledFromCache(key: DevFeatureKey): boolean {
+  const cache = readLicenseCache()
+  if (!cache) return true
+  return cache.features[key] !== false
+}

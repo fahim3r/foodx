@@ -1310,6 +1310,9 @@ export default function DevPanelPage() {
                         ))}
                       </div>
                     )}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t('devpanel.featureNfcNote')}
+                    </p>
                   </div>
 
                   <div>

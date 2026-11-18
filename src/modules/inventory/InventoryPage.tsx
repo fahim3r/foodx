@@ -13,6 +13,8 @@ import { useTranslation } from 'react-i18next'
 import { isMissingTableError, isUniqueViolationError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
+import { useLicenseState } from '@/hooks/useLicenseState'
+import { isModuleEnabled } from '@/services/heartbeat'
 import {
   adjustStock,
   createInventoryItem,
@@ -182,6 +184,17 @@ export default function InventoryPage() {
   const currency = settings?.currency ?? 'BDT'
 
   const [tab, setTab] = useState<Tab>('items')
+  // Vendor feature flag (§60): multi_branch off hides the
+  // Transfers tab (branch stock lives there).
+  const licenseView = useLicenseState()
+  const multiBranchEnabled = isModuleEnabled(licenseView, 'multi_branch')
+  const visibleTabs = TABS.filter(
+    (key) => key !== 'transfers' || multiBranchEnabled,
+  )
+
+  useEffect(() => {
+    if (!multiBranchEnabled && tab === 'transfers') setTab('items')
+  }, [multiBranchEnabled, tab])
   const [loading, setLoading] = useState(true)
   const [dbPending, setDbPending] = useState(false)
   const [loadError, setLoadError] = useState(false)
@@ -926,7 +939,7 @@ export default function InventoryPage() {
       </header>
 
       <div className="flex flex-wrap gap-2">
-        {TABS.map((key) => (
+        {visibleTabs.map((key) => (
           <Button
             key={key}
             type="button"
@@ -2295,7 +2308,7 @@ export default function InventoryPage() {
         </Card>
       )}
 
-      {tab === 'transfers' && (
+      {tab === 'transfers' && multiBranchEnabled && (
         <div className="flex flex-col gap-6">
           {transferError && (
             <p

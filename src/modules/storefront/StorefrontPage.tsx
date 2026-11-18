@@ -29,6 +29,7 @@ import {
   placeOnlineOrder,
 } from '@/services/storefront'
 import { computeOrderTotals, type PricedLine } from '@/services/pos'
+import { isFeatureEnabledFromCache } from '@/services/heartbeat'
 import {
   TERMINAL_ORDER_STATUSES,
   type Category,
@@ -396,8 +397,15 @@ export default function StorefrontPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placed, slug])
 
+  // Vendor feature flag (§60): when the registry says online
+  // ordering is off for this deployment, the menu stays browsable
+  // but checkout is replaced by a notice. Read from the license
+  // cache the panel maintains on this origin; no cache = enabled.
+  const orderingEnabled = isFeatureEnabledFromCache('online_ordering')
+
   const handlePlaceOrder = async (event: FormEvent) => {
     event.preventDefault()
+    if (!orderingEnabled) return
     if (!info || cart.length === 0 || placing) return
     setPlaceErrorKey(null)
     if (!customerName.trim() || !customerPhone.trim()) {
@@ -802,7 +810,13 @@ export default function StorefrontPage({
                   </div>
                 )}
 
-                {previewLines.length > 0 && (
+                {previewLines.length > 0 && !orderingEnabled && (
+                  <p className="border-t pt-4 text-sm text-muted-foreground">
+                    {t('storefront.orderingDisabled')}
+                  </p>
+                )}
+
+                {previewLines.length > 0 && orderingEnabled && (
                   <form
                     onSubmit={handlePlaceOrder}
                     className="flex flex-col gap-4 border-t pt-4"

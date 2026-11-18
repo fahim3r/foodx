@@ -13,6 +13,8 @@ import { Link } from 'react-router-dom'
 import { isMissingTableError, isUniqueViolationError } from '@/lib/errors'
 import { formatMoney, roundMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
+import { useLicenseState } from '@/hooks/useLicenseState'
+import { isModuleEnabled } from '@/services/heartbeat'
 import {
   adjustLoyaltyPoints,
   fetchCustomerBalance,
@@ -146,6 +148,13 @@ export default function CustomersPage() {
   const { loading: authLoading, user, restaurant, settings } = useAuth()
   const restaurantId = restaurant?.id
   const currency = settings?.currency ?? 'BDT'
+
+  // Vendor feature flag (§60): loyalty off hides the Loyalty tab.
+  const licenseView = useLicenseState()
+  const loyaltyEnabled = isModuleEnabled(licenseView, 'loyalty')
+  const visibleTabs = TABS.filter(
+    (item) => item !== 'loyalty' || loyaltyEnabled,
+  )
 
   const [tab, setTab] = useState<Tab>('customers')
   const [loading, setLoading] = useState(true)
@@ -549,7 +558,7 @@ export default function CustomersPage() {
       </header>
 
       <div className="flex flex-wrap gap-2" role="tablist">
-        {TABS.map((item) => (
+        {visibleTabs.map((item) => (
           <Button
             key={item}
             type="button"
@@ -923,7 +932,7 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {tab === 'loyalty' && (
+      {tab === 'loyalty' && loyaltyEnabled && (
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>

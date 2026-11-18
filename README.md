@@ -586,10 +586,23 @@ There is no automated provisioning yet — that is later-phase work.
   everything works offline; a license problem raises a warning
   banner but never blocks POS (§53). Settings gains a **License &
   updates** card (§42) with a manual "Check now". The Delivery and
-  Business modules are gated by the pulled feature flags (§60);
-  the other flags are display-only for now. Update *execution*
-  remains a vendor-operated deploy — the panel only detects and
-  displays new releases (§56).
+  Business modules are gated by the pulled feature flags (§60).
+  Update *execution* remains a vendor-operated deploy — the panel
+  only detects and displays new releases (§56).
+
+- **Feature-flag enforcement completed** (Phase 8 remainder R1) —
+  all six §60 flags now have real effects, still under the §53
+  rule (only an explicit `false` from the registry gates; POS is
+  never blocked): **online_ordering** off replaces the storefront
+  checkout with an "ordering unavailable" notice (the menu stays
+  browsable; the storefront reads the same-origin license cache,
+  and the server-side order RPC itself is not gated);
+  **loyalty** off hides the Customers → Loyalty tab and the
+  loyalty report (points data is untouched); **multi_branch**
+  off hides the Branches page and the Inventory → Transfers tab.
+  **nfc** has no module in the app yet, so the flag stays
+  informational and the Developer Panel says so next to the
+  toggles.
 
 
 - **Developer registry tables** (`0014_devpanel.sql`) — `dev_clients`

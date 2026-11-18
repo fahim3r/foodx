@@ -15,6 +15,8 @@ import {
 } from 'recharts'
 import { formatMoney } from '@/lib/money'
 import { escapeHtml, printHtml } from '@/lib/print'
+import { useLicenseState } from '@/hooks/useLicenseState'
+import { isModuleEnabled } from '@/services/heartbeat'
 import {
   fetchBranchSales,
   fetchCategorySales,
@@ -251,6 +253,17 @@ export default function ReportsPanel({
   const rangeState = useReportRange()
   const { range } = rangeState
   const [report, setReport] = useState<ReportKey>('overview')
+  // Vendor feature flag (§60): loyalty off removes the loyalty
+  // report from the picker; if it was selected, fall back.
+  const licenseView = useLicenseState()
+  const loyaltyEnabled = isModuleEnabled(licenseView, 'loyalty')
+  const visibleReportKeys = REPORT_KEYS.filter(
+    (key) => key !== 'loyalty' || loyaltyEnabled,
+  )
+
+  useEffect(() => {
+    if (!loyaltyEnabled && report === 'loyalty') setReport('overview')
+  }, [loyaltyEnabled, report])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
 
@@ -358,7 +371,7 @@ export default function ReportsPanel({
             onChange={(e) => setReport(e.target.value as ReportKey)}
             className={SELECT_CLASS}
           >
-            {REPORT_KEYS.map((key) => (
+            {visibleReportKeys.map((key) => (
               <option key={key} value={key}>
                 {t(`reports.report_${key}`)}
               </option>
