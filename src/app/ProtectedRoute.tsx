@@ -38,11 +38,21 @@ export default function ProtectedRoute({
     )
   }
 
+  // '/panel' on platform hosts, '' under the /panel basename (where
+  // the router strips the prefix from location.pathname).
+  const panelRoot =
+    location.pathname === '/panel' ||
+    location.pathname.startsWith('/panel/')
+      ? '/panel'
+      : ''
+
   if (!user) {
-    // Relative target: the admin lives under /panel in both mountings
-    // (descendant of /panel/* on platform hosts, basename /panel on a
-    // restaurant domain), so "login" resolves to the panel login.
-    return <Navigate to="login" replace />
+    // Absolute target, computed from the current path: the admin
+    // lives under /panel in both mountings (descendant of /panel/* on
+    // platform hosts, basename /panel on a restaurant domain). A
+    // relative "login" here resolved against the current page's path
+    // (e.g. /panel/settings/login — a blank page), so compute it.
+    return <Navigate to={`${panelRoot}/login`} replace />
   }
 
   if (lockedRestaurantId) {
@@ -89,17 +99,13 @@ export default function ProtectedRoute({
   // false is sent to the setup wizard first. The wizard route itself
   // is exempt, and the wizard can be finished without activating —
   // it guides the first run, it does not lock the panel (§53).
-  const onSetupRoute =
-    location.pathname === '/setup' ||
-    location.pathname.endsWith('/panel/setup')
+  const setupPath = `${panelRoot}/setup`
+  const onSetupRoute = location.pathname === setupPath
   if (
     settings &&
     settings.onboarding_completed === false &&
     !onSetupRoute
   ) {
-    const setupPath = location.pathname.startsWith('/panel/')
-      ? '/panel/setup'
-      : '/setup'
     return <Navigate to={setupPath} replace />
   }
 
