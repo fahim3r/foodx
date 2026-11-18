@@ -209,3 +209,22 @@ export async function updateBranchContact(
     .eq('id', branchId)
   if (error) throw error
 }
+
+/** Create the main branch (onboarding wizard step 1, when the
+ * deployment was seeded without one): the POS needs a branch, and
+ * the wizard's phone/address need a home. */
+export async function createMainBranch(
+  restaurantId: string,
+  values: { name: string; phone: string | null; address: string | null },
+): Promise<void> {
+  const { error } = await supabase.from('branches').insert({
+    id: crypto.randomUUID(),
+    restaurant_id: restaurantId,
+    name: values.name,
+    phone: values.phone,
+    address: values.address,
+    is_main: true,
+    status: 'active',
+  })
+  if (error) throw error
+}

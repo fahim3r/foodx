@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/useAuth'
 import { isHeartbeatConfigured } from '@/services/heartbeat'
 import {
+  createMainBranch,
   fetchBranches,
   updateBranchContact,
   updateRestaurant,
@@ -117,6 +118,14 @@ export default function SetupPage() {
       })
       if (branch) {
         await updateBranchContact(branch.id, {
+          phone: phone.trim() || null,
+          address: address.trim() || null,
+        })
+      } else if (phone.trim() || address.trim()) {
+        // Seeded without a branch: create the main one so the contact
+        // details have a home (and the POS has its default branch).
+        await createMainBranch(restaurantId, {
+          name: name.trim(),
           phone: phone.trim() || null,
           address: address.trim() || null,
         })
