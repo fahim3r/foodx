@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Boxes,
+  Building2,
   ChefHat,
   ClipboardList,
   LayoutDashboard,
@@ -62,6 +63,7 @@ const NAV_ITEMS = [
     end: false,
     feature: 'accounting' as DevFeatureKey,
   },
+  { to: '/branches', key: 'nav.branches', icon: Building2, end: false },
   { to: '/settings', key: 'nav.settings', icon: Settings, end: false },
   { to: '/staff', key: 'nav.staff', icon: UserCog, end: false },
   { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false },

@@ -14,6 +14,9 @@ import type {
   StockMovement,
   StockMovementType,
   StockMovementWithItem,
+  StockTransfer,
+  StockTransferItem,
+  StockTransferWithItems,
 } from '@/types'
 
 // --- inventory items ---------------------------------------------------------
@@ -263,5 +266,177 @@ export async function fetchProductAvailability(
       console.error('[Inventory] availability fetch failed', error)
     }
     return new Map<string, number>()
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 Step 2B — branch stock + transfers (migration 0018, §41)
+// ---------------------------------------------------------------------------
+
+export interface BranchStockRow {
+  inventoryItemId: string
+  name: string
+  unit: string
+  branchQuantity: number
+  globalQuantity: number
+}
+
+/** Stock of one branch: every active item with its branch quantity
+ * (0 when the branch has no row yet) next to the global quantity. */
+export async function fetchBranchStock(
+  restaurantId: string,
+  branchId: string,
+): Promise<BranchStockRow[]> {
+  const { data: items, error } = await supabase
+    .from('inventory_items')
+    .select('id, name, unit, current_quantity')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+  if (error) throw error
+  const { data: stock, error: stockError } = await supabase
+    .from('branch_stock')
+    .select('inventory_item_id, quantity')
+    .eq('restaurant_id', restaurantId)
+    .eq('branch_id', branchId)
+  if (stockError) throw stockError
+  const byItem = new Map(
+    ((stock ?? []) as { inventory_item_id: string; quantity: number }[]).map(
+      (s) => [s.inventory_item_id, Number(s.quantity)],
+    ),
+  )
+  return (
+    (items ?? []) as {
+      id: string
+      name: string
+      unit: string
+      current_quantity: number
+    }[]
+  ).map((item) => ({
+    inventoryItemId: item.id,
+    name: item.name,
+    unit: item.unit,
+    branchQuantity: byItem.get(item.id) ?? 0,
+    globalQuantity: Number(item.current_quantity),
+  }))
+}
+
+export async function fetchTransfers(
+  restaurantId: string,
+): Promise<StockTransferWithItems[]> {
+  const { data, error } = await supabase
+    .from('stock_transfers')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  const transfers = (data ?? []) as StockTransfer[]
+  if (transfers.length === 0) return []
+  const { data: items, error: itemsError } = await supabase
+    .from('stock_transfer_items')
+    .select('*')
+    .in(
+      'transfer_id',
+      transfers.map((t) => t.id),
+    )
+  if (itemsError) throw itemsError
+  const itemsByTransfer = new Map<string, StockTransferItem[]>()
+  for (const item of (items ?? []) as StockTransferItem[]) {
+    const list = itemsByTransfer.get(item.transfer_id) ?? []
+    list.push(item)
+    itemsByTransfer.set(item.transfer_id, list)
+  }
+  return transfers.map((t) => ({
+    ...t,
+    items: itemsByTransfer.get(t.id) ?? [],
+  }))
+}
+
+export interface CreateTransferInput {
+  fromBranchId: string
+  toBranchId: string
+  notes?: string
+  lines: { inventoryItemId: string; quantity: number }[]
+}
+
+/** Create a transfer REQUEST. No stock moves until receive. */
+export async function createTransfer(
+  restaurantId: string,
+  userId: string,
+  input: CreateTransferInput,
+): Promise<void> {
+  const lines = input.lines.filter((l) => l.quantity > 0)
+  if (lines.length === 0) throw new Error('empty_transfer')
+  if (input.fromBranchId === input.toBranchId) {
+    throw new Error('same_branch')
+  }
+  const transferId = crypto.randomUUID()
+  const { error } = await supabase.from('stock_transfers').insert({
+    id: transferId,
+    restaurant_id: restaurantId,
+    from_branch_id: input.fromBranchId,
+    to_branch_id: input.toBranchId,
+    status: 'REQUESTED',
+    notes: input.notes?.trim() ? input.notes.trim() : null,
+    requested_by: userId,
+  })
+  if (error) throw error
+  const { error: itemsError } = await supabase
+    .from('stock_transfer_items')
+    .insert(
+      lines.map((l) => ({
+        id: crypto.randomUUID(),
+        restaurant_id: restaurantId,
+        transfer_id: transferId,
+        inventory_item_id: l.inventoryItemId,
+        quantity: l.quantity,
+      })),
+    )
+  if (itemsError) {
+    // Roll the header back so a failed request leaves no orphan.
+    await supabase
+      .from('stock_transfers')
+      .update({ status: 'CANCELLED' })
+      .eq('id', transferId)
+    throw itemsError
+  }
+}
+
+export async function setTransferStatus(
+  transferId: string,
+  status: 'APPROVED' | 'REJECTED' | 'CANCELLED',
+  userId: string,
+): Promise<void> {
+  const patch: Record<string, unknown> = { status }
+  if (status === 'APPROVED') {
+    patch.approved_by = userId
+    patch.approved_at = new Date().toISOString()
+  }
+  const { error } = await supabase
+    .from('stock_transfers')
+    .update(patch)
+    .eq('id', transferId)
+  if (error) throw error
+}
+
+/**
+ * Receive an APPROVED transfer: the database function checks the
+ * source branch's stock, writes both movements and moves the branch
+ * quantities atomically. Throws 'insufficient_branch_stock' when the
+ * source branch does not hold enough.
+ */
+export async function receiveTransfer(transferId: string): Promise<void> {
+  const { error } = await supabase.rpc('receive_stock_transfer', {
+    p_transfer_id: transferId,
+  })
+  if (error) {
+    if (error.message.includes('insufficient_branch_stock')) {
+      throw new Error('insufficient_branch_stock')
+    }
+    if (error.message.includes('transfer_not_approved')) {
+      throw new Error('transfer_not_approved')
+    }
+    throw error
   }
 }

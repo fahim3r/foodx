@@ -402,6 +402,46 @@ export interface StockMovement {
   reason: string | null
   created_by: string | null
   created_at: string
+  /** Branch the movement hit (migration 0018); null on movements
+   * written before 0018 and on restaurants without branches. */
+  branch_id: string | null
+}
+
+export type StockTransferStatus =
+  | 'REQUESTED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'RECEIVED'
+  | 'CANCELLED'
+
+/** A branch-to-branch stock transfer (migration 0018, §41). Stock
+ * moves only at receive time, inside receive_stock_transfer(). */
+export interface StockTransfer {
+  id: string
+  restaurant_id: string
+  from_branch_id: string
+  to_branch_id: string
+  status: StockTransferStatus
+  notes: string | null
+  requested_by: string | null
+  approved_by: string | null
+  approved_at: string | null
+  received_by: string | null
+  received_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StockTransferItem {
+  id: string
+  restaurant_id: string
+  transfer_id: string
+  inventory_item_id: string
+  quantity: number
+}
+
+export interface StockTransferWithItems extends StockTransfer {
+  items: StockTransferItem[]
 }
 
 /** A stock movement with its item's name + unit attached. */

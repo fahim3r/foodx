@@ -228,3 +228,84 @@ export async function createMainBranch(
   })
   if (error) throw error
 }
+
+export interface BranchInput {
+  name: string
+  code: string | null
+  address: string | null
+  phone: string | null
+  isMain: boolean
+  status: 'active' | 'inactive'
+}
+
+/** Branch management (Phase 7 Step 2B, §40). When the new branch is
+ * the main branch, any previous main branch is demoted first so a
+ * restaurant keeps exactly one main branch. */
+export async function createBranch(
+  restaurantId: string,
+  values: BranchInput,
+): Promise<Branch> {
+  if (values.isMain) {
+    const { error: demoteError } = await supabase
+      .from('branches')
+      .update({ is_main: false })
+      .eq('restaurant_id', restaurantId)
+      .eq('is_main', true)
+    if (demoteError) throw demoteError
+  }
+  const { data, error } = await supabase
+    .from('branches')
+    .insert({
+      id: crypto.randomUUID(),
+      restaurant_id: restaurantId,
+      name: values.name.trim(),
+      code: values.code?.trim() || null,
+      address: values.address?.trim() || null,
+      phone: values.phone?.trim() || null,
+      is_main: values.isMain,
+      status: values.status,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data as Branch
+}
+
+export async function updateBranch(
+  restaurantId: string,
+  branchId: string,
+  values: BranchInput,
+): Promise<void> {
+  if (values.isMain) {
+    const { error: demoteError } = await supabase
+      .from('branches')
+      .update({ is_main: false })
+      .eq('restaurant_id', restaurantId)
+      .eq('is_main', true)
+      .neq('id', branchId)
+    if (demoteError) throw demoteError
+  }
+  const { error } = await supabase
+    .from('branches')
+    .update({
+      name: values.name.trim(),
+      code: values.code?.trim() || null,
+      address: values.address?.trim() || null,
+      phone: values.phone?.trim() || null,
+      is_main: values.isMain,
+      status: values.status,
+    })
+    .eq('id', branchId)
+  if (error) throw error
+}
+
+/**
+ * Fill branch_stock rows for the main branch from the global totals
+ * (migration 0018). Only fills rows that do not exist yet — safe to
+ * call after creating a main branch; returns how many rows were added.
+ */
+export async function backfillBranchStock(): Promise<number> {
+  const { data, error } = await supabase.rpc('backfill_branch_stock')
+  if (error) throw error
+  return Number(data ?? 0)
+}

@@ -16,13 +16,20 @@ import { useAuth } from '@/hooks/useAuth'
 import {
   adjustStock,
   createInventoryItem,
+  createTransfer,
   deleteInventoryItem,
+  fetchBranchStock,
   fetchInventoryItems,
   fetchProductAvailability,
   fetchStockMovements,
+  fetchTransfers,
+  receiveTransfer,
   recordWaste,
+  setTransferStatus,
   updateInventoryItem,
+  type BranchStockRow,
 } from '@/services/inventory'
+import { fetchBranches, type Branch } from '@/services/restaurant'
 import { fetchProducts } from '@/services/menu'
 import {
   advancePurchaseOrderStatus,
@@ -60,7 +67,9 @@ import type {
   PurchaseOrder,
   PurchaseOrderWithDetails,
   StockMovementType,
+  StockMovementType,
   StockMovementWithItem,
+  StockTransferWithItems,
   Supplier,
 } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -77,9 +86,22 @@ import { Label } from '@/components/ui/label'
 const SELECT_CLASS =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
 
-type Tab = 'items' | 'recipes' | 'suppliers' | 'purchases' | 'movements'
+type Tab =
+  | 'items'
+  | 'recipes'
+  | 'suppliers'
+  | 'purchases'
+  | 'movements'
+  | 'transfers'
 
-const TABS: Tab[] = ['items', 'recipes', 'suppliers', 'purchases', 'movements']
+const TABS: Tab[] = [
+  'items',
+  'recipes',
+  'suppliers',
+  'purchases',
+  'movements',
+  'transfers',
+]
 
 const TAB_KEYS: Record<Tab, string> = {
   items: 'inventory.tabItems',
@@ -87,6 +109,7 @@ const TAB_KEYS: Record<Tab, string> = {
   suppliers: 'inventory.tabSuppliers',
   purchases: 'inventory.tabPurchases',
   movements: 'inventory.tabMovements',
+  transfers: 'inventory.tabTransfers',
 }
 
 const MOVEMENT_TYPE_KEYS: Record<StockMovementType, string> = {
@@ -532,6 +555,135 @@ export default function InventoryPage() {
         isUniqueViolationError(error)
           ? 'inventory.nameTaken'
           : 'inventory.saveFailed',
+      )
+    }
+  }
+
+  // --- branch transfers (Phase 7 Step 2B, migration 0018) --------------------
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [stockBranchId, setStockBranchId] = useState('')
+  const [branchStock, setBranchStock] = useState<BranchStockRow[]>([])
+  const [transfers, setTransfers] = useState<StockTransferWithItems[]>([])
+  const [transfersLoaded, setTransfersLoaded] = useState(false)
+  const [transferError, setTransferError] = useState<string | null>(null)
+  const [transferSaved, setTransferSaved] = useState(false)
+  const [tfFrom, setTfFrom] = useState('')
+  const [tfTo, setTfTo] = useState('')
+  const [tfNotes, setTfNotes] = useState('')
+  const [tfLines, setTfLines] = useState<
+    { itemId: string; quantity: string }[]
+  >([{ itemId: '', quantity: '' }])
+  const [tfSaving, setTfSaving] = useState(false)
+
+  const loadTransfersData = useCallback(async () => {
+    if (!restaurantId) return
+    try {
+      const [branchRows, transferRows] = await Promise.all([
+        fetchBranches(restaurantId),
+        fetchTransfers(restaurantId),
+      ])
+      setBranches(branchRows)
+      setTransfers(transferRows)
+      setStockBranchId((prev) => {
+        if (prev && branchRows.some((b) => b.id === prev)) return prev
+        const main = branchRows.find((b) => b.is_main) ?? branchRows[0]
+        return main?.id ?? ''
+      })
+      setTfFrom((prev) => {
+        if (prev) return prev
+        const main = branchRows.find((b) => b.is_main) ?? branchRows[0]
+        return main?.id ?? ''
+      })
+      setTransfersLoaded(true)
+    } catch {
+      setTransferError('inventory.transfersLoadFailed')
+    }
+  }, [restaurantId])
+
+  useEffect(() => {
+    if (tab === 'transfers' && !transfersLoaded) {
+      void loadTransfersData()
+    }
+  }, [tab, transfersLoaded, loadTransfersData])
+
+  useEffect(() => {
+    if (tab !== 'transfers' || !restaurantId || !stockBranchId) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const rows = await fetchBranchStock(restaurantId, stockBranchId)
+        if (!cancelled) setBranchStock(rows)
+      } catch {
+        if (!cancelled) setBranchStock([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, restaurantId, stockBranchId])
+
+  const refreshTransfers = async () => {
+    setTransfersLoaded(false)
+    await loadTransfersData()
+    if (restaurantId && stockBranchId) {
+      setBranchStock(
+        await fetchBranchStock(restaurantId, stockBranchId).catch(() => []),
+      )
+    }
+  }
+
+  const handleCreateTransfer = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!restaurantId || !user || tfSaving) return
+    const lines = tfLines
+      .filter((l) => l.itemId && Number(l.quantity) > 0)
+      .map((l) => ({
+        inventoryItemId: l.itemId,
+        quantity: Number(l.quantity),
+      }))
+    if (!tfFrom || !tfTo || tfFrom === tfTo || lines.length === 0) {
+      setTransferError('inventory.transferInvalid')
+      return
+    }
+    setTfSaving(true)
+    setTransferError(null)
+    setTransferSaved(false)
+    try {
+      await createTransfer(restaurantId, user.id, {
+        fromBranchId: tfFrom,
+        toBranchId: tfTo,
+        notes: tfNotes,
+        lines,
+      })
+      setTfLines([{ itemId: '', quantity: '' }])
+      setTfNotes('')
+      setTransferSaved(true)
+      await refreshTransfers()
+    } catch {
+      setTransferError('inventory.transferFailed')
+    } finally {
+      setTfSaving(false)
+    }
+  }
+
+  const handleTransferAction = async (
+    transfer: StockTransferWithItems,
+    action: 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'RECEIVE',
+  ) => {
+    if (!user) return
+    setTransferError(null)
+    try {
+      if (action === 'RECEIVE') {
+        await receiveTransfer(transfer.id)
+      } else {
+        await setTransferStatus(transfer.id, action, user.id)
+      }
+      await refreshTransfers()
+    } catch (error) {
+      setTransferError(
+        error instanceof Error && error.message === 'insufficient_branch_stock'
+          ? 'inventory.transferInsufficient'
+          : 'inventory.transferFailed',
       )
     }
   }
@@ -2142,6 +2294,362 @@ export default function InventoryPage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {tab === 'transfers' && (
+        <div className="flex flex-col gap-6">
+          {transferError && (
+            <p
+              role="alert"
+              className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {t(transferError)}
+            </p>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('inventory.branchStockTitle')}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex max-w-xs flex-col gap-2">
+                <Label htmlFor="stockBranch">
+                  {t('inventory.branchLabel')}
+                </Label>
+                <select
+                  id="stockBranch"
+                  value={stockBranchId}
+                  onChange={(e) => setStockBranchId(e.target.value)}
+                  className={SELECT_CLASS}
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                      {b.is_main ? ` (${t('branches.mainBadge')})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {branchStock.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('inventory.noItems')}
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-2 font-medium">
+                        {t('inventory.itemName')}
+                      </th>
+                      <th className="py-2 pr-2 font-medium">
+                        {t('inventory.branchQty')}
+                      </th>
+                      <th className="py-2 pr-2 font-medium">
+                        {t('inventory.globalQty')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {branchStock.map((row) => (
+                      <tr
+                        key={row.inventoryItemId}
+                        className="border-b last:border-0"
+                      >
+                        <td className="py-2 pr-2">
+                          {row.name}{' '}
+                          <span className="text-muted-foreground">
+                            ({row.unit})
+                          </span>
+                        </td>
+                        <td className="py-2 pr-2">
+                          {formatQty(row.branchQuantity)}
+                        </td>
+                        <td className="py-2 pr-2">
+                          {formatQty(row.globalQuantity)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('inventory.newTransfer')}</CardTitle>
+              <CardDescription>
+                {t('inventory.newTransferHint')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                onSubmit={handleCreateTransfer}
+                className="flex flex-col gap-4"
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="tfFrom">{t('inventory.fromBranch')}</Label>
+                    <select
+                      id="tfFrom"
+                      value={tfFrom}
+                      onChange={(e) => setTfFrom(e.target.value)}
+                      className={SELECT_CLASS}
+                      required
+                    >
+                      <option value="" disabled>
+                        {t('inventory.fromBranch')}
+                      </option>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="tfTo">{t('inventory.toBranch')}</Label>
+                    <select
+                      id="tfTo"
+                      value={tfTo}
+                      onChange={(e) => setTfTo(e.target.value)}
+                      className={SELECT_CLASS}
+                      required
+                    >
+                      <option value="" disabled>
+                        {t('inventory.toBranch')}
+                      </option>
+                      {branches
+                        .filter((b) => b.id !== tfFrom)
+                        .map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {tfLines.map((line, index) => (
+                    <div key={index} className="flex gap-2">
+                      <select
+                        value={line.itemId}
+                        onChange={(e) =>
+                          setTfLines((prev) =>
+                            prev.map((l, i) =>
+                              i === index
+                                ? { ...l, itemId: e.target.value }
+                                : l,
+                            ),
+                          )
+                        }
+                        className={SELECT_CLASS}
+                        aria-label={t('inventory.itemName')}
+                      >
+                        <option value="" disabled>
+                          {t('inventory.itemName')}
+                        </option>
+                        {items
+                          .filter((item) => item.is_active)
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} ({item.unit})
+                            </option>
+                          ))}
+                      </select>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        value={line.quantity}
+                        onChange={(e) =>
+                          setTfLines((prev) =>
+                            prev.map((l, i) =>
+                              i === index
+                                ? { ...l, quantity: e.target.value }
+                                : l,
+                            ),
+                          )
+                        }
+                        placeholder={t('inventory.quantity')}
+                        aria-label={t('inventory.quantity')}
+                        className="max-w-32"
+                      />
+                      {tfLines.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setTfLines((prev) =>
+                              prev.filter((_, i) => i !== index),
+                            )
+                          }
+                        >
+                          {t('common.remove')}
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  <div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setTfLines((prev) => [
+                          ...prev,
+                          { itemId: '', quantity: '' },
+                        ])
+                      }
+                    >
+                      {t('inventory.addLine')}
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="tfNotes">{t('inventory.paymentNote')}</Label>
+                  <Input
+                    id="tfNotes"
+                    value={tfNotes}
+                    onChange={(e) => setTfNotes(e.target.value)}
+                  />
+                </div>
+                {transferSaved && (
+                  <p
+                    role="status"
+                    className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+                  >
+                    {t('inventory.transferSaved')}
+                  </p>
+                )}
+                <div>
+                  <Button type="submit" disabled={tfSaving}>
+                    {t('inventory.createTransfer')}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('inventory.transfersListTitle')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {transfers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('inventory.noTransfers')}
+                </p>
+              ) : (
+                <ul className="flex flex-col divide-y">
+                  {transfers.map((transfer) => {
+                    const fromName =
+                      branches.find((b) => b.id === transfer.from_branch_id)
+                        ?.name ?? transfer.from_branch_id.slice(0, 8)
+                    const toName =
+                      branches.find((b) => b.id === transfer.to_branch_id)
+                        ?.name ?? transfer.to_branch_id.slice(0, 8)
+                    return (
+                      <li
+                        key={transfer.id}
+                        className="flex flex-col gap-1 py-3 text-sm first:pt-0 last:pb-0"
+                      >
+                        <span className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium">
+                            {fromName} → {toName}
+                          </span>
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                            {t(
+                              `inventory.transferStatus_${transfer.status}`,
+                            )}
+                          </span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {transfer.items
+                            .map((item) => {
+                              const inv = items.find(
+                                (i) => i.id === item.inventory_item_id,
+                              )
+                              return `${inv?.name ?? item.inventory_item_id.slice(0, 8)} × ${formatQty(Number(item.quantity))}${inv ? ` ${inv.unit}` : ''}`
+                            })
+                            .join(', ')}
+                          {' · '}
+                          {formatDate(transfer.created_at)}
+                          {transfer.notes ? ` · ${transfer.notes}` : ''}
+                        </span>
+                        {(transfer.status === 'REQUESTED' ||
+                          transfer.status === 'APPROVED') && (
+                          <span className="flex gap-1 pt-1">
+                            {transfer.status === 'REQUESTED' && (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    void handleTransferAction(
+                                      transfer,
+                                      'APPROVED',
+                                    )
+                                  }
+                                >
+                                  {t('inventory.transferApprove')}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    void handleTransferAction(
+                                      transfer,
+                                      'REJECTED',
+                                    )
+                                  }
+                                >
+                                  {t('inventory.transferReject')}
+                                </Button>
+                              </>
+                            )}
+                            {transfer.status === 'APPROVED' && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  void handleTransferAction(
+                                    transfer,
+                                    'RECEIVE',
+                                  )
+                                }
+                              >
+                                {t('inventory.transferReceive')}
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() =>
+                                void handleTransferAction(
+                                  transfer,
+                                  'CANCELLED',
+                                )
+                              }
+                            >
+                              {t('common.cancel')}
+                            </Button>
+                          </span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )

@@ -541,8 +541,23 @@ There is no automated provisioning yet — that is later-phase work.
   detail page reprints receipt and kitchen ticket — restaurant logo
   on top, small "Powered by FoodX" underneath (branding rule below);
   the browser print dialog picks the printer (no per-device printer
-  routing yet). **Still open (Step 2B):** branch management UI and
-  branch inventory / transfers (§40–§41).
+  routing yet).
+- **Step 2B (2026-11-18):** branches are manageable and stock is
+  tracked per branch (§40–§41). Migration
+  `0018_branch_stock_transfers.sql` adds `branch_stock` (written
+  only by the stock functions, like `stock_movements`),
+  `stock_movements.branch_id`, and `stock_transfers` /
+  `stock_transfer_items` (no DELETE policies — the transfer history
+  is the audit trail). `apply_stock_movement()` now also moves the
+  branch quantity (the order's branch for sales, the main branch by
+  default), so the global total stays the single source the rest of
+  the app reads. Receiving a transfer runs in one database function:
+  it refuses when the source branch lacks the stock, writes the
+  TRANSFER_OUT / TRANSFER_IN movements, and never changes global
+  totals. UI: a **Branches page** (`/panel/branches`, CRUD, one main
+  branch enforced) and an Inventory **Transfers tab** (per-branch
+  stock viewer, transfer request → approve → receive flow). Not
+  covered: per-branch menus, delivery zones or printer routing.
 
 ## What Phase 8 adds
 
@@ -669,7 +684,7 @@ Do not assume it exists.
 | Rate limiting / anti-spam on the public order endpoint | Not started (later work) |
 | Reports / analytics | Built (Phase 7 + Step 2A): full §39 list (P&L, sales, cashier, waiter, branch, kitchen, customer, loyalty, inventory, purchase, supplier balances, tax, discounts, refunds/voids, shifts), §28 item margins, CSV export + print/PDF |
 | Role editing / assigning permissions to roles | Read-only view only; the `role_permissions` table is seeded **empty** — the matrix shows all dashes until assignments are made (a later phase) |
-| Branch management UI | The `branches` table exists; no UI or service touches it yet |
+| Branch management UI | Built (Phase 7 Step 2B): Branches page CRUD + per-branch stock and transfers (§40–§41) |
 | Staff/user management UI | Not started |
 | Feature flags UI | The `feature_flags` table exists; nothing reads or writes it yet |
 | Audit log UI | The `audit_logs` table exists (insert-only); nothing writes to it yet |

@@ -53,6 +53,7 @@ import RolesPage from '@/modules/roles/RolesPage'
 import SettingsPage from '@/modules/settings/SettingsPage'
 import SetupPage from '@/modules/settings/SetupPage'
 import StaffPage from '@/modules/staff/StaffPage'
+import BranchesPage from '@/modules/branches/BranchesPage'
 import TablesPage from '@/modules/tables/TablesPage'
 import DevPanelPage from '@/modules/devpanel/DevPanelPage'
 import LandingPage from '@/modules/landing/LandingPage'
@@ -105,6 +106,7 @@ function AdminRoutes({
         <Route path="settings" element={<SettingsPage />} />
         <Route path="setup" element={<SetupPage />} />
         <Route path="staff" element={<StaffPage />} />
+        <Route path="branches" element={<BranchesPage />} />
         <Route path="roles" element={<RolesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="." replace />} />
