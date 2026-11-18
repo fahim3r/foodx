@@ -37,6 +37,7 @@ import {
   featureStateMap,
   fetchDevClientFeatures,
   fetchDevHeartbeats,
+  fetchDevBackupReports,
   fetchDevClients,
   fetchDevLicenses,
   fetchDevReleases,
@@ -63,6 +64,7 @@ import {
   LICENSE_PLANS,
   type DevClient,
   type DevHeartbeat,
+  type DevBackupReport,
   type DevClientStatus,
   type DevFeatureKey,
   type DevLicense,
@@ -219,6 +221,7 @@ export default function DevPanelPage() {
   > | null>(null)
   const [supportNotes, setSupportNotes] = useState<DevSupportNote[]>([])
   const [heartbeats, setHeartbeats] = useState<DevHeartbeat[]>([])
+  const [backupReports, setBackupReports] = useState<DevBackupReport[]>([])
   const [issuedToken, setIssuedToken] = useState<string | null>(null)
   const [tokenBusy, setTokenBusy] = useState(false)
   const [noteText, setNoteText] = useState('')
@@ -310,6 +313,7 @@ export default function DevPanelPage() {
       setFeatureMap(null)
       setSupportNotes([])
       setHeartbeats([])
+      setBackupReports([])
       setIssuedToken(null)
       return
     }
@@ -318,12 +322,14 @@ export default function DevPanelPage() {
       fetchDevClientFeatures(selectedClientId),
       fetchDevSupportNotes(selectedClientId),
       fetchDevHeartbeats(selectedClientId),
+      fetchDevBackupReports(selectedClientId),
     ])
-      .then(([features, notes, beats]) => {
+      .then(([features, notes, beats, backups]) => {
         if (!active) return
         setFeatureMap(featureStateMap(features))
         setSupportNotes(notes)
         setHeartbeats(beats)
+        setBackupReports(backups)
       })
       .catch(() => {
         if (active) setActionError(t('devpanel.loadError'))
@@ -833,6 +839,30 @@ export default function DevPanelPage() {
                       nowMs - new Date(c.last_seen_at).getTime() >= dayMs,
                   ).length
                   const never = clients.filter((c) => !c.last_seen_at).length
+                  // Backup health (Phase 8 R3): from the latest
+                  // report each client carries — fresh = success
+                  // within 48h, stale = older success, failed =
+                  // the last run failed, never = no report yet.
+                  const backupFresh = clients.filter(
+                    (c) =>
+                      c.last_backup_status === 'success' &&
+                      c.last_backup_at &&
+                      nowMs - new Date(c.last_backup_at).getTime() <
+                        2 * dayMs,
+                  ).length
+                  const backupStale = clients.filter(
+                    (c) =>
+                      c.last_backup_status === 'success' &&
+                      c.last_backup_at &&
+                      nowMs - new Date(c.last_backup_at).getTime() >=
+                        2 * dayMs,
+                  ).length
+                  const backupFailed = clients.filter(
+                    (c) => c.last_backup_status === 'failed',
+                  ).length
+                  const backupNever = clients.filter(
+                    (c) => !c.last_backup_at,
+                  ).length
                   return (
                     <div className="space-y-1 text-sm">
                       <p>
@@ -847,8 +877,25 @@ export default function DevPanelPage() {
                         {t('devpanel.healthNever')}:{' '}
                         <span className="font-semibold">{never}</span>
                       </p>
-                      <p className="pt-1 text-xs text-muted-foreground">
-                        {t('devpanel.healthBackupNote')}
+                      <p className="pt-2">
+                        {t('devpanel.healthBackupFresh')}:{' '}
+                        <span className="font-semibold">{backupFresh}</span>
+                      </p>
+                      <p>
+                        {t('devpanel.healthBackupStale')}:{' '}
+                        <span className="font-semibold">{backupStale}</span>
+                      </p>
+                      <p
+                        className={
+                          backupFailed > 0 ? 'text-destructive' : undefined
+                        }
+                      >
+                        {t('devpanel.healthBackupFailed')}:{' '}
+                        <span className="font-semibold">{backupFailed}</span>
+                      </p>
+                      <p>
+                        {t('devpanel.healthBackupNever')}:{' '}
+                        <span className="font-semibold">{backupNever}</span>
                       </p>
                     </div>
                   )
@@ -1304,6 +1351,26 @@ export default function DevPanelPage() {
                           </span>
                         )}
                       </p>
+                      <p>
+                        <span className="text-muted-foreground">
+                          {t('devpanel.lastBackupLabel')}:{' '}
+                        </span>
+                        {selectedClient.last_backup_at ? (
+                          <>
+                            {new Date(
+                              selectedClient.last_backup_at,
+                            ).toLocaleString()}
+                            {' — '}
+                            {selectedClient.last_backup_status
+                              ? t(
+                                  `devpanel.backupStatus_${selectedClient.last_backup_status}`,
+                                )
+                              : ''}
+                          </>
+                        ) : (
+                          t('devpanel.noBackupYet')
+                        )}
+                      </p>
                       <Button
                         size="sm"
                         variant="outline"
@@ -1340,6 +1407,25 @@ export default function DevPanelPage() {
                               {new Date(h.created_at).toLocaleString()} — v
                               {h.version}
                               {h.domain ? ` — ${h.domain}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {backupReports.length > 0 && (
+                      <div className="mt-3">
+                        <h4 className="text-xs font-semibold text-muted-foreground">
+                          {t('devpanel.recentBackupReports')}
+                        </h4>
+                        <ul className="mt-1 space-y-1 text-xs">
+                          {backupReports.map((r) => (
+                            <li key={r.id}>
+                              {new Date(r.created_at).toLocaleString()} —{' '}
+                              {t(`devpanel.backupStatus_${r.status}`)}
+                              {r.size_bytes !== null
+                                ? ` — ${(r.size_bytes / 1024).toFixed(1)} KB`
+                                : ''}
+                              {r.note ? ` — ${r.note}` : ''}
                             </li>
                           ))}
                         </ul>

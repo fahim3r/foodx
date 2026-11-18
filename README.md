@@ -641,6 +641,25 @@ There is no automated provisioning yet — that is later-phase work.
   remains a recorded license field only — the app keeps no
   device registry, so nothing enforces it.
 
+- **Backup status reporting** (Phase 8 remainder R3) — a browser
+  app cannot back up its own database, so §59 is implemented as
+  a vendor procedure plus reporting, never a fake button. The
+  vendor runs `scripts/backup-client.sh` (pg_dump of the client's
+  database using the connection string from the vendor's vault,
+  stored under a dated path on the vendor machine; scheduling is
+  a vendor ops choice). After every run — success OR failure —
+  the script calls the registry's `report-backup` Edge Function
+  (authenticated by the client's instance token, like the
+  heartbeat), which appends a `dev_backup_reports` history row
+  and stamps `last_backup_at` / `last_backup_status` on the
+  client record (registry schema: the R3 amendment in
+  `supabase/registry/bootstrap.sql`). The Developer Panel's
+  deployment-health card now shows real backup counts (fresh
+  <48h / stale / failed / never reported), and the client detail
+  shows the last backup plus the recent report history (§72).
+  There is deliberately no "Backup now" button in the panel —
+  it could not run one honestly.
+
 
 - **Developer registry tables** (`0014_devpanel.sql`) — `dev_clients`
   (the §51 client record: code, restaurant, owner, contact, domain,

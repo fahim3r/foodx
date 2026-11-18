@@ -21,6 +21,7 @@ import {
   type DevClient,
   type DevClientFeature,
   type DevHeartbeat,
+  type DevBackupReport,
   type DevClientStatus,
   type DevFeatureKey,
   type DevLicense,
@@ -467,4 +468,22 @@ export async function fetchDevHeartbeats(
     .limit(limit)
   if (error) throw error
   return (data ?? []) as unknown as DevHeartbeat[]
+}
+
+
+/** Most recent backup reports for a client (newest first,
+ * Phase 8 R3). Written by the report-backup function on behalf of
+ * the vendor's backup script — the panel only reads them. */
+export async function fetchDevBackupReports(
+  clientId: string,
+  limit = 10,
+): Promise<DevBackupReport[]> {
+  const { data, error } = await supabase
+    .from('dev_backup_reports')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as unknown as DevBackupReport[]
 }

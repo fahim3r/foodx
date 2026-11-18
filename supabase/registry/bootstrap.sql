@@ -347,3 +347,33 @@ grant select, insert, update, delete on public.dev_clients, public.dev_licenses,
 -- ----------------------------------------------------------------------------
 alter table public.dev_clients add column if not exists last_branch_count int;
 alter table public.dev_clients add column if not exists last_user_count int;
+
+-- ----------------------------------------------------------------------------
+-- R3 amendment (Phase 8 backup reporting, 2026-11-18): the vendor's
+-- backup script reports each run through the report-backup Edge
+-- Function (instance-token authenticated). dev_clients carries the
+-- latest state for the dashboard health card; dev_backup_reports is
+-- the append-only history shown in the client detail (§72). Only
+-- developers can read the history; only the function's service role
+-- writes it.
+-- ----------------------------------------------------------------------------
+alter table public.dev_clients add column if not exists last_backup_at timestamptz;
+alter table public.dev_clients add column if not exists last_backup_status text
+  check (last_backup_status in ('success', 'failed'));
+
+create table if not exists public.dev_backup_reports (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.dev_clients(id) on delete cascade,
+  status text not null check (status in ('success', 'failed')),
+  size_bytes bigint,
+  note text,
+  created_at timestamptz not null default now()
+);
+create index if not exists dev_backup_reports_client_created_idx
+  on public.dev_backup_reports (client_id, created_at desc);
+alter table public.dev_backup_reports enable row level security;
+drop policy if exists dev_backup_reports_select_developer on public.dev_backup_reports;
+create policy dev_backup_reports_select_developer on public.dev_backup_reports
+  for select to authenticated using (public.is_developer());
+grant select on public.dev_backup_reports to authenticated;
+grant select, insert, update, delete on public.dev_backup_reports to service_role;

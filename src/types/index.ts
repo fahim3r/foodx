@@ -938,6 +938,11 @@ export interface DevClient {
    * them against the license limits in the support view (§72). */
   last_branch_count: number | null
   last_user_count: number | null
+  /** Latest backup report from the vendor's backup script
+   * (Phase 8 R3); null = no backup ever reported. Written only by
+   * the report-backup function (instance-token authenticated). */
+  last_backup_at: string | null
+  last_backup_status: 'success' | 'failed' | null
   created_at: string
   updated_at: string
 }
@@ -1047,6 +1052,18 @@ export interface DevHeartbeat {
   version: string
   domain: string | null
   user_agent: string | null
+  created_at: string
+}
+
+/** One backup run reported by the vendor's backup script
+ * (Phase 8 R3, §59). Append-only history; the client's latest
+ * state is mirrored on DevClient.last_backup_*. */
+export interface DevBackupReport {
+  id: string
+  client_id: string
+  status: 'success' | 'failed'
+  size_bytes: number | null
+  note: string | null
   created_at: string
 }
 
