@@ -27,6 +27,8 @@ import { formatMoney, roundMoney } from '@/lib/money'
 import {
   fetchDailySalesSeries,
   fetchPaymentBreakdown,
+  fetchSupplierBalances,
+  type SupplierBalanceRow,
   fetchProductSales,
   fetchTodayExpenseTotal,
   makeRange,
@@ -36,6 +38,7 @@ import {
   type ProductSalesRow,
 } from '@/services/business'
 import { fetchLowStockItems } from '@/services/inventory'
+import type { InventoryItem } from '@/types'
 import { fetchTodayOrders } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
 import { Button } from '@/components/ui/button'
@@ -58,8 +61,13 @@ export default function DashboardPage() {
   const [ordersToday, setOrdersToday] = useState(0)
   const [occupiedTables, setOccupiedTables] = useState(0)
   const [totalTables, setTotalTables] = useState(0)
-  const [lowStockCount, setLowStockCount] = useState(0)
-  const [lowStockLoaded, setLowStockLoaded] = useState(false)
+  // Alerts panel (Roadmap Wave 1, gap 7): null = not loaded or the
+  // source failed — each list hides independently, and an empty
+  // state is only ever shown for a list that actually loaded.
+  const [lowStockItems, setLowStockItems] = useState<InventoryItem[] | null>(
+    null,
+  )
+  const [duesRows, setDuesRows] = useState<SupplierBalanceRow[] | null>(null)
   // Phase 7 business widgets: null until loaded; stay hidden entirely
   // when the business tables are not applied yet (same honest pattern
   // as the low-stock line).
@@ -116,21 +124,56 @@ export default function DashboardPage() {
       .catch(() => {
         // Phase 7 tables not applied: leave the widgets hidden.
       })
-    // Low-stock line (Phase 3): hidden entirely when the inventory
-    // tables are not applied yet — never claim "all OK" without data.
+    // Alerts sources (Phase 3 low stock + Phase 7 supplier
+    // balances): each hides independently when its tables are not
+    // applied yet — never claim "all OK" without data.
     void fetchLowStockItems(restaurant.id)
       .then((lowStock) => {
-        if (cancelled) return
-        setLowStockCount(lowStock.length)
-        setLowStockLoaded(true)
+        if (!cancelled) setLowStockItems(lowStock)
       })
       .catch(() => {
-        // Phase 3 tables not applied: leave the line hidden.
+        // Phase 3 tables not applied: leave the list hidden.
+      })
+    void fetchSupplierBalances(restaurant.id)
+      .then((rows) => {
+        if (!cancelled) setDuesRows(rows)
+      })
+      .catch(() => {
+        // Phase 7 tables not applied: leave the list hidden.
       })
     return () => {
       cancelled = true
     }
   }, [restaurant])
+
+  // Alerts derivations: low stock sorted by urgency (out of stock
+  // first, then the lowest quantity relative to its threshold);
+  // dues = suppliers owing money, largest first. Both show 5.
+  const lowStockSorted = (lowStockItems ?? [])
+    .slice()
+    .sort((a, b) => {
+      const aq = Number(a.current_quantity)
+      const bq = Number(b.current_quantity)
+      const aOut = aq <= 0 ? 0 : 1
+      const bOut = bq <= 0 ? 0 : 1
+      if (aOut !== bOut) return aOut - bOut
+      const aRatio =
+        Number(a.low_stock_threshold) > 0
+          ? aq / Number(a.low_stock_threshold)
+          : aq
+      const bRatio =
+        Number(b.low_stock_threshold) > 0
+          ? bq / Number(b.low_stock_threshold)
+          : bq
+      return aRatio - bRatio
+    })
+  const duesOwed = (duesRows ?? [])
+    .filter((row) => row.due > 0)
+    .sort((a, b) => b.due - a.due)
+  const duesTotal = roundMoney(
+    duesOwed.reduce((sum, row) => sum + row.due, 0),
+  )
+  const showAlerts = lowStockItems !== null || duesRows !== null
 
   const hasData = todaySales > 0 || ordersToday > 0 || occupiedTables > 0
   const netToday =
@@ -222,36 +265,117 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {lowStockLoaded && restaurant && (
-        <Link to="/inventory" className="block">
-          <Card
-            className={
-              lowStockCount > 0 ? 'border-amber-300 bg-amber-50' : undefined
-            }
-          >
-            <CardContent className="flex items-center gap-3 pt-6">
-              <Package
-                className={
-                  lowStockCount > 0
-                    ? 'size-5 shrink-0 text-amber-700'
-                    : 'size-5 shrink-0 text-muted-foreground'
-                }
-              />
-              <p className="text-sm">
-                <span className="font-medium">
+      {showAlerts && restaurant && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t('dashboard.alertsTitle')}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-6 lg:grid-cols-2">
+            {lowStockItems !== null && (
+              <div>
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <Package className="size-4 text-amber-700" />
                   {t('dashboard.lowStockTitle')}
-                  {': '}
-                </span>
-                {lowStockCount > 0
-                  ? t('dashboard.lowStockHint', { count: lowStockCount })
-                  : t('dashboard.lowStockNone')}
-              </p>
-              <span className="ml-auto shrink-0 text-sm font-medium text-primary">
-                {t('dashboard.viewInventory')} →
-              </span>
-            </CardContent>
-          </Card>
-        </Link>
+                </p>
+                {lowStockSorted.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {t('dashboard.lowStockNone')}
+                  </p>
+                ) : (
+                  <>
+                    <div className="mt-2 divide-y">
+                      {lowStockSorted.slice(0, 5).map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between gap-2 py-1.5 text-sm"
+                        >
+                          <span>{item.name}</span>
+                          {Number(item.current_quantity) <= 0 ? (
+                            <span className="font-medium text-red-700">
+                              {t('dashboard.alertsOutOfStock')}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              {t('dashboard.alertsStockLeft', {
+                                qty: Number(item.current_quantity),
+                                unit: item.unit,
+                                threshold: Number(item.low_stock_threshold),
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {lowStockSorted.length > 5 && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {t('dashboard.alertsMore', {
+                          count: lowStockSorted.length - 5,
+                        })}
+                      </p>
+                    )}
+                  </>
+                )}
+                <Link
+                  to="/inventory"
+                  className="mt-2 inline-block text-sm font-medium text-primary"
+                >
+                  {t('dashboard.viewInventory')} →
+                </Link>
+              </div>
+            )}
+            {duesRows !== null && (
+              <div>
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <Wallet className="size-4 text-amber-700" />
+                  {t('dashboard.alertsDuesTitle')}
+                </p>
+                {duesOwed.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {t('dashboard.alertsDuesNone')}
+                  </p>
+                ) : (
+                  <>
+                    <div className="mt-2 divide-y">
+                      {duesOwed.slice(0, 5).map((row) => (
+                        <div
+                          key={row.supplierId}
+                          className="flex items-center justify-between gap-2 py-1.5 text-sm"
+                        >
+                          <span>{row.name}</span>
+                          <span className="font-medium">
+                            {formatMoney(row.due, currency)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {duesOwed.length > 5 && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {t('dashboard.alertsMore', {
+                          count: duesOwed.length - 5,
+                        })}
+                      </p>
+                    )}
+                    <p className="mt-2 text-sm">
+                      <span className="text-muted-foreground">
+                        {t('dashboard.alertsDuesTotal')}
+                        {': '}
+                      </span>
+                      <span className="font-semibold">
+                        {formatMoney(duesTotal, currency)}
+                      </span>
+                    </p>
+                  </>
+                )}
+                <Link
+                  to="/inventory"
+                  className="mt-2 inline-block text-sm font-medium text-primary"
+                >
+                  {t('dashboard.viewInventory')} →
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {todayExpenses !== null && (
