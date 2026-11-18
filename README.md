@@ -627,6 +627,16 @@ project notes):
     here first (0016 marks all pre-existing restaurants true):
     restaurant info → license activation (the same form also lives in
     Settings → License) → done. Skippable; never a lock (§53).
+- **Step 3 — staff management** (`/panel/staff`): the admin creates
+  staff logins with a role, changes roles, resets passwords and
+  deactivates/reactivates accounts. All of it runs through the
+  `manage-staff` Edge Function in the client project (creating logins
+  needs the Auth Admin API; profiles/user_roles RLS is self-only).
+  The function verifies the caller's JWT, requires an admin-level
+  role, and scopes everything to the caller's restaurant; nobody can
+  modify themselves, and the last active admin cannot be demoted or
+  deactivated. Deactivation also bans the Auth user, so a disabled
+  account really cannot sign in. No migration was needed.
 
 ## What is not built yet
 

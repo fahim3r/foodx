@@ -22,6 +22,7 @@ import {
   ShoppingCart,
   Table2,
   Truck,
+  UserCog,
   Users,
   Wallet,
   UtensilsCrossed,
@@ -62,6 +63,7 @@ const NAV_ITEMS = [
     feature: 'accounting' as DevFeatureKey,
   },
   { to: '/settings', key: 'nav.settings', icon: Settings, end: false },
+  { to: '/staff', key: 'nav.staff', icon: UserCog, end: false },
   { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false },
 ] as const
 
