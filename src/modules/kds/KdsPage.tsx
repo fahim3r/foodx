@@ -259,6 +259,11 @@ export default function KdsPage() {
                                 + {modifier.modifier_name}
                               </p>
                             ))}
+                            {item.note && (
+                              <p className="pl-4 text-sm font-semibold text-amber-700">
+                                {item.note}
+                              </p>
+                            )}
                           </li>
                         ))}
                       </ul>

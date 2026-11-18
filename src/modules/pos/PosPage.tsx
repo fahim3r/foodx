@@ -74,10 +74,15 @@ import { Label } from '@/components/ui/label'
 
 /** One cart line: ids + quantity only — prices are never stored here. */
 interface CartLine {
+  /** Stable row identity — the note editor keys off this, never the
+   * content signature, so typing a note cannot remount the row. */
+  id: string
   productId: string
   variantId: string | null
   modifierIds: string[]
   quantity: number
+  /** Per-item kitchen note (gap 5); part of the merge signature. */
+  note: string
 }
 
 const ORDER_TYPE_KEYS: Record<OrderType, string> = {
@@ -110,7 +115,7 @@ const SELECT_CLASSNAME =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
 
 function cartKey(line: CartLine): string {
-  return `${line.productId}|${line.variantId ?? ''}|${[...line.modifierIds].sort().join(',')}`
+  return `${line.productId}|${line.variantId ?? ''}|${[...line.modifierIds].sort().join(',')}|${line.note.trim()}`
 }
 
 export default function PosPage() {
@@ -352,6 +357,8 @@ export default function PosPage() {
         })),
         unitPrice,
         lineTotal: roundMoney(unitPrice * line.quantity),
+        note: line.note || null,
+        cartLineId: line.id,
       })
     }
     return lines
@@ -495,10 +502,12 @@ export default function PosPage() {
     quantity: number,
   ) => {
     const line: CartLine = {
+      id: crypto.randomUUID(),
       productId: product.id,
       variantId,
       modifierIds: [...modifierIds].sort(),
       quantity,
+      note: '',
     }
     const key = cartKey(line)
     setCart((prev) => {
@@ -540,18 +549,24 @@ export default function PosPage() {
     setChooserProduct(null)
   }
 
-  const updateCartQty = (key: string, delta: number) => {
+  const updateCartQty = (id: string, delta: number) => {
     setCart((prev) =>
       prev.map((line) =>
-        cartKey(line) === key
+        line.id === id
           ? { ...line, quantity: Math.max(1, line.quantity + delta) }
           : line,
       ),
     )
   }
 
-  const removeCartLine = (key: string) => {
-    setCart((prev) => prev.filter((line) => cartKey(line) !== key))
+  const removeCartLine = (id: string) => {
+    setCart((prev) => prev.filter((line) => line.id !== id))
+  }
+
+  const updateCartNote = (id: string, note: string) => {
+    setCart((prev) =>
+      prev.map((line) => (line.id === id ? { ...line, note } : line)),
+    )
   }
 
   const resetForNewOrder = () => {
@@ -661,6 +676,7 @@ export default function PosPage() {
       variantId: line.variantId,
       modifierIds: line.modifierIds,
       quantity: line.quantity,
+      note: line.note.trim() || undefined,
     }))
     const input: CreateOrderInput = {
       restaurantId: restaurant.id,
@@ -914,6 +930,7 @@ export default function PosPage() {
         quantity: line.quantity,
         unit_price: line.unitPrice,
         total_price: line.lineTotal,
+        note: line.note?.trim() || null,
         created_at: entry.queuedAt,
         updated_at: entry.queuedAt,
         modifiers: line.modifierNames.map((m, j) => ({
@@ -1082,6 +1099,11 @@ export default function PosPage() {
                       : ''}
                     {' × '}
                     {line.quantity}
+                    {line.note ? (
+                      <span className="block text-xs font-medium text-amber-700">
+                        {line.note}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="font-medium">
                     {formatMoney(line.lineTotal, currency)}
@@ -1267,6 +1289,11 @@ export default function PosPage() {
                       : ''}
                     {' × '}
                     {line.quantity}
+                    {line.note ? (
+                      <span className="block text-xs font-medium text-amber-700">
+                        {line.note}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="font-medium">
                     {formatMoney(line.lineTotal, currency)}
@@ -1816,7 +1843,9 @@ export default function PosPage() {
             ) : (
               <ul className="flex flex-col gap-3">
                 {previewLines.map((line) => {
-                  const key = `${line.productId}|${line.variantId ?? ''}|${line.modifierIds.join(',')}`
+                  const key =
+                    line.cartLineId ??
+                    `${line.productId}|${line.variantId ?? ''}|${line.modifierIds.join(',')}`
                   return (
                     <li key={key} className="flex flex-col gap-1 text-sm">
                       <span className="flex items-center justify-between gap-2">
@@ -1860,6 +1889,13 @@ export default function PosPage() {
                           {t('common.delete')}
                         </Button>
                       </span>
+                      <Input
+                        value={line.note ?? ''}
+                        onChange={(e) => updateCartNote(key, e.target.value)}
+                        placeholder={t('pos.itemNotePlaceholder')}
+                        maxLength={200}
+                        className="h-8 text-xs"
+                      />
                     </li>
                   )
                 })}

@@ -55,7 +55,10 @@ function itemRows(detail: OrderDetail, fmt: (n: number) => string): string {
       const variant = item.variant_name
         ? ` (${escapeHtml(item.variant_name)})`
         : ''
-      return `<div class="row"><span>${item.quantity} × ${escapeHtml(item.product_name)}${variant}</span><span>${fmt(Number(item.total_price))}</span></div>${mods}`
+      const note = item.note
+        ? `<div class="row"><span>&nbsp;&nbsp;* ${escapeHtml(item.note)}</span></div>`
+        : ''
+      return `<div class="row"><span>${item.quantity} × ${escapeHtml(item.product_name)}${variant}</span><span>${fmt(Number(item.total_price))}</span></div>${mods}${note}`
     })
     .join('')
 }
@@ -115,7 +118,10 @@ export function buildKitchenTicketHtml(
       const variant = item.variant_name
         ? ` (${escapeHtml(item.variant_name)})`
         : ''
-      return `<div class="row"><span>${item.quantity} × ${escapeHtml(item.product_name)}${variant}</span></div>${mods}`
+      const note = item.note
+        ? `<div class="row"><span>&nbsp;&nbsp;* ${escapeHtml(item.note)}</span></div>`
+        : ''
+      return `<div class="row"><span>${item.quantity} × ${escapeHtml(item.product_name)}${variant}</span></div>${mods}${note}`
     })
     .join('')
   const html = `

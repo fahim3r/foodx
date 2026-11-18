@@ -255,6 +255,8 @@ export interface OrderItem {
   quantity: number
   unit_price: number
   total_price: number
+  /** Per-item kitchen note (migration 0021); null when none. */
+  note: string | null
   created_at: string
   updated_at: string
 }
@@ -307,6 +309,8 @@ export interface PosOrderLineInput {
   variantId?: string | null
   modifierIds: string[]
   quantity: number
+  /** Per-item kitchen note ("less spicy") — Roadmap Wave 1, gap 5. */
+  note?: string
 }
 
 export interface CreateOrderInput {

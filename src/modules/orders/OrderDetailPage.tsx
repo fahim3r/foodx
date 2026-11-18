@@ -617,6 +617,11 @@ export default function OrderDetailPage() {
               <p className="text-sm text-muted-foreground">
                 {item.quantity} × {formatMoney(item.unit_price, currency)}
               </p>
+              {item.note && (
+                <p className="pl-4 text-sm font-medium text-amber-700">
+                  {item.note}
+                </p>
+              )}
               {item.modifiers.map((modifier) => (
                 <p
                   key={modifier.id}

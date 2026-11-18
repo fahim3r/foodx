@@ -40,6 +40,11 @@ export interface PricedLine {
   modifierNames: { id: string; name: string; price: number }[]
   unitPrice: number
   lineTotal: number
+  /** Per-item kitchen note, carried through untouched (never priced). */
+  note: string | null
+  /** POS page only: stable cart-row identity for the note editor.
+   * Services ignore it; it rides along in offline snapshots. */
+  cartLineId?: string
 }
 
 /**
@@ -219,6 +224,7 @@ export async function priceOrderLines(
       modifierNames,
       unitPrice,
       lineTotal: roundMoney(unitPrice * line.quantity),
+      note: line.note ?? null,
     }
   })
 }
@@ -329,6 +335,7 @@ async function persistPricedOrder(args: {
     quantity: line.quantity,
     unit_price: line.unitPrice,
     total_price: line.lineTotal,
+    note: line.note?.trim() || null,
   }))
   const { error: itemsError } = await supabase
     .from('order_items')
