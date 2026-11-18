@@ -10,11 +10,14 @@
 //     plus the developer allow-list; fully separated from /panel (§88).
 //   - Legacy admin URLs (/login, /pos, /orders, …) redirect to their
 //     /panel/* equivalents, query string included.
+//   - / (no ?store= / ?table=) → the FoodX marketing landing page.
+//     The live demo moved to demo.foodx.bond, which is NOT a platform
+//     host: it resolves through restaurant_domains like a real client
+//     domain (owner's decision 2026-11-18).
 //   - Anything else → the public storefront: the FoodX Demo
-//     restaurant (DEFAULT_DEMO_STORE_SLUG) by default — the platform
-//     domain is the demo landing page — or ?store=<slug> to preview
-//     another restaurant (and ?store=<slug>&table=<code> to pre-select
-//     a table).
+//     restaurant (DEFAULT_DEMO_STORE_SLUG) by default, or
+//     ?store=<slug> to preview another restaurant (and
+//     ?store=<slug>&table=<code> to pre-select a table).
 // - Any other hostname: resolved with resolve_restaurant_by_domain().
 //   A match serves that restaurant's public storefront at / and the
 //   admin app under /panel, locked to that restaurant. No match renders
@@ -50,6 +53,7 @@ import RolesPage from '@/modules/roles/RolesPage'
 import SettingsPage from '@/modules/settings/SettingsPage'
 import TablesPage from '@/modules/tables/TablesPage'
 import DevPanelPage from '@/modules/devpanel/DevPanelPage'
+import LandingPage from '@/modules/landing/LandingPage'
 import DomainNotConnectedPage from '@/modules/storefront/DomainNotConnectedPage'
 import StorefrontPage from '@/modules/storefront/StorefrontPage'
 import {
@@ -135,9 +139,12 @@ function LegacyAdminRedirect() {
 /**
  * The platform hosts in one router: /panel/* is the admin app,
  * /devpanel* is the Developer Panel (Phase 8), the legacy
- * admin URLs redirect to their /panel/* equivalents, and everything
- * else is the public storefront — the demo restaurant by default, or
- * ?store=<slug> to preview another restaurant.
+ * admin URLs redirect to their /panel/* equivalents, the root is
+ * the marketing landing page, and everything else is the public
+ * storefront — the demo restaurant by default, or ?store=<slug>
+ * to preview another restaurant. A ?store= or ?table= on the root
+ * keeps the old preview behaviour, so existing demo/QR links to
+ * the platform host keep landing on the storefront.
  */
 function PlatformRoutes({
   previewSlug,
@@ -159,6 +166,19 @@ function PlatformRoutes({
             element={<LegacyAdminRedirect />}
           />
         ))}
+        <Route
+          path="/"
+          element={
+            previewSlug || tableCode ? (
+              <StorefrontPage
+                slug={previewSlug ?? DEFAULT_DEMO_STORE_SLUG}
+                tableCode={tableCode}
+              />
+            ) : (
+              <LandingPage />
+            )
+          }
+        />
         <Route
           path="/*"
           element={
@@ -206,8 +226,9 @@ function HostRouter() {
   }, [hostname, platform])
 
   // Platform host: one router — /panel/* admin, /devpanel vendor panel,
-  // legacy admin redirects, everything else the demo storefront
-  // (?store=<slug> previews another restaurant).
+  // legacy admin redirects, the landing page at the root, and the demo
+  // storefront for everything else (?store=<slug> previews another
+  // restaurant).
   if (platform) {
     return <PlatformRoutes previewSlug={previewSlug} tableCode={tableCode} />
   }
