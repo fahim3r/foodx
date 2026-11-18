@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { isMissingTableError, isUniqueViolationError } from '@/lib/errors'
+import { elapsedMinutes, useNow } from '@/lib/time'
 import { useAuth } from '@/hooks/useAuth'
 import { fetchBranches, type Branch } from '@/services/restaurant'
 import { getPrimaryDomain } from '@/services/domains'
@@ -16,6 +17,7 @@ import { buildTableQrUrl } from '@/services/storefront'
 import {
   createTable,
   deleteTable,
+  fetchOpenOrderStarts,
   fetchTables,
   setTableStatus,
   updateTable,
@@ -48,6 +50,8 @@ export default function TablesPage() {
   const { t } = useTranslation()
   const { restaurant, loading: authLoading } = useAuth()
   const [tables, setTables] = useState<DiningTable[]>([])
+  const [openStarts, setOpenStarts] = useState<Map<string, string>>(new Map())
+  const now = useNow()
   const [branches, setBranches] = useState<Branch[]>([])
   const [pageState, setPageState] = useState<
     'loading' | 'ready' | 'dbPending' | 'error'
@@ -75,12 +79,15 @@ export default function TablesPage() {
   const loadAll = useCallback(async (restaurantId: string) => {
     setPageState('loading')
     try {
-      const [tablesData, branchesData, domain] = await Promise.all([
+      const [tablesData, startsData, branchesData, domain] =
+        await Promise.all([
         fetchTables(restaurantId),
+        fetchOpenOrderStarts(restaurantId).catch(() => new Map<string, string>()),
         fetchBranches(restaurantId),
         getPrimaryDomain(restaurantId),
       ])
       setTables(tablesData)
+      setOpenStarts(startsData)
       setBranches(branchesData)
       setPrimaryDomain(domain?.domain ?? null)
       setPageState('ready')
@@ -468,6 +475,16 @@ export default function TablesPage() {
                 <span className="inline-block w-fit rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                   {t(STATUS_KEYS[table.status])}
                 </span>
+                {table.status === 'occupied' && openStarts.has(table.id) && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('tables.occupiedFor', {
+                      minutes: elapsedMinutes(
+                        openStarts.get(table.id) as string,
+                        now,
+                      ),
+                    })}
+                  </p>
+                )}
                 {tableUrl(table) && (
                   <div className="flex flex-col gap-2 border-t pt-3 text-sm">
                     <p className="font-medium">{t('tables.qr.title')}</p>

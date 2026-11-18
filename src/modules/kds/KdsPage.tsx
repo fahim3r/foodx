@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { isMissingTableError } from '@/lib/errors'
+import { elapsedMinutes } from '@/lib/time'
 import {
   advanceKitchenStatus,
   fetchKitchenOrders,
@@ -26,13 +27,6 @@ import {
 } from '@/components/ui/card'
 
 const POLL_MS = 30_000
-
-function waitingMinutes(createdAt: string, now: number): number {
-  return Math.max(
-    0,
-    Math.floor((now - new Date(createdAt).getTime()) / 60_000),
-  )
-}
 
 export default function KdsPage() {
   const { t } = useTranslation()
@@ -229,7 +223,7 @@ export default function KdsPage() {
                 if (tableName) meta.push(t('kds.table', { name: tableName }))
                 meta.push(
                   t('kds.waiting', {
-                    minutes: waitingMinutes(order.created_at, now),
+                    minutes: elapsedMinutes(order.created_at, now),
                   }),
                 )
                 meta.push(t('kds.itemCount', { count: items.length }))

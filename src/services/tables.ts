@@ -94,3 +94,30 @@ export async function deleteTable(tableId: string): Promise<void> {
     .eq('id', tableId)
   if (deleteError) throw deleteError
 }
+
+/**
+ * The earliest open (non-terminal) order's created_at per table —
+ * the honest "occupied since" for the Tables page timers (gap 4).
+ * Tables carry no occupied-since column; the open order's creation
+ * time is the source. Tables with no open order are absent.
+ */
+export async function fetchOpenOrderStarts(
+  restaurantId: string,
+): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('table_id, created_at')
+    .eq('restaurant_id', restaurantId)
+    .not('table_id', 'is', null)
+    .not('status', 'in', '(\"COMPLETED\",\"CANCELLED\",\"REFUNDED\")')
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  const starts = new Map<string, string>()
+  for (const row of (data ?? []) as {
+    table_id: string
+    created_at: string
+  }[]) {
+    if (!starts.has(row.table_id)) starts.set(row.table_id, row.created_at)
+  }
+  return starts
+}

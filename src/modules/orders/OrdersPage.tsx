@@ -8,8 +8,15 @@ import { useAuth } from '@/hooks/useAuth'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { fetchOrders } from '@/services/orders'
+import { elapsedChipClass, elapsedMinutes, useNow } from '@/lib/time'
 import { fetchTables } from '@/services/tables'
-import type { Order, OrderSource, OrderStatus, OrderType } from '@/types'
+import {
+  TERMINAL_ORDER_STATUSES,
+  type Order,
+  type OrderSource,
+  type OrderStatus,
+  type OrderType,
+} from '@/types'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -44,6 +51,24 @@ const STATUS_KEYS: Record<OrderStatus, string> = {
   REFUNDED: 'orders.statusRefunded',
 }
 
+function ElapsedChip({
+  createdAt,
+  now,
+}: {
+  createdAt: string
+  now: number
+}) {
+  const { t } = useTranslation()
+  const minutes = elapsedMinutes(createdAt, now)
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${elapsedChipClass(minutes)}`}
+    >
+      {t('orders.elapsedMinutes', { minutes })}
+    </span>
+  )
+}
+
 export default function OrdersPage() {
   const { t } = useTranslation()
   const {
@@ -53,6 +78,7 @@ export default function OrdersPage() {
     dbPending,
   } = useAuth()
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL')
+  const now = useNow()
   const [orders, setOrders] = useState<Order[]>([])
   const [tableNames, setTableNames] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -228,6 +254,9 @@ export default function OrdersPage() {
                   <span className="text-muted-foreground">
                     {new Date(order.created_at).toLocaleString()}
                   </span>
+                  {!TERMINAL_ORDER_STATUSES.includes(order.status) && (
+                    <ElapsedChip createdAt={order.created_at} now={now} />
+                  )}
                 </CardContent>
               </Card>
             </Link>

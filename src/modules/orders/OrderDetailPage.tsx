@@ -8,6 +8,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
+import { elapsedMinutes, useNow } from '@/lib/time'
 import {
   cancelOrder,
   completeOrder,
@@ -73,6 +74,7 @@ function actionErrorKey(error: unknown): string {
 }
 
 export default function OrderDetailPage() {
+  const now = useNow()
   const { t } = useTranslation()
   const { id } = useParams()
   const {
@@ -389,6 +391,13 @@ export default function OrderDetailPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-1 text-sm">
           <p>{typeLabel(detail.type)}</p>
+          {!TERMINAL_ORDER_STATUSES.includes(detail.status) && (
+            <p className="text-muted-foreground">
+              {t('orders.openFor', {
+                minutes: elapsedMinutes(detail.created_at, now),
+              })}
+            </p>
+          )}
           <p className="text-muted-foreground">
             {t('orders.source')}: {sourceLabel(detail.source)}
           </p>
