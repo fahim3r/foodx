@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import { Mic } from 'lucide-react'
 import { isMissingTableError, isNetworkError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
@@ -118,6 +119,34 @@ function cartKey(line: CartLine): string {
   return `${line.productId}|${line.variantId ?? ''}|${[...line.modifierIds].sort().join(',')}|${line.note.trim()}`
 }
 
+// Voice search (gap 9): the Web Speech API is not in the DOM lib
+// types, so a minimal structural shape is declared here. Support
+// is Chrome/Android — exactly the counter devices; where the API
+// is absent the mic button simply never renders (no fake affordance).
+interface SpeechRecognitionLike {
+  lang: string
+  interimResults: boolean
+  continuous: boolean
+  start: () => void
+  onresult:
+    | ((event: {
+        results: ArrayLike<ArrayLike<{ transcript: string }>>
+      }) => void)
+    | null
+  onerror: (() => void) | null
+  onend: (() => void) | null
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor
+    webkitSpeechRecognition?: SpeechRecognitionCtor
+  }
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+}
+
 export default function PosPage() {
   const { t, i18n } = useTranslation()
   const { user, restaurant, settings, loading, dbPending } = useAuth()
@@ -138,6 +167,10 @@ export default function PosPage() {
   const [selectedTableId, setSelectedTableId] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
   const [search, setSearch] = useState('')
+  const [voiceListening, setVoiceListening] = useState(false)
+  const [voiceFailed, setVoiceFailed] = useState(false)
+  const speechSupported =
+    typeof window !== 'undefined' && getSpeechRecognitionCtor() !== null
   const [cart, setCart] = useState<CartLine[]>([])
   const [discount, setDiscount] = useState(0)
   const [notes, setNotes] = useState('')
@@ -561,6 +594,35 @@ export default function PosPage() {
 
   const removeCartLine = (id: string) => {
     setCart((prev) => prev.filter((line) => line.id !== id))
+  }
+
+  useEffect(() => {
+    if (!voiceFailed) return
+    const id = window.setTimeout(() => setVoiceFailed(false), 4000)
+    return () => window.clearTimeout(id)
+  }, [voiceFailed])
+
+  const handleVoiceSearch = () => {
+    const Ctor = getSpeechRecognitionCtor()
+    if (!Ctor) return
+    setVoiceFailed(false)
+    const recognition = new Ctor()
+    recognition.lang = i18n.language?.startsWith('bn') ? 'bn-BD' : 'en-US'
+    recognition.interimResults = false
+    recognition.continuous = false
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? ''
+      if (transcript) setSearch(transcript)
+    }
+    recognition.onerror = () => setVoiceFailed(true)
+    recognition.onend = () => setVoiceListening(false)
+    setVoiceListening(true)
+    try {
+      recognition.start()
+    } catch {
+      setVoiceListening(false)
+      setVoiceFailed(true)
+    }
   }
 
   const updateCartNote = (id: string, note: string) => {
@@ -1659,13 +1721,39 @@ export default function PosPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="flex flex-col gap-4">
-          <Input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('pos.searchProducts')}
-            aria-label={t('pos.searchProducts')}
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('pos.searchProducts')}
+              aria-label={t('pos.searchProducts')}
+              className="flex-1"
+            />
+            {speechSupported && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleVoiceSearch}
+                disabled={voiceListening}
+                aria-label={t('pos.voiceSearch')}
+              >
+                <Mic
+                  className={
+                    voiceListening
+                      ? 'size-4 animate-pulse text-red-600'
+                      : 'size-4'
+                  }
+                />
+              </Button>
+            )}
+          </div>
+          {voiceFailed && (
+            <p className="text-xs text-muted-foreground">
+              {t('pos.voiceFailed')}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
