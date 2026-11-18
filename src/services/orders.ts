@@ -3,7 +3,7 @@
 // (see src/types) and writes an order_status_history row. Financial
 // records are never deleted — a wrong order is CANCELLED or REFUNDED.
 import { supabase } from '@/lib/supabase'
-import { restockForOrder } from '@/services/inventory'
+import { guardedErrorCode } from '@/services/pin'
 import {
   awardLoyaltyPoints,
   reverseLoyaltyEarn,
@@ -201,29 +201,35 @@ export async function completeOrder(
  * Refunds do NOT restock: a refunded order was already served, its
  * food is gone.
  */
+/**
+ * Cancel an order (gap 6): the transition runs through the
+ * cancel_order_guarded RPC, which verifies the restaurant's manager
+ * PIN server-side when one is set and performs the status change,
+ * history row, restock and table release itself. The loyalty
+ * reversal stays here, best-effort as before. `userId` is kept for
+ * signature compatibility — the RPC records auth.uid() itself.
+ */
 export async function cancelOrder(
   order: Order,
   userId: string,
   reason: string,
+  pin?: string,
 ): Promise<Order> {
+  void userId
   if (!reason.trim()) throw new Error('cancel_reason_required')
-  const cancelled = await advanceOrderStatus(
-    order,
-    'CANCELLED',
-    userId,
-    reason.trim(),
-  )
-  try {
-    await restockForOrder(order.id)
-  } catch (error) {
-    console.error('[Orders] restock after cancel failed', error)
-  }
+  const { error } = await supabase.rpc('cancel_order_guarded', {
+    p_order_id: order.id,
+    p_pin: pin?.trim() || null,
+    p_reason: reason.trim(),
+  })
+  if (error) throw new Error(guardedErrorCode(error))
   try {
     await reverseLoyaltyRedemption(order.id)
-  } catch (error) {
-    console.error('[Orders] loyalty reversal after cancel failed', error)
+  } catch (loyaltyError) {
+    console.error('[Orders] loyalty reversal after cancel failed', loyaltyError)
   }
-  return cancelled
+  const updated = await fetchOrderById(order.id)
+  return updated ?? { ...order, status: 'CANCELLED' }
 }
 
 /**
@@ -242,19 +248,27 @@ export async function refundOrder(
   userId: string,
   reason: string,
   amount?: number,
+  pin?: string,
 ): Promise<Order> {
+  void userId
   if (!reason.trim()) throw new Error('refund_reason_required')
   const note =
     amount !== undefined && Number.isFinite(amount)
       ? `Refunded ${amount} — ${reason.trim()}`
       : `Refunded — ${reason.trim()}`
-  const refunded = await advanceOrderStatus(order, 'REFUNDED', userId, note)
+  const { error } = await supabase.rpc('refund_order_guarded', {
+    p_order_id: order.id,
+    p_pin: pin?.trim() || null,
+    p_note: note,
+  })
+  if (error) throw new Error(guardedErrorCode(error))
   try {
     await reverseLoyaltyEarn(order.id)
-  } catch (error) {
-    console.error('[Orders] loyalty reversal after refund failed', error)
+  } catch (loyaltyError) {
+    console.error('[Orders] loyalty reversal after refund failed', loyaltyError)
   }
-  return refunded
+  const updated = await fetchOrderById(order.id)
+  return updated ?? { ...order, status: 'REFUNDED' }
 }
 
 /** Today's orders for the dashboard (non-cancelled, newest first). */

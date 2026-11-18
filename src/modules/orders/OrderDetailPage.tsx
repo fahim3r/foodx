@@ -18,6 +18,7 @@ import {
   sendOrderToKitchen,
 } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
+import { fetchManagerPinIsSet } from '@/services/pin'
 import { fetchBranches, type Branch } from '@/services/restaurant'
 import { printHtml } from '@/lib/print'
 import {
@@ -99,6 +100,11 @@ export default function OrderDetailPage() {
   const [refundReason, setRefundReason] = useState('')
   const [refundAmount, setRefundAmount] = useState('')
   const [refundFormError, setRefundFormError] = useState<string | null>(null)
+  // Manager PIN gate (gap 6): when the restaurant has a PIN set, the
+  // cancel / refund forms ask for it and the guarded RPCs verify it.
+  const [pinIsSet, setPinIsSet] = useState(false)
+  const [cancelPin, setCancelPin] = useState('')
+  const [refundPin, setRefundPin] = useState('')
 
   const currency =
     settings?.currency ?? restaurant?.default_currency ?? 'BDT'
@@ -225,6 +231,16 @@ export default function OrderDetailPage() {
     void load()
   }, [authLoading, restaurant, id, load])
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        setPinIsSet(await fetchManagerPinIsSet())
+      } catch {
+        setPinIsSet(false)
+      }
+    })()
+  }, [])
+
   const runAction = async (
     fn: (order: OrderDetail, userId: string) => Promise<unknown>,
   ) => {
@@ -253,13 +269,18 @@ export default function OrderDetailPage() {
     setActionError(null)
     setActing(true)
     try {
-      await cancelOrder(detail, user.id, cancelReason.trim())
+      await cancelOrder(detail, user.id, cancelReason.trim(), cancelPin)
       setShowCancelForm(false)
       setCancelReason('')
+      setCancelPin('')
       await reload()
     } catch (error) {
       console.error('[OrderDetail] cancel failed', error)
-      if (
+      if (error instanceof Error && error.message === 'pin_incorrect') {
+        setCancelFormError('orders.pinIncorrect')
+      } else if (error instanceof Error && error.message === 'pin_required') {
+        setCancelFormError('orders.pinRequired')
+      } else if (
         error instanceof Error &&
         error.message === 'cancel_reason_required'
       ) {
@@ -289,14 +310,20 @@ export default function OrderDetailPage() {
         user.id,
         refundReason.trim(),
         Number.isFinite(amount) ? amount : undefined,
+        refundPin,
       )
       setShowRefundForm(false)
       setRefundReason('')
       setRefundAmount('')
+      setRefundPin('')
       await reload()
     } catch (error) {
       console.error('[OrderDetail] refund failed', error)
-      if (
+      if (error instanceof Error && error.message === 'pin_incorrect') {
+        setRefundFormError('orders.pinIncorrect')
+      } else if (error instanceof Error && error.message === 'pin_required') {
+        setRefundFormError('orders.pinRequired')
+      } else if (
         error instanceof Error &&
         error.message === 'refund_reason_required'
       ) {
@@ -543,6 +570,21 @@ export default function OrderDetailPage() {
                   </p>
                 )}
               </div>
+              {pinIsSet && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="cancelPin">{t('orders.managerPin')}</Label>
+                  <Input
+                    id="cancelPin"
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={8}
+                    value={cancelPin}
+                    onChange={(e) => setCancelPin(e.target.value)}
+                    className="max-w-56"
+                  />
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button type="submit" variant="destructive" disabled={acting}>
                   {t('orders.cancelOrder')}
@@ -553,6 +595,7 @@ export default function OrderDetailPage() {
                   onClick={() => {
                     setShowCancelForm(false)
                     setCancelReason('')
+                    setCancelPin('')
                     setCancelFormError(null)
                   }}
                 >
@@ -600,6 +643,21 @@ export default function OrderDetailPage() {
                   onChange={(e) => setRefundAmount(e.target.value)}
                 />
               </div>
+              {pinIsSet && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="refundPin">{t('orders.managerPin')}</Label>
+                  <Input
+                    id="refundPin"
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={8}
+                    value={refundPin}
+                    onChange={(e) => setRefundPin(e.target.value)}
+                    className="max-w-56"
+                  />
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button type="submit" variant="destructive" disabled={acting}>
                   {t('orders.refundOrder')}
@@ -611,6 +669,7 @@ export default function OrderDetailPage() {
                     setShowRefundForm(false)
                     setRefundReason('')
                     setRefundAmount('')
+                    setRefundPin('')
                     setRefundFormError(null)
                   }}
                 >
