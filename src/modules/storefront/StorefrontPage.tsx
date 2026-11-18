@@ -284,6 +284,7 @@ export default function StorefrontPage({
         })),
         unitPrice,
         lineTotal: roundMoney(unitPrice * line.quantity),
+        note: null,
       })
     }
     return lines

@@ -59,6 +59,7 @@ export async function fetchKitchenOrders(
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price,
+        note: item.note,
         created_at: item.created_at,
         updated_at: item.updated_at,
         modifiers: [...(item.order_item_modifiers ?? [])],
