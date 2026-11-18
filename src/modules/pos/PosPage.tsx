@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { isMissingTableError } from '@/lib/errors'
+import { isMissingTableError, isNetworkError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
 import { fetchProductAvailability } from '@/services/inventory'
@@ -32,14 +32,28 @@ import {
 import { fetchBranches, type Branch } from '@/services/restaurant'
 import { fetchOrderDetail } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import {
+  addQueuedPayment,
+  enqueueOrder,
+  getDeviceId,
+  loadQueue,
+  localRef,
+  queueCounts,
+  removeEntry,
+  OFFLINE_QUEUE_UPDATED_EVENT,
+  type QueuedOrder,
+} from '@/services/offlineQueue'
 import { printHtml } from '@/lib/print'
 import { buildReceiptHtml } from '@/lib/receipt'
 import type {
   Category,
   Coupon,
+  CreateOrderInput,
   Customer,
   DiningTable,
   Order,
+  OrderDetail,
   OrderPayment,
   OrderType,
   PaymentMethod,
@@ -160,6 +174,13 @@ export default function PosPage() {
   const [recordingPayment, setRecordingPayment] = useState(false)
   const [paymentErrorKey, setPaymentErrorKey] = useState<string | null>(null)
   const [paymentRecorded, setPaymentRecorded] = useState(false)
+
+  // --- Phase 9: offline queue ------------------------------------------------
+  const online = useOnlineStatus()
+  const [queuedOrder, setQueuedOrder] = useState<QueuedOrder | null>(null)
+  const [queueEntries, setQueueEntries] = useState<QueuedOrder[]>([])
+  const [queueOpen, setQueueOpen] = useState(false)
+  const [removingEntryId, setRemovingEntryId] = useState<string | null>(null)
 
   const isBn = i18n.language === 'bn'
   const taxRate = Number(settings?.tax_rate ?? 0)
@@ -369,6 +390,17 @@ export default function PosPage() {
     }
   }, [placedOrder])
 
+  // The offline queue for this restaurant, kept current through the
+  // queue-updated event (enqueues, sync removals, failure marks).
+  useEffect(() => {
+    if (!restaurant) return
+    const refresh = () => setQueueEntries(loadQueue(restaurant.id))
+    refresh()
+    window.addEventListener(OFFLINE_QUEUE_UPDATED_EVENT, refresh)
+    return () =>
+      window.removeEventListener(OFFLINE_QUEUE_UPDATED_EVENT, refresh)
+  }, [restaurant])
+
   const paymentSummary = useMemo(
     () =>
       placedOrder
@@ -445,6 +477,7 @@ export default function PosPage() {
 
   const resetForNewOrder = () => {
     setPlacedOrder(null)
+    setQueuedOrder(null)
     setPlacedLines([])
     setPayments([])
     setCart([])
@@ -544,32 +577,74 @@ export default function PosPage() {
       setPlaceErrorKey('pos.tableRequired')
       return
     }
+    const lines: PosOrderLineInput[] = cart.map((line) => ({
+      productId: line.productId,
+      variantId: line.variantId,
+      modifierIds: line.modifierIds,
+      quantity: line.quantity,
+    }))
+    const input: CreateOrderInput = {
+      restaurantId: restaurant.id,
+      branchId: defaultBranch?.id ?? null,
+      tableId: orderType === 'dine_in' ? selectedTableId : null,
+      type: orderType,
+      notes,
+      discountAmount: discount,
+      customerId: selectedCustomer?.id ?? null,
+      couponId: appliedCoupon?.id ?? null,
+      couponDiscount,
+      loyaltyPointsRedeemed: redeemPointsEffective,
+      loyaltyDiscount,
+      lines,
+    }
+    // Phase 9: the offline queue cannot carry a customer, coupon or
+    // loyalty redemption — those need live validation (design D2).
+    const hasOnlineExtras =
+      !!selectedCustomer || !!appliedCoupon || redeemPointsEffective > 0
+    const queueCurrentOrder = () => {
+      const entry: QueuedOrder = {
+        id: crypto.randomUUID(),
+        deviceId: getDeviceId(),
+        restaurantId: restaurant.id,
+        queuedAt: new Date().toISOString(),
+        source: 'pos_offline',
+        status: 'queued',
+        failureReason: null,
+        attempts: 0,
+        lastAttemptAt: null,
+        input,
+        pricedLines: previewLines,
+        totals,
+        taxRate,
+        serviceChargeRate,
+        payments: [],
+      }
+      enqueueOrder(entry)
+      setPlacedLines(previewLines)
+      setQueuedOrder(entry)
+      setCart([])
+      setDiscount(0)
+      setNotes('')
+      setChooserProduct(null)
+      setPaymentAmount(String(totals.totalAmount))
+      setPaymentReference('')
+      setPaymentErrorKey(null)
+      setPaymentRecorded(false)
+    }
+    if (!online) {
+      if (hasOnlineExtras) {
+        setPlaceErrorKey('offline.extrasUnsupported')
+        return
+      }
+      queueCurrentOrder()
+      return
+    }
     setPlacing(true)
     try {
-      const lines: PosOrderLineInput[] = cart.map((line) => ({
-        productId: line.productId,
-        variantId: line.variantId,
-        modifierIds: line.modifierIds,
-        quantity: line.quantity,
-      }))
-      const order = await createOrder(
-        {
-          restaurantId: restaurant.id,
-          branchId: defaultBranch?.id ?? null,
-          tableId: orderType === 'dine_in' ? selectedTableId : null,
-          type: orderType,
-          notes,
-          discountAmount: discount,
-          customerId: selectedCustomer?.id ?? null,
-          couponId: appliedCoupon?.id ?? null,
-          couponDiscount,
-          loyaltyPointsRedeemed: redeemPointsEffective,
-          loyaltyDiscount,
-          lines,
-        },
-        user.id,
-        { taxRate, serviceChargeRate },
-      )
+      const order = await createOrder(input, user.id, {
+        taxRate,
+        serviceChargeRate,
+      })
       setPlacedLines(previewLines)
       setPlacedOrder(order)
       setCart([])
@@ -580,6 +655,13 @@ export default function PosPage() {
       // availability so the next order sees honest servings.
       setAvailability(await fetchProductAvailability(restaurant.id))
     } catch (error) {
+      // A connectivity failure mid-placement queues the order
+      // instead of losing the sale (Phase 9) — unless it carries
+      // online-only extras, which the queue cannot hold.
+      if (isNetworkError(error) && !hasOnlineExtras) {
+        queueCurrentOrder()
+        return
+      }
       console.error('[POS] place order failed', error)
       const message = error instanceof Error ? error.message : ''
       setPlaceErrorKey(
@@ -674,6 +756,142 @@ export default function PosPage() {
     }
   }
 
+  // --- Phase 9: payments + receipt for a QUEUED (offline) order -------------
+  // The payment form state is shared with the placed-order card; for a
+  // queued order the payment is appended to the queue entry (with the
+  // attempt id as its idempotency key) and syncs with the order.
+  const handleQueuedPayment = (event: FormEvent) => {
+    event.preventDefault()
+    if (!queuedOrder || !restaurant) return
+    setPaymentErrorKey(null)
+    setPaymentRecorded(false)
+    const amount = roundMoney(Number(paymentAmount))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentErrorKey('pos.invalidPaymentAmount')
+      return
+    }
+    const paidSoFar = queuedOrder.payments.reduce(
+      (sum, p) => sum + p.amount,
+      0,
+    )
+    const balance = roundMoney(queuedOrder.totals.totalAmount - paidSoFar)
+    if (amount > balance + 0.001) {
+      setPaymentErrorKey('pos.paymentExceedsBalance')
+      return
+    }
+    const updated = addQueuedPayment(restaurant.id, queuedOrder.id, {
+      id: paymentAttemptId,
+      method: paymentMethod,
+      amount,
+      reference: paymentReference.trim() || null,
+    })
+    if (updated) {
+      setQueuedOrder(updated)
+      setPaymentAmount(String(Math.max(0, roundMoney(balance - amount))))
+      setPaymentReference('')
+      setPaymentRecorded(true)
+      setPaymentAttemptId(crypto.randomUUID())
+    }
+  }
+
+  const handlePrintQueuedReceipt = () => {
+    if (!queuedOrder || !restaurant) return
+    const entry = queuedOrder
+    const detail: OrderDetail = {
+      id: entry.id,
+      restaurant_id: entry.restaurantId,
+      branch_id: entry.input.branchId ?? null,
+      table_id: entry.input.tableId ?? null,
+      order_number: 0,
+      type: entry.input.type,
+      source: 'POS',
+      status: 'CONFIRMED',
+      subtotal: entry.totals.subtotal,
+      discount_amount: entry.totals.discountAmount,
+      tax_amount: entry.totals.taxAmount,
+      service_charge_amount: entry.totals.serviceChargeAmount,
+      total_amount: entry.totals.totalAmount,
+      delivery_fee: 0,
+      delivery_zone_id: null,
+      customer_id: null,
+      customer_name: null,
+      customer_phone: null,
+      delivery_address: null,
+      coupon_id: null,
+      coupon_discount: 0,
+      loyalty_points_redeemed: 0,
+      loyalty_discount: 0,
+      notes: entry.input.notes ?? null,
+      created_by: user?.id ?? null,
+      created_at: entry.queuedAt,
+      updated_at: entry.queuedAt,
+      items: entry.pricedLines.map((line, i) => ({
+        id: `${entry.id}-item-${i}`,
+        order_id: entry.id,
+        product_id: line.productId,
+        variant_id: line.variantId,
+        product_name: line.productName,
+        variant_name: line.variantName,
+        quantity: line.quantity,
+        unit_price: line.unitPrice,
+        total_price: line.lineTotal,
+        created_at: entry.queuedAt,
+        updated_at: entry.queuedAt,
+        modifiers: line.modifierNames.map((m, j) => ({
+          id: `${entry.id}-item-${i}-mod-${j}`,
+          order_item_id: `${entry.id}-item-${i}`,
+          modifier_id: m.id,
+          modifier_name: m.name,
+          price: m.price,
+          created_at: entry.queuedAt,
+        })),
+      })),
+      payments: entry.payments.map((payment) => ({
+        id: payment.id,
+        order_id: entry.id,
+        method: payment.method,
+        amount: payment.amount,
+        reference: payment.reference,
+        received_by: null,
+        created_at: entry.queuedAt,
+      })),
+      history: [],
+    }
+    const branch =
+      branches.find((b) => b.id === detail.branch_id) ?? defaultBranch
+    const table = tables.find((tb) => tb.id === detail.table_id)
+    const { title, html, css } = buildReceiptHtml(
+      detail,
+      {
+        restaurantName: settings?.branding_name || restaurant.name,
+        logoUrl: settings?.logo_url ?? null,
+        branchName: branch?.name ?? null,
+        branchAddress: branch?.address ?? null,
+        branchPhone: branch?.phone ?? null,
+        tableName: table?.name ?? null,
+        footer: settings?.receipt_footer ?? null,
+        orderRef: localRef(entry.id),
+      },
+      {
+        order: t('print.order'),
+        table: t('print.table'),
+        subtotal: t('print.subtotal'),
+        discount: t('print.discount'),
+        tax: t('print.tax'),
+        serviceCharge: t('print.serviceCharge'),
+        deliveryFee: t('print.deliveryFee'),
+        total: t('print.total'),
+        payment: t('print.payment'),
+        kitchenTicket: t('print.kitchenTicket'),
+        notes: t('print.notes'),
+        poweredBy: t('print.poweredBy'),
+      },
+      (n) => formatMoney(n, currency),
+      (method) => t(PAYMENT_METHOD_KEYS[method as PaymentMethod]),
+    )
+    printHtml(title, html, css)
+  }
+
   if (loading || !loaded) {
     return <p className="text-muted-foreground">{t('common.loading')}</p>
   }
@@ -718,6 +936,207 @@ export default function PosPage() {
           </Button>
         </CardContent>
       </Card>
+    )
+  }
+
+  // --- queued (offline) order summary state --------------------------------
+  if (queuedOrder) {
+    const tableName =
+      tables.find((table) => table.id === queuedOrder.input.tableId)?.name ??
+      t('pos.noTable')
+    const paidTotal = roundMoney(
+      queuedOrder.payments
+        .filter((payment) => payment.method !== 'due')
+        .reduce((sum, payment) => sum + payment.amount, 0),
+    )
+    const dueTotal = roundMoney(
+      queuedOrder.payments
+        .filter((payment) => payment.method === 'due')
+        .reduce((sum, payment) => sum + payment.amount, 0),
+    )
+    const balanceTotal = roundMoney(
+      queuedOrder.totals.totalAmount - paidTotal - dueTotal,
+    )
+    return (
+      <div className="flex flex-col gap-6">
+        <header>
+          <h2 className="text-2xl font-bold tracking-tight">
+            {t('offline.queuedTitle')}
+          </h2>
+          <p role="status" className="text-muted-foreground">
+            {t('offline.localRef')}: {localRef(queuedOrder.id)}
+          </p>
+        </header>
+
+        <p
+          role="status"
+          className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          {t('offline.queuedNotice')}
+        </p>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {localRef(queuedOrder.id)} ·{' '}
+              {t(ORDER_TYPE_KEYS[queuedOrder.input.type])}
+            </CardTitle>
+            <CardDescription>{tableName}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <ul className="flex flex-col gap-2">
+              {placedLines.map((line) => (
+                <li
+                  key={`${line.productId}|${line.variantId ?? ''}|${line.modifierIds.join(',')}`}
+                  className="flex items-center justify-between gap-2 text-sm"
+                >
+                  <span>
+                    {line.productName}
+                    {line.variantName ? ` (${line.variantName})` : ''}
+                    {line.modifierNames.length > 0
+                      ? ` + ${line.modifierNames.map((m) => m.name).join(', ')}`
+                      : ''}
+                    {' × '}
+                    {line.quantity}
+                  </span>
+                  <span className="font-medium">
+                    {formatMoney(line.lineTotal, currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-col gap-1 border-t pt-3 text-sm">
+              <p className="flex justify-between">
+                <span>{t('pos.subtotal')}</span>
+                <span>{formatMoney(queuedOrder.totals.subtotal, currency)}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>{t('pos.discount')}</span>
+                <span>
+                  {formatMoney(queuedOrder.totals.discountAmount, currency)}
+                </span>
+              </p>
+              <p className="flex justify-between">
+                <span>{t('pos.tax', { rate: taxRate })}</span>
+                <span>{formatMoney(queuedOrder.totals.taxAmount, currency)}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>{t('pos.serviceCharge', { rate: serviceChargeRate })}</span>
+                <span>
+                  {formatMoney(queuedOrder.totals.serviceChargeAmount, currency)}
+                </span>
+              </p>
+              <p className="flex justify-between font-semibold">
+                <span>{t('pos.total')}</span>
+                <span>
+                  {formatMoney(queuedOrder.totals.totalAmount, currency)}
+                </span>
+              </p>
+            </div>
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePrintQueuedReceipt}
+              >
+                {t('print.receiptButton')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('pos.payment')}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1 text-sm">
+              <p className="flex justify-between">
+                <span>{t('pos.paid')}</span>
+                <span>{formatMoney(paidTotal, currency)}</span>
+              </p>
+              <p className="flex justify-between">
+                <span>{t('pos.due')}</span>
+                <span>{formatMoney(dueTotal, currency)}</span>
+              </p>
+              <p className="flex justify-between font-semibold">
+                <span>{t('pos.balance')}</span>
+                <span>{formatMoney(balanceTotal, currency)}</span>
+              </p>
+            </div>
+            <form onSubmit={handleQueuedPayment} className="flex flex-col gap-4">
+              <p className="text-sm font-medium">{t('pos.addPayment')}</p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="queuedPaymentMethod">
+                    {t('pos.paymentMethod')}
+                  </Label>
+                  <select
+                    id="queuedPaymentMethod"
+                    value={paymentMethod}
+                    onChange={(e) =>
+                      setPaymentMethod(e.target.value as PaymentMethod)
+                    }
+                    className={SELECT_CLASSNAME}
+                  >
+                    {PAYMENT_METHODS.map((method) => (
+                      <option key={method} value={method}>
+                        {t(PAYMENT_METHOD_KEYS[method])}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="queuedPaymentAmount">{t('pos.amount')}</Label>
+                  <Input
+                    id="queuedPaymentAmount"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="queuedPaymentReference">
+                    {t('pos.reference')}
+                  </Label>
+                  <Input
+                    id="queuedPaymentReference"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder={t('pos.referencePlaceholder')}
+                  />
+                </div>
+              </div>
+              {paymentErrorKey && (
+                <p
+                  role="alert"
+                  className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  {t(paymentErrorKey)}
+                </p>
+              )}
+              {paymentRecorded && (
+                <p
+                  role="status"
+                  className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+                >
+                  {t('offline.paymentQueued')}
+                </p>
+              )}
+              <div>
+                <Button type="submit">{t('pos.recordPayment')}</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={resetForNewOrder}>{t('pos.newOrder')}</Button>
+        </div>
+      </div>
     )
   }
 
@@ -937,7 +1356,140 @@ export default function PosPage() {
       <header>
         <h2 className="text-2xl font-bold tracking-tight">{t('pos.title')}</h2>
         <p className="text-muted-foreground">{t('pos.subtitle')}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {!online && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
+              {t('offline.badge')}
+            </span>
+          )}
+          {queueCounts(queueEntries).waiting > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setQueueOpen((value) => !value)}
+            >
+              {t('offline.waitingCount', {
+                count: queueCounts(queueEntries).waiting,
+              })}
+            </Button>
+          )}
+          {queueCounts(queueEntries).failed > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={() => setQueueOpen((value) => !value)}
+            >
+              {t('offline.failedCount', {
+                count: queueCounts(queueEntries).failed,
+              })}
+            </Button>
+          )}
+        </div>
       </header>
+
+      {queueOpen && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('offline.queueTitle')}</CardTitle>
+            <CardDescription>{t('offline.queueHint')}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {queueEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t('offline.queueEmpty')}
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {queueEntries.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex flex-col gap-1 rounded-lg border p-3 text-sm"
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="font-medium">
+                        {localRef(entry.id)} ·{' '}
+                        {formatMoney(entry.totals.totalAmount, currency)}
+                      </span>
+                      <span>
+                        {entry.status === 'failed'
+                          ? t('offline.statusFailed')
+                          : t('offline.statusWaiting')}
+                      </span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      {t('offline.queuedAt', {
+                        time: new Date(entry.queuedAt).toLocaleString(),
+                      })}{' '}
+                      ·{' '}
+                      {t('offline.itemsCount', {
+                        count: entry.pricedLines.reduce(
+                          (sum, line) => sum + line.quantity,
+                          0,
+                        ),
+                      })}
+                    </span>
+                    {entry.status === 'failed' && (
+                      <span className="text-destructive">
+                        {t(
+                          `offline.fail_${entry.failureReason ?? 'sync_failed'}`,
+                        )}
+                      </span>
+                    )}
+                    <span className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          window.dispatchEvent(
+                            new Event(OFFLINE_QUEUE_UPDATED_EVENT),
+                          )
+                        }
+                      >
+                        {t('offline.syncNow')}
+                      </Button>
+                      {removingEntryId === entry.id ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              removeEntry(restaurant.id, entry.id)
+                              setRemovingEntryId(null)
+                            }}
+                          >
+                            {t('offline.confirmRemove')}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setRemovingEntryId(null)}
+                          >
+                            {t('common.cancel')}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setRemovingEntryId(entry.id)}
+                        >
+                          {t('offline.remove')}
+                        </Button>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="flex flex-col gap-4 pt-6">
@@ -1240,6 +1792,13 @@ export default function PosPage() {
                 placeholder={t('pos.notesPlaceholder')}
               />
             </div>
+            {!online && (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {t('offline.extrasDisabled')}
+              </p>
+            )}
+            {online && (
+              <>
             <div className="flex flex-col gap-2 border-t pt-3">
               <Label>{t('pos.customer')}</Label>
               {selectedCustomer ? (
@@ -1378,6 +1937,8 @@ export default function PosPage() {
                 </p>
               </div>
             )}
+              </>
+            )}
             <div className="flex flex-col gap-1 border-t pt-3 text-sm">
               <p className="flex justify-between">
                 <span>{t('pos.subtotal')}</span>
@@ -1431,7 +1992,11 @@ export default function PosPage() {
               onClick={() => void handlePlaceOrder()}
               disabled={placing}
             >
-              {placing ? t('pos.placingOrder') : t('pos.placeOrder')}
+              {placing
+                ? t('pos.placingOrder')
+                : online
+                  ? t('pos.placeOrder')
+                  : t('offline.placeOffline')}
             </Button>
           </CardContent>
         </Card>

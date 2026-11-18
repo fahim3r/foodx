@@ -15,6 +15,9 @@ export interface ReceiptContext {
   branchPhone: string | null
   tableName: string | null
   footer: string | null
+  /** Printed instead of "#<order_number>" — used for offline-queued
+   * orders, which have a local reference but no real number yet. */
+  orderRef?: string
 }
 
 export interface ReceiptLabels {
@@ -79,7 +82,7 @@ export function buildReceiptHtml(
     ${ctx.branchAddress ? `<p class="center">${escapeHtml(ctx.branchAddress)}</p>` : ''}
     ${ctx.branchPhone ? `<p class="center">${escapeHtml(ctx.branchPhone)}</p>` : ''}
     <hr />
-    <div class="row"><span>${labels.order} #${detail.order_number}</span><span>${new Date(detail.created_at).toLocaleString()}</span></div>
+    <div class="row"><span>${labels.order} ${ctx.orderRef ?? `#${detail.order_number}`}</span><span>${new Date(detail.created_at).toLocaleString()}</span></div>
     ${ctx.tableName ? `<div class="row"><span>${labels.table}</span><span>${escapeHtml(ctx.tableName)}</span></div>` : ''}
     <hr />
     ${itemRows(detail, fmt)}
@@ -93,7 +96,7 @@ export function buildReceiptHtml(
     ${payments}
     ${ctx.footer ? `<hr /><p class="center">${escapeHtml(ctx.footer)}</p>` : ''}
   `
-  return { title: `Receipt #${detail.order_number}`, html, css: RECEIPT_CSS }
+  return { title: `Receipt ${ctx.orderRef ?? `#${detail.order_number}`}`, html, css: RECEIPT_CSS }
 }
 
 export function buildKitchenTicketHtml(

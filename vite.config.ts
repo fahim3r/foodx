@@ -15,12 +15,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      // Manifest only for Phase 1. Full offline precaching / runtime
-      // caching is a later phase — the service worker currently
-      // precaches nothing (empty globPatterns).
+      // Phase 9: precache the built app shell so the panel OPENS
+      // offline (the offline order queue then survives reloads and
+      // syncs when connectivity returns). Runtime data (menu,
+      // orders) is still fetched live — see OFFLINE_SYNC.md.
       registerType: 'autoUpdate',
       workbox: {
-        globPatterns: [],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
       manifest: {
         name: 'FoodX',

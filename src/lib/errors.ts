@@ -56,3 +56,20 @@ export function isMissingTableError(error: unknown): boolean {
     /could not find the table/i.test(message)
   )
 }
+
+/**
+ * True when an error looks like a connectivity failure rather than
+ * a server/business response: fetch TypeErrors ("Failed to fetch"
+ * in Chrome, "Load failed" in Safari) and network-flavoured
+ * messages. Phase 9 uses this to decide that an order belongs in
+ * the offline queue instead of an error banner.
+ */
+export function isNetworkError(error: unknown): boolean {
+  if (error instanceof TypeError) return true
+  if (!error || typeof error !== 'object') return false
+  const e = error as { message?: unknown }
+  const message = typeof e.message === 'string' ? e.message : ''
+  return /failed to fetch|load failed|networkerror|network request failed|fetch failed/i.test(
+    message,
+  )
+}

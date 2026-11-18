@@ -736,6 +736,32 @@ There is no automated provisioning yet — that is later-phase work.
   Until then, versions and statuses in the panel are **as
   registered** by the developer, and the UI says so.
 
+## What Phase 9 adds (v1 — offline order queue)
+
+Phase 9 (Production Hardening) starts with the §5 offline-first
+slice. Full design + rationale: OFFLINE_SYNC.md.
+
+- **Offline order queue** (`src/services/offlineQueue.ts`): when
+  the POS loses connectivity, orders are captured on the device
+  (localStorage, per restaurant) with a UUID idempotency key,
+  device ID, timestamp, source and sync status, the priced
+  snapshot as charged, and any payments taken at the counter.
+- **Sync** (`src/hooks/useOfflineSync.ts` + `pos.syncQueuedOrder`):
+  on reconnect the queue replays automatically — existence +
+  totals validation first, then the same idempotent write path
+  as a live order (order number assigned at sync, stock deducted
+  by the idempotent RPC). Validation failures are parked in the
+  POS queue panel with a reason, never silently dropped.
+- **Counter UX**: offline badge, queue chip + panel in the POS,
+  a queued-order card with a local reference (OFF-…, never a fake
+  order number), payments against the entry, and receipt printing
+  from the snapshot. Customer / coupon / loyalty are disabled
+  while offline (they need live validation).
+- **App shell precache**: the PWA now precaches the built shell,
+  so the panel opens offline and the queue survives reloads.
+  Menu data is still fetched live — a fully offline cold start
+  is v2, as are LAN mode and multi-device sync (§4).
+
 ## Landing page, demo subdomain & client onboarding
 
 The sales/delivery flow on top of the 9 phases (owner's product
@@ -792,11 +818,11 @@ Do not assume it exists.
 | Reports / analytics | Built (Phase 7 + Step 2A): full §39 list (P&L, sales, cashier, waiter, branch, kitchen, customer, loyalty, inventory, purchase, supplier balances, tax, discounts, refunds/voids, shifts), §28 item margins, CSV export + print/PDF |
 | Role editing / assigning permissions to roles | Read-only view only; the `role_permissions` table is seeded **empty** — the matrix shows all dashes until assignments are made (a later phase) |
 | Branch management UI | Built (Phase 7 Step 2B): Branches page CRUD + per-branch stock and transfers (§40–§41) |
-| Staff/user management UI | Not started |
+| Staff/user management UI | Built (Landing Step 3): `/panel/staff` via the manage-staff Edge Function (create, role, activate/deactivate, password reset) |
 | Feature flags UI | The `feature_flags` table exists; nothing reads or writes it yet |
 | Audit log UI | The `audit_logs` table exists (insert-only); nothing writes to it yet |
-| Offline-first / LAN mode / cloud sync | Reserved for Phase 9; PWA is manifest-only now |
-| Developer Panel (separate from Restaurant Admin) | Step 1 built (Phase 8): manual client / license / release registry at `/devpanel`, developer allow-list only; heartbeat validation, update execution and backup reporting are Step 2 |
+| Offline-first / LAN mode / cloud sync | v1 built (Phase 9): offline POS order queue + sync + app-shell precache (see OFFLINE_SYNC.md); LAN mode / multi-device sync not started |
+| Developer Panel (separate from Restaurant Admin) | Built (Phase 8 complete): registry in its own Supabase project, heartbeat validation, feature flags + license limits enforced, backup reporting, deploy-hook updates with a backup gate, rollback runbook above |
 | Docker packaging | Not started |
 
 The 9-phase plan is: 1 Foundation → 2 Core Restaurant → 3 Inventory

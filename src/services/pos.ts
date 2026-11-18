@@ -23,6 +23,7 @@ import type {
   PaymentMethod,
   PosOrderLineInput,
 } from '@/types'
+import type { QueuedOrder } from '@/services/offlineQueue'
 
 /** Round to 2 decimals (BDT paisa). The single rounding rule for money. */
 export function roundMoney(value: number): number {
@@ -245,30 +246,23 @@ async function fetchOrderById(orderId: string): Promise<Order | null> {
 }
 
 /**
- * Place an order. Prices come from the database (see priceOrderLines),
- * totals from computeOrderTotals. The order is created CONFIRMED with a
- * status-history row recording the DRAFT → CONFIRMED placement. A dine-in
- * order marks its table occupied. Throws Error('product_unavailable') or
- * Error('empty_order') / Error('invalid_quantity') on bad input.
+ * Persist an already-priced order: the order row (with the
+ * per-restaurant number retry), its items + modifiers, the
+ * placement history row, the table flag and the stock deduction.
+ * Shared by createOrder (live placement) and syncQueuedOrder
+ * (Phase 9 offline replay) so both paths write identical shapes.
+ * Every write upserts on client-generated ids — replaying this
+ * function for the same orderId can never double-post.
  */
-export async function createOrder(
-  input: CreateOrderInput,
-  userId: string,
-  settings: { taxRate: number; serviceChargeRate: number },
-): Promise<Order> {
-  const pricedLines = await priceOrderLines(input.restaurantId, input.lines)
-  const totals = computeOrderTotals(
-    pricedLines,
-    input.discountAmount,
-    settings.taxRate,
-    settings.serviceChargeRate,
-    {
-      couponDiscount: input.couponDiscount ?? 0,
-      loyaltyDiscount: input.loyaltyDiscount ?? 0,
-    },
-  )
-
-  const orderId = crypto.randomUUID()
+async function persistPricedOrder(args: {
+  orderId: string
+  input: CreateOrderInput
+  pricedLines: PricedLine[]
+  totals: OrderTotals
+  userId: string
+  historyNote: string
+}): Promise<Order> {
+  const { orderId, input, pricedLines, totals, userId, historyNote } = args
   const itemIds = pricedLines.map(() => crypto.randomUUID())
 
   // Insert the order, retrying the per-restaurant order number on a
@@ -368,7 +362,7 @@ export async function createOrder(
         from_status: 'DRAFT',
         to_status: 'CONFIRMED',
         changed_by: userId,
-        note: 'Order placed',
+        note: historyNote,
       },
       { onConflict: 'id' },
     )
@@ -395,6 +389,44 @@ export async function createOrder(
   } catch (error) {
     console.error('[POS] stock deduction failed', error)
   }
+  return order
+}
+
+
+/**
+ * Place an order. Prices come from the database (see priceOrderLines),
+ * totals from computeOrderTotals. The order is created CONFIRMED with a
+ * status-history row recording the DRAFT → CONFIRMED placement. A dine-in
+ * order marks its table occupied. Throws Error('product_unavailable') or
+ * Error('empty_order') / Error('invalid_quantity') on bad input.
+ */
+export async function createOrder(
+  input: CreateOrderInput,
+  userId: string,
+  settings: { taxRate: number; serviceChargeRate: number },
+): Promise<Order> {
+  const pricedLines = await priceOrderLines(input.restaurantId, input.lines)
+  const totals = computeOrderTotals(
+    pricedLines,
+    input.discountAmount,
+    settings.taxRate,
+    settings.serviceChargeRate,
+    {
+      couponDiscount: input.couponDiscount ?? 0,
+      loyaltyDiscount: input.loyaltyDiscount ?? 0,
+    },
+  )
+
+  const orderId = crypto.randomUUID()
+  const order = await persistPricedOrder({
+    orderId,
+    input,
+    pricedLines,
+    totals,
+    userId,
+    historyNote: 'Order placed',
+  })
+
 
   // Coupon + loyalty records (Phase 4): best-effort, after the order
   // row exists — they must never fail an order at the counter. The
@@ -419,6 +451,145 @@ export async function createOrder(
     } catch (error) {
       console.error('[POS] loyalty redemption failed', error)
     }
+  }
+  return order
+}
+
+
+// --- offline sync (Phase 9) -------------------------------------------------
+
+/**
+ * Replay one offline-queued order (see services/offlineQueue).
+ *
+ * The snapshot prices are honoured — the customer already paid
+ * them (design D1) — but nothing is trusted blindly:
+ *   1. every product / variant / modifier in the snapshot must
+ *      still exist for this restaurant, else 'sync_product_missing';
+ *   2. the totals are recomputed from the snapshot lines with the
+ *      rates captured at queue time and must match the queued
+ *      totals exactly, else 'sync_totals_mismatch';
+ *   3. the queued payments must be positive and within the order
+ *      total, else 'sync_payment_exceeds'.
+ * Only then is the order persisted (through the same
+ * persistPricedOrder the live path uses, under the entry's UUID —
+ * a retried sync upserts instead of duplicating) and its payments
+ * upserted under their queued ids. The placement history note
+ * records the offline origin: queued time + device (§5).
+ */
+export async function syncQueuedOrder(
+  entry: QueuedOrder,
+  userId: string,
+): Promise<Order> {
+  const { input, pricedLines } = entry
+
+  const productIds = [...new Set(pricedLines.map((l) => l.productId))]
+  const variantIds = [
+    ...new Set(
+      pricedLines.map((l) => l.variantId).filter((v): v is string => !!v),
+    ),
+  ]
+  const modifierIds = [...new Set(pricedLines.flatMap((l) => l.modifierIds))]
+
+  const { data: productRows, error: productsError } = await supabase
+    .from('products')
+    .select('id')
+    .eq('restaurant_id', input.restaurantId)
+    .in('id', productIds)
+  if (productsError) throw productsError
+  const productSet = new Set(
+    ((productRows ?? []) as { id: string }[]).map((r) => r.id),
+  )
+
+  let variantRows: { id: string; product_id: string }[] = []
+  if (variantIds.length > 0) {
+    const { data, error } = await supabase
+      .from('product_variants')
+      .select('id, product_id')
+      .in('id', variantIds)
+    if (error) throw error
+    variantRows = (data ?? []) as { id: string; product_id: string }[]
+  }
+  const variantById = new Map(variantRows.map((v) => [v.id, v]))
+
+  let modifierSet = new Set<string>()
+  if (modifierIds.length > 0) {
+    const { data, error } = await supabase
+      .from('modifiers')
+      .select('id')
+      .eq('restaurant_id', input.restaurantId)
+      .in('id', modifierIds)
+    if (error) throw error
+    modifierSet = new Set(((data ?? []) as { id: string }[]).map((r) => r.id))
+  }
+
+  for (const line of pricedLines) {
+    if (!productSet.has(line.productId)) throw new Error('sync_product_missing')
+    if (line.variantId) {
+      const variant = variantById.get(line.variantId)
+      if (!variant || variant.product_id !== line.productId) {
+        throw new Error('sync_product_missing')
+      }
+    }
+    for (const modifierId of line.modifierIds) {
+      if (!modifierSet.has(modifierId)) throw new Error('sync_product_missing')
+    }
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+      throw new Error('sync_totals_mismatch')
+    }
+  }
+
+  const totals = computeOrderTotals(
+    pricedLines,
+    input.discountAmount,
+    entry.taxRate,
+    entry.serviceChargeRate,
+  )
+  const queued = entry.totals
+  if (
+    totals.subtotal !== queued.subtotal ||
+    totals.discountAmount !== queued.discountAmount ||
+    totals.taxAmount !== queued.taxAmount ||
+    totals.serviceChargeAmount !== queued.serviceChargeAmount ||
+    totals.totalAmount !== queued.totalAmount ||
+    totals.couponDiscount !== 0 ||
+    totals.loyaltyDiscount !== 0
+  ) {
+    throw new Error('sync_totals_mismatch')
+  }
+
+  let paymentsTotal = 0
+  for (const payment of entry.payments) {
+    if (!Number.isFinite(payment.amount) || payment.amount <= 0) {
+      throw new Error('sync_payment_exceeds')
+    }
+    paymentsTotal += payment.amount
+  }
+  if (roundMoney(paymentsTotal) > totals.totalAmount + 0.001) {
+    throw new Error('sync_payment_exceeds')
+  }
+
+  const order = await persistPricedOrder({
+    orderId: entry.id,
+    input,
+    pricedLines,
+    totals,
+    userId,
+    historyNote: `Offline order - placed ${entry.queuedAt} on device ${entry.deviceId.slice(0, 8)}; synced ${new Date().toISOString()}`,
+  })
+
+  for (const payment of entry.payments) {
+    const { error } = await supabase.from('order_payments').upsert(
+      {
+        id: payment.id,
+        order_id: order.id,
+        method: payment.method,
+        amount: roundMoney(payment.amount),
+        reference: payment.reference,
+        received_by: userId,
+      },
+      { onConflict: 'id' },
+    )
+    if (error) throw error
   }
   return order
 }

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLicenseState } from '@/hooks/useLicenseState'
+import { useOfflineSync } from '@/hooks/useOfflineSync'
 import {
   isModuleEnabled,
   runHeartbeat,
@@ -235,6 +236,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [])
   const navigate = useNavigate()
   const { user, profile, restaurant, settings, dbPending, signOut } = useAuth()
+  useOfflineSync(restaurant?.id ?? null, user?.id ?? null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
