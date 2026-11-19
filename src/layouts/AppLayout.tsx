@@ -41,6 +41,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
 import { EasyModeProvider } from '@/app/EasyModeProvider'
 import { useEasyMode } from '@/hooks/useEasyMode'
+import { usePermissions } from '@/hooks/usePermissions'
 import { useLicenseState } from '@/hooks/useLicenseState'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
 import {
@@ -58,21 +59,22 @@ import { Button } from '@/components/ui/button'
 
 const NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard, end: true },
-  { to: '/pos', key: 'nav.pos', icon: ShoppingCart, end: false },
-  { to: '/orders', key: 'nav.orders', icon: ClipboardList, end: false },
-  { to: '/kds', key: 'nav.kds', icon: ChefHat, end: false },
-  { to: '/serve', key: 'nav.serve', icon: BellRing, end: false },
-  { to: '/display', key: 'nav.display', icon: Monitor, end: false },
-  { to: '/reservations', key: 'nav.reservations', icon: CalendarCheck, end: false, module: 'reservations' as ModuleKey },
-  { to: '/menu', key: 'nav.menu', icon: UtensilsCrossed, end: false },
-  { to: '/inventory', key: 'nav.inventory', icon: Boxes, end: false },
-  { to: '/tables', key: 'nav.tables', icon: Table2, end: false },
-  { to: '/customers', key: 'nav.customers', icon: Users, end: false, module: 'customers' as ModuleKey },
+  { to: '/pos', key: 'nav.pos', icon: ShoppingCart, end: false, perm: 'orders.create' },
+  { to: '/orders', key: 'nav.orders', icon: ClipboardList, end: false, perm: 'orders.view' },
+  { to: '/kds', key: 'nav.kds', icon: ChefHat, end: false, perm: 'kitchen.view' },
+  { to: '/serve', key: 'nav.serve', icon: BellRing, end: false, perm: 'kitchen.view' },
+  { to: '/display', key: 'nav.display', icon: Monitor, end: false, perm: 'kitchen.view' },
+  { to: '/reservations', key: 'nav.reservations', icon: CalendarCheck, end: false, module: 'reservations' as ModuleKey, perm: 'tables.view' },
+  { to: '/menu', key: 'nav.menu', icon: UtensilsCrossed, end: false, perm: 'products.view' },
+  { to: '/inventory', key: 'nav.inventory', icon: Boxes, end: false, perm: 'inventory.view' },
+  { to: '/tables', key: 'nav.tables', icon: Table2, end: false, perm: 'tables.view' },
+  { to: '/customers', key: 'nav.customers', icon: Users, end: false, module: 'customers' as ModuleKey, perm: 'customers.view' },
   {
     to: '/delivery',
     key: 'nav.delivery',
     icon: Truck,
     end: false,
+    perm: 'delivery.view',
     feature: 'delivery' as DevFeatureKey,
     module: 'delivery' as ModuleKey,
   },
@@ -81,6 +83,7 @@ const NAV_ITEMS = [
     key: 'nav.business',
     icon: Wallet,
     end: false,
+    perm: 'reports.view',
     feature: 'accounting' as DevFeatureKey,
     module: 'business' as ModuleKey,
   },
@@ -89,12 +92,13 @@ const NAV_ITEMS = [
     key: 'nav.branches',
     icon: Building2,
     end: false,
+    perm: 'settings.view',
     feature: 'multi_branch' as DevFeatureKey,
   },
-  { to: '/settings', key: 'nav.settings', icon: Settings, end: false },
-  { to: '/health', key: 'nav.health', icon: Activity, end: false },
-  { to: '/staff', key: 'nav.staff', icon: UserCog, end: false },
-  { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false },
+  { to: '/settings', key: 'nav.settings', icon: Settings, end: false, perm: 'settings.view' },
+  { to: '/health', key: 'nav.health', icon: Activity, end: false, perm: 'settings.view' },
+  { to: '/staff', key: 'nav.staff', icon: UserCog, end: false, perm: 'staff.view' },
+  { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false, perm: 'staff.view' },
 ] as const
 
 function LanguageSwitcher() {
@@ -163,6 +167,7 @@ function EasyModeToggleButton() {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const licenseView = useLicenseState()
   const { easy } = useEasyMode()
+  const { can } = usePermissions()
   const { t } = useTranslation()
   const { restaurant, settings } = useAuth()
   const { pathname } = useLocation()
@@ -221,7 +226,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               isModuleEnabled(licenseView, item.feature)) &&
             (!('module' in item && item.module) ||
               isModuleOn(settings, item.module)) &&
-            (!easy || EASY_NAV.includes(item.to)),
+            (!easy || EASY_NAV.includes(item.to)) &&
+            (!('perm' in item && item.perm) || can(item.perm)),
         ).map(({ to, key, icon: Icon, end }) => (
           <NavLink
             key={to}

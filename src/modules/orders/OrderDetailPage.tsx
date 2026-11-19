@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { usePermissions } from '@/hooks/usePermissions'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { elapsedMinutes, useNow } from '@/lib/time'
@@ -98,6 +99,7 @@ export default function OrderDetailPage() {
   const [missingTables, setMissingTables] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [acting, setActing] = useState(false)
+  const { can } = usePermissions()
   const [showCancelForm, setShowCancelForm] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelFormError, setCancelFormError] = useState<string | null>(null)
@@ -611,7 +613,7 @@ export default function OrderDetailPage() {
               {t('orders.mergeInto')}
             </Button>
           )}
-        {!isTerminal && (
+        {!isTerminal && can('orders.cancel') && (
           <Button
             variant="outline"
             onClick={() => {
@@ -624,7 +626,7 @@ export default function OrderDetailPage() {
             {t('orders.cancelOrder')}
           </Button>
         )}
-        {detail.status === 'COMPLETED' && (
+        {detail.status === 'COMPLETED' && can('orders.refund') && (
           <Button
             variant="outline"
             onClick={() => {
