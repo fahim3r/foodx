@@ -36,7 +36,7 @@ import {
   type QueuedOrder,
 } from '@/services/offlineQueue'
 import { fetchOrders } from '@/services/orders'
-import { computeOrderTotals, createOrder } from '@/services/pos'
+import { computeOrderTotals, createOrder, type PricedLine } from '@/services/pos'
 import { fetchBranches } from '@/services/restaurant'
 import { fetchTables } from '@/services/tables'
 import {
@@ -45,7 +45,6 @@ import {
   type CreateOrderInput,
   type DiningTable,
   type Order,
-  type PricedLine,
   type ProductWithDetails,
 } from '@/types'
 
@@ -196,11 +195,11 @@ export default function WaiterPage() {
       } catch (error) {
         const cached = loadPosCache(restaurantId)
         if (cached && isNetworkError(error)) {
-          setCategories(cached.data.categories)
-          setProducts(cached.data.products)
-          setTables(cached.data.tables)
+          setCategories(cached.categories)
+          setProducts(cached.products)
+          setTables(cached.tables)
           setMainBranchId(
-            cached.data.branches.find((b) => b.is_main)?.id ?? null,
+            cached.branches.find((b) => b.is_main)?.id ?? null,
           )
           setFromCacheAt(cached.savedAt)
           setLoadState('ready')
