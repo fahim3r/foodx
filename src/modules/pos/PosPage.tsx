@@ -2283,19 +2283,21 @@ export default function PosPage() {
                 })}
               </ul>
             )}
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="discount">{t('pos.discountAmount')}</Label>
-              <Input
-                id="discount"
-                type="number"
-                min={0}
-                step={0.01}
-                value={discount}
-                onChange={(e) =>
-                  setDiscount(Math.max(0, Number(e.target.value) || 0))
-                }
-              />
-            </div>
+            {!easy && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="discount">{t('pos.discountAmount')}</Label>
+                <Input
+                  id="discount"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={discount}
+                  onChange={(e) =>
+                    setDiscount(Math.max(0, Number(e.target.value) || 0))
+                  }
+                />
+              </div>
+            )}
             <div className="flex flex-col gap-2">
               <Label htmlFor="notes">{t('pos.notes')}</Label>
               <Input
