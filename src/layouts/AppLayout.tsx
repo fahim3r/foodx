@@ -85,7 +85,7 @@ const NAV_ITEMS = [
     end: false,
     feature: 'multi_branch' as DevFeatureKey,
   },
-  { to: '/settings', key: 'nav.settings', icon: Settings, end: false }
+  { to: '/settings', key: 'nav.settings', icon: Settings, end: false },
   { to: '/health', key: 'nav.health', icon: Activity, end: false },
   { to: '/staff', key: 'nav.staff', icon: UserCog, end: false },
   { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false },
