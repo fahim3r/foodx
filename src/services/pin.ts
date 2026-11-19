@@ -22,9 +22,19 @@ export async function removeManagerPin(): Promise<void> {
   if (error) throw error
 }
 
-/** Map a guarded-RPC failure to a stable error code the UI keys on. */
+/** Map a guarded-RPC failure to a stable error code the UI keys on.
+ * PostgREST errors are plain objects (not Error instances), so the
+ * message is read off the object as well as off real Errors. */
 export function guardedErrorCode(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
+  const raw = (
+    error as { message?: unknown } | null | undefined
+  )?.message
+  const message =
+    typeof raw === 'string'
+      ? raw
+      : error instanceof Error
+        ? error.message
+        : String(error)
   if (message.includes('pin_incorrect')) return 'pin_incorrect'
   if (message.includes('pin_required')) return 'pin_required'
   if (message.includes('pin_invalid')) return 'pin_invalid'
