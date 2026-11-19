@@ -14,10 +14,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { supabase } from '@/lib/supabase'
 import { APP_VERSION } from '@/lib/version'
-import {
-  loadPosCache,
-  loadWorkspaceCache,
-} from '@/services/catalogCache'
+import { loadPosCache } from '@/services/catalogCache'
 import {
   compareVersions,
   readLicenseCache,
@@ -35,6 +32,17 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+function readWorkspaceSavedAt(userId: string): string | null {
+  try {
+    const raw = localStorage.getItem(`foodx.workspace_cache.${userId}`)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { savedAt?: unknown }
+    return typeof parsed.savedAt === 'string' ? parsed.savedAt : null
+  } catch {
+    return null
+  }
 }
 
 function daysUntil(dateIso: string): number {
@@ -110,7 +118,8 @@ export default function HealthPage() {
   const qc = queueCounts(queue)
   const failed = queue.filter((entry) => entry.status === 'failed')
   const posCache = restaurant ? loadPosCache(restaurant.id) : null
-  const workspaceCache = user ? loadWorkspaceCache(user.id) : null
+  const workspaceSavedAt = user ? readWorkspaceSavedAt(user.id) : null
+  const license = cache?.license ?? null
   const updatePending =
     cache?.latest_release != null &&
     compareVersions(cache.latest_release.version, APP_VERSION) > 0
@@ -226,27 +235,27 @@ export default function HealthPage() {
             {statusLine(
               cache != null &&
                 cache.client_status === 'ACTIVE' &&
-                cache.license.status === 'ACTIVE',
+                license?.status === 'ACTIVE',
             )}
           </CardTitle>
           <CardDescription>
-            {cache
-              ? `${cache.license.status} · ${cache.license.plan}`
+            {cache && license
+              ? `${license.status} · ${license.plan}`
               : t('health.never')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-1 text-sm text-muted-foreground">
-          {cache?.license.expiry_date ? (
+          {license?.expiry_date ? (
             <p>
               {t('health.licenseExpires')}:{' '}
-              {new Date(cache.license.expiry_date).toLocaleDateString()} (
+              {new Date(license.expiry_date).toLocaleDateString()} (
               {t('health.daysLeft', {
-                count: daysUntil(cache.license.expiry_date),
+                count: daysUntil(license.expiry_date),
               })}
               )
             </p>
           ) : (
-            cache && <p>{t('health.licenseLifetime')}</p>
+            license && <p>{t('health.licenseLifetime')}</p>
           )}
           <p>
             {t('health.branchesUse')}: {counts.branches ?? '—'} /{' '}
@@ -297,8 +306,8 @@ export default function HealthPage() {
           </p>
           <p>
             {t('health.workspaceCache')}:{' '}
-            {workspaceCache
-              ? new Date(workspaceCache.savedAt).toLocaleString()
+            {workspaceSavedAt
+              ? new Date(workspaceSavedAt).toLocaleString()
               : t('health.menuCacheNone')}
           </p>
           <p>
