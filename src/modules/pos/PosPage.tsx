@@ -52,6 +52,7 @@ import { printHtml } from '@/lib/print'
 import { buildKitchenTicketHtml, buildReceiptHtml } from '@/lib/receipt'
 import { loadPrintSettings } from '@/services/printSettings'
 import { isModuleOn } from '@/services/modules'
+import { useEasyMode } from '@/hooks/useEasyMode'
 import type {
   Category,
   Coupon,
@@ -115,6 +116,8 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   'bank',
   'due',
 ]
+
+const EASY_PAYMENT_METHODS: PaymentMethod[] = ['cash', 'bkash', 'card']
 
 const SELECT_CLASSNAME =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
@@ -210,6 +213,7 @@ export default function PosPage() {
 
   const [placing, setPlacing] = useState(false)
   const [placeErrorKey, setPlaceErrorKey] = useState<string | null>(null)
+  const { easy } = useEasyMode()
   const licenseView = useLicenseState()
   const licenseSuspended =
     licenseView.reason === 'client_suspended' ||
@@ -455,6 +459,16 @@ export default function PosPage() {
   }, [selectedCustomer, customerBalance, totalsAfterCoupon, loyaltyRates])
 
   const loyaltyModuleOn = isModuleOn(settings, 'loyalty')
+  // Easy Mode (item 9): the advanced strip (customer, coupon,
+  // loyalty redeem, manual discount) is hidden — clear it when the
+  // mode turns on so a hidden extra can never ride into an order.
+  useEffect(() => {
+    if (!easy) return
+    setSelectedCustomer(null)
+    setAppliedCoupon(null)
+    setRedeemPoints('')
+    setDiscount(0)
+  }, [easy])
   const redeemPointsEffective = useMemo(() => {
     if (!loyaltyModuleOn) return 0
     const wanted = Number.parseInt(redeemPoints, 10)
@@ -965,6 +979,38 @@ export default function PosPage() {
     }
   }
 
+  // Easy Mode (item 9): one big button settles the exact balance in
+  // cash — the common counter case, no form fields to fill.
+  const handleEasyPaidInFull = async () => {
+    if (!user || !placedOrder || paymentSummary.balance <= 0) return
+    setPaymentErrorKey(null)
+    setPaymentRecorded(false)
+    setRecordingPayment(true)
+    try {
+      await recordPayment(
+        placedOrder,
+        {
+          method: 'cash',
+          amount: paymentSummary.balance,
+          reference: '',
+        },
+        user.id,
+        paymentAttemptId,
+      )
+      const loaded = await fetchOrderPayments(placedOrder.id)
+      setPayments(loaded)
+      setPaymentAmount('0')
+      setPaymentReference('')
+      setPaymentRecorded(true)
+      setPaymentAttemptId(crypto.randomUUID())
+    } catch (error) {
+      console.error('[POS] easy paid-in-full failed', error)
+      setPaymentErrorKey('pos.paymentFailed')
+    } finally {
+      setRecordingPayment(false)
+    }
+  }
+
   // --- Phase 9: payments + receipt for a QUEUED (offline) order -------------
   // The payment form state is shared with the placed-order card; for a
   // queued order the payment is appended to the queue entry (with the
@@ -1390,7 +1436,7 @@ export default function PosPage() {
                     }
                     className={SELECT_CLASSNAME}
                   >
-                    {PAYMENT_METHODS.map((method) => (
+                    {(easy ? EASY_PAYMENT_METHODS : PAYMENT_METHODS).map((method) => (
                       <option key={method} value={method}>
                         {t(PAYMENT_METHOD_KEYS[method])}
                       </option>
@@ -1592,6 +1638,19 @@ export default function PosPage() {
                 </p>
               </div>
             )}
+            {easy && paymentSummary.balance > 0 && (
+              <Button
+                type="button"
+                size="lg"
+                className="mb-4 w-full text-base"
+                onClick={() => void handleEasyPaidInFull()}
+                disabled={recordingPayment}
+              >
+                {t('pos.paidInFull', {
+                  amount: formatMoney(paymentSummary.balance, currency),
+                })}
+              </Button>
+            )}
             <form onSubmit={handleRecordPayment} className="flex flex-col gap-4">
               <p className="text-sm font-medium">{t('pos.addPayment')}</p>
               <div className="grid gap-4 sm:grid-cols-3">
@@ -1607,7 +1666,7 @@ export default function PosPage() {
                     }
                     className={SELECT_CLASSNAME}
                   >
-                    {PAYMENT_METHODS.map((method) => (
+                    {(easy ? EASY_PAYMENT_METHODS : PAYMENT_METHODS).map((method) => (
                       <option key={method} value={method}>
                         {t(PAYMENT_METHOD_KEYS[method])}
                       </option>
@@ -2095,7 +2154,13 @@ export default function PosPage() {
             </Card>
           )}
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <div
+            className={
+              easy
+                ? 'grid gap-3 sm:grid-cols-2'
+                : 'grid gap-2 sm:grid-cols-2 xl:grid-cols-3'
+            }
+          >
             {filteredProducts.map((product) => {
               const servable = availability.get(product.id)
               const outOfStock = servable === 0
@@ -2108,12 +2173,22 @@ export default function PosPage() {
                   variant="outline"
                   disabled={!product.is_available || outOfStock}
                   onClick={() => handleProductTap(product)}
-                  className="h-auto flex-col items-start gap-1 p-4 text-left"
+                  className={
+                    easy
+                      ? 'h-auto flex-col items-start gap-1 p-5 text-left'
+                      : 'h-auto flex-col items-start gap-1 p-4 text-left'
+                  }
                 >
-                  <span className="font-medium">
+                  <span className={easy ? 'text-lg font-semibold' : 'font-medium'}>
                     {displayName(product.name, product.name_bn)}
                   </span>
-                  <span className="text-sm text-muted-foreground">
+                  <span
+                    className={
+                      easy
+                        ? 'text-base text-muted-foreground'
+                        : 'text-sm text-muted-foreground'
+                    }
+                  >
                     {formatMoney(Number(product.price), currency)}
                   </span>
                   {!product.is_available && (
@@ -2234,7 +2309,7 @@ export default function PosPage() {
                 {t('offline.extrasDisabled')}
               </p>
             )}
-            {online && (
+            {online && !easy && (
               <>
             <div className="flex flex-col gap-2 border-t pt-3">
               <Label>{t('pos.customer')}</Label>

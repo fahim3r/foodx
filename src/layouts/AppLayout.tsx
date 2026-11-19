@@ -28,6 +28,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingCart,
+  Sparkles,
   Sun,
   Table2,
   Truck,
@@ -38,6 +39,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
+import { EasyModeProvider } from '@/app/EasyModeProvider'
+import { useEasyMode } from '@/hooks/useEasyMode'
 import { useLicenseState } from '@/hooks/useLicenseState'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
 import {
@@ -139,8 +142,27 @@ function LanguageSwitcher() {
   )
 }
 
+const EASY_NAV = ['/', '/pos', '/orders', '/kds', '/tables', '/serve']
+
+function EasyModeToggleButton() {
+  const { t } = useTranslation()
+  const { easy, toggle } = useEasyMode()
+  return (
+    <Button
+      variant={easy ? 'default' : 'ghost'}
+      size="icon"
+      onClick={toggle}
+      aria-label={t('common.easyMode')}
+      title={t('common.easyMode')}
+    >
+      <Sparkles className="size-5" />
+    </Button>
+  )
+}
+
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const licenseView = useLicenseState()
+  const { easy } = useEasyMode()
   const { t } = useTranslation()
   const { restaurant, settings } = useAuth()
   const { pathname } = useLocation()
@@ -198,7 +220,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             (!('feature' in item && item.feature) ||
               isModuleEnabled(licenseView, item.feature)) &&
             (!('module' in item && item.module) ||
-              isModuleOn(settings, item.module)),
+              isModuleOn(settings, item.module)) &&
+            (!easy || EASY_NAV.includes(item.to)),
         ).map(({ to, key, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -233,7 +256,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+function AppLayoutShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
   const licenseView = useLicenseState()
 
@@ -351,6 +374,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             {displayName}
           </h1>
           <LanguageSwitcher />
+          <EasyModeToggleButton />
           <Button
             variant="ghost"
             size="icon"
@@ -542,5 +566,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </main>
       </div>
     </div>
+  )
+}
+
+export default function AppLayout({ children }: { children: ReactNode }) {
+  return (
+    <EasyModeProvider>
+      <AppLayoutShell>{children}</AppLayoutShell>
+    </EasyModeProvider>
   )
 }

@@ -23,6 +23,7 @@ import {
   YAxis,
 } from 'recharts'
 import { useAuth } from '@/hooks/useAuth'
+import { useEasyMode } from '@/hooks/useEasyMode'
 import { formatMoney, roundMoney } from '@/lib/money'
 import {
   fetchDailySalesSeries,
@@ -51,6 +52,7 @@ import {
 } from '@/components/ui/card'
 
 export default function DashboardPage() {
+  const { easy } = useEasyMode()
   const { t } = useTranslation()
   const { profile, user, restaurant, settings } = useAuth()
 
@@ -378,7 +380,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {todayExpenses !== null && (
+      {!easy && todayExpenses !== null && (
         <Card>
           <CardHeader>
             <CardTitle>{t('dashboard.salesLast7Days')}</CardTitle>
@@ -404,7 +406,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {todayExpenses !== null && (
+      {!easy && todayExpenses !== null && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>

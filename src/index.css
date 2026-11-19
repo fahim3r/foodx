@@ -132,3 +132,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Easy Mode (modifications v2, item 9): Tailwind is rem-based, so
+   raising the root font size grows every text and tap target ~1/8. */
+html.easy-mode {
+  font-size: 112.5%;
+}

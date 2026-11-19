@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { useEasyMode } from '@/hooks/useEasyMode'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { fetchOrders } from '@/services/orders'
@@ -99,6 +100,7 @@ export default function OrdersPage() {
           ? t('orders.pickup')
           : t('orders.delivery')
 
+  const { easy } = useEasyMode()
   const sourceLabel = (source: OrderSource) => t(`orders.source${source}`)
 
   const load = useCallback(async () => {
@@ -243,9 +245,11 @@ export default function OrdersPage() {
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                   <span>{typeLabel(order.type)}</span>
-                  <span className="text-muted-foreground">
-                    {t('orders.source')}: {sourceLabel(order.source)}
-                  </span>
+                  {!easy && (
+                    <span className="text-muted-foreground">
+                      {t('orders.source')}: {sourceLabel(order.source)}
+                    </span>
+                  )}
                   {order.table_id && (
                     <span>
                       {t('orders.table')}{' '}
