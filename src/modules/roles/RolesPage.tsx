@@ -82,11 +82,6 @@ export default function RolesPage() {
     return set
   }, [rolePermissions])
 
-  const permissionByKey = useMemo(
-    () => new Map(permissions.map((p) => [p.key, p])),
-    [permissions],
-  )
-
   const isGranted = (role: Role, permission: Permission): boolean => {
     if (role.is_system) {
       return (DEFAULT_ROLE_PERMISSIONS[role.name] ?? []).includes(permission.key)
