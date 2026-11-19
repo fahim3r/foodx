@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Maximize, Minimize } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { useAuth } from '@/hooks/useAuth'
@@ -32,6 +33,27 @@ export default function DisplayPage() {
   const { restaurant } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loadError, setLoadError] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    const onChange = () =>
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', onChange)
+    onChange()
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else {
+        await document.documentElement.requestFullscreen()
+      }
+    } catch {
+      // Refused: no-op.
+    }
+  }
 
   const load = useCallback(async () => {
     if (!restaurant) return
@@ -84,7 +106,21 @@ export default function DisplayPage() {
     <div className="-m-4 flex min-h-screen flex-col bg-zinc-950 p-6 text-zinc-50 sm:-m-6 sm:p-10">
       <header className="flex items-baseline justify-between gap-4 border-b border-zinc-800 pb-4">
         <h1 className="text-2xl font-bold sm:text-3xl">{restaurant.name}</h1>
-        <p className="text-lg text-zinc-400">{t('display.title')}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-lg text-zinc-400">{t('display.title')}</p>
+          {typeof document !== 'undefined' && document.fullscreenEnabled && (
+            <button
+              type="button"
+              onClick={() => void toggleFullscreen()}
+              className="flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900"
+            >
+              {isFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+              {isFullscreen
+                ? t('common.exitFullscreen')
+                : t('common.fullscreen')}
+            </button>
+          )}
+        </div>
       </header>
 
       {loadError && (

@@ -20,10 +20,14 @@ import {
   ClipboardList,
   LayoutDashboard,
   LogOut,
+  Maximize,
   Menu,
+  Minimize,
+  Moon,
   Settings,
   ShieldCheck,
   ShoppingCart,
+  Sun,
   Table2,
   Truck,
   UserCog,
@@ -32,6 +36,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useTheme } from '@/hooks/useTheme'
 import { useLicenseState } from '@/hooks/useLicenseState'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
 import {
@@ -242,6 +247,30 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [])
   const navigate = useNavigate()
   const { user, profile, restaurant, settings, dbPending, signOut } = useAuth()
+  const { mode: themeMode, cycle: cycleTheme } = useTheme()
+  // Fullscreen (item 6): a per-device, per-session toggle — browsers
+  // drop fullscreen on Esc/navigation by design, so nothing persists.
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  useEffect(() => {
+    const onChange = () =>
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', onChange)
+    onChange()
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else {
+        await document.documentElement.requestFullscreen()
+      }
+    } catch {
+      // Fullscreen refused (permissions/iframe): the button just no-ops.
+    }
+  }
+  const fullscreenSupported =
+    typeof document !== 'undefined' && document.fullscreenEnabled
   useOfflineSync(restaurant?.id ?? null, user?.id ?? null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -315,6 +344,44 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             {displayName}
           </h1>
           <LanguageSwitcher />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={cycleTheme}
+            aria-label={t('common.theme')}
+            title={t(`common.themeMode.${themeMode}`)}
+          >
+            {themeMode === 'dark' ? (
+              <Moon className="size-5" />
+            ) : themeMode === 'light' ? (
+              <Sun className="size-5" />
+            ) : (
+              <Monitor className="size-5" />
+            )}
+          </Button>
+          {fullscreenSupported && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void toggleFullscreen()}
+              aria-label={
+                isFullscreen
+                  ? t('common.exitFullscreen')
+                  : t('common.fullscreen')
+              }
+              title={
+                isFullscreen
+                  ? t('common.exitFullscreen')
+                  : t('common.fullscreen')
+              }
+            >
+              {isFullscreen ? (
+                <Minimize className="size-5" />
+              ) : (
+                <Maximize className="size-5" />
+              )}
+            </Button>
+          )}
           <div className="relative">
             <Button
               variant="outline"
