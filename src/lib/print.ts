@@ -16,9 +16,9 @@ export function escapeHtml(value: string): string {
 }
 
 /** Open `bodyHtml` in a print-ready window and trigger printing. */
-export function printHtml(title: string, bodyHtml: string, css = ''): void {
+export function printHtml(title: string, bodyHtml: string, css = ''): boolean {
   const win = window.open('', '_blank', 'width=480,height=720')
-  if (!win) return
+  if (!win) return false
   win.document.write(`<!doctype html>
 <html>
 <head>
@@ -45,4 +45,5 @@ export function printHtml(title: string, bodyHtml: string, css = ''): void {
   win.document.close()
   win.focus()
   win.print()
+  return true
 }

@@ -48,7 +48,8 @@ import {
   type QueuedOrder,
 } from '@/services/offlineQueue'
 import { printHtml } from '@/lib/print'
-import { buildReceiptHtml } from '@/lib/receipt'
+import { buildKitchenTicketHtml, buildReceiptHtml } from '@/lib/receipt'
+import { loadPrintSettings } from '@/services/printSettings'
 import type {
   Category,
   Coupon,
@@ -642,6 +643,7 @@ export default function PosPage() {
 
   const resetForNewOrder = () => {
     setPlacedOrder(null)
+    setAutoPrintBlocked(false)
     setQueuedOrder(null)
     setPlacedLines([])
     setPayments([])
@@ -802,6 +804,12 @@ export default function PosPage() {
         payments: [],
       }
       enqueueOrder(entry)
+      // Auto-print (item 11): the customer still gets a paper token
+      // at the counter — the snapshot receipt (OFF- reference)
+      // prints at queue time; nothing prints again at sync.
+      if (loadPrintSettings(restaurant.id).autoReceipt) {
+        if (!printSnapshotReceipt(entry)) setAutoPrintBlocked(true)
+      }
       setPlacedLines(previewLines)
       setQueuedOrder(entry)
       setCart([])
@@ -829,6 +837,7 @@ export default function PosPage() {
       })
       setPlacedLines(previewLines)
       setPlacedOrder(order)
+      void autoPrintPlaced(order)
       setCart([])
       setDiscount(0)
       setNotes('')
@@ -980,9 +989,10 @@ export default function PosPage() {
     }
   }
 
-  const handlePrintQueuedReceipt = () => {
-    if (!queuedOrder || !restaurant) return
-    const entry = queuedOrder
+  const [autoPrintBlocked, setAutoPrintBlocked] = useState(false)
+
+  const printSnapshotReceipt = (entry: QueuedOrder): boolean => {
+    if (!restaurant) return false
     const detail: OrderDetail = {
       id: entry.id,
       restaurant_id: entry.restaurantId,
@@ -1085,7 +1095,83 @@ export default function PosPage() {
       (n) => formatMoney(n, currency),
       (method) => t(PAYMENT_METHOD_KEYS[method as PaymentMethod]),
     )
-    printHtml(title, html, css)
+    return printHtml(title, html, css)
+  }
+
+  const handlePrintQueuedReceipt = () => {
+    if (!queuedOrder) return
+    printSnapshotReceipt(queuedOrder)
+  }
+
+  // Auto-print (item 11): after a successful placement, open the
+  // print flow for the receipt (and kitchen ticket) when this
+  // device has it enabled. Best-effort only — the order is already
+  // placed; a blocked popup just leaves a note on the placed card.
+  const autoPrintPlaced = async (order: Order) => {
+    if (!restaurant) return
+    const printSettings = loadPrintSettings(restaurant.id)
+    if (!printSettings.autoReceipt && !printSettings.autoKitchen) return
+    try {
+      const detail = await fetchOrderDetail(order.id)
+      const branch =
+        branches.find((b) => b.id === detail.branch_id) ?? defaultBranch
+      const table = tables.find((tb) => tb.id === detail.table_id)
+      const ctx = {
+        restaurantName: settings?.branding_name || restaurant.name,
+        logoUrl: settings?.logo_url ?? null,
+        branchName: branch?.name ?? null,
+        branchAddress: branch?.address ?? null,
+        branchPhone: branch?.phone ?? null,
+        tableName: table?.name ?? null,
+        footer: settings?.receipt_footer ?? null,
+        channelLine:
+          detail.source === 'THIRD_PARTY'
+            ? `${detail.third_party_company ?? ''} #${detail.external_order_id ?? ''}`
+            : undefined,
+      }
+      const labels = {
+        order: t('print.order'),
+        table: t('print.table'),
+        subtotal: t('print.subtotal'),
+        discount: t('print.discount'),
+        tax: t('print.tax'),
+        serviceCharge: t('print.serviceCharge'),
+        deliveryFee: t('print.deliveryFee'),
+        total: t('print.total'),
+        payment: t('print.payment'),
+        kitchenTicket: t('print.kitchenTicket'),
+        notes: t('print.notes'),
+        poweredBy: t('print.poweredBy'),
+      }
+      let blocked = false
+      if (printSettings.autoReceipt) {
+        const receipt = buildReceiptHtml(
+          detail,
+          ctx,
+          labels,
+          (n) => formatMoney(n, currency),
+          (method) => t(PAYMENT_METHOD_KEYS[method as PaymentMethod]),
+        )
+        blocked = !printHtml(receipt.title, receipt.html, receipt.css)
+      }
+      if (printSettings.autoKitchen) {
+        const ticket = buildKitchenTicketHtml(detail, ctx, labels)
+        const printTicket = () => {
+          if (!printHtml(ticket.title, ticket.html, ticket.css)) {
+            setAutoPrintBlocked(true)
+          }
+        }
+        // A beat between the two windows so both survive popup rules.
+        if (printSettings.autoReceipt) {
+          window.setTimeout(printTicket, 800)
+        } else {
+          printTicket()
+        }
+      }
+      if (blocked) setAutoPrintBlocked(true)
+    } catch {
+      // Printing is best-effort; the order itself is unaffected.
+    }
   }
 
   if (loading || !loaded) {
@@ -1174,6 +1260,11 @@ export default function PosPage() {
           className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900"
         >
           {t('offline.queuedNotice')}
+            {autoPrintBlocked && (
+              <span className="block text-amber-600 dark:text-amber-400">
+                {t('pos.autoPrintBlocked')}
+              </span>
+            )}
         </p>
 
         <Card>
@@ -1359,6 +1450,11 @@ export default function PosPage() {
           </h2>
           <p role="status" className="text-muted-foreground">
             {t('pos.orderPlaced', { number: placedOrder.order_number })}
+            {autoPrintBlocked && (
+              <p className="mt-1 text-sm font-normal text-amber-600 dark:text-amber-400">
+                {t('pos.autoPrintBlocked')}
+              </p>
+            )}
           </p>
         </header>
 

@@ -19,6 +19,7 @@ import DomainSection from '@/modules/settings/DomainSection'
 import LicenseCard from './LicenseCard'
 import ManagerPinCard from './ManagerPinCard'
 import AppearanceCard from './AppearanceCard'
+import PrintingCard from './PrintingCard'
 import { Link } from 'react-router-dom'
 import type { RestaurantFormValues } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -633,6 +634,7 @@ export default function SettingsPage() {
       <LicenseCard />
       <ManagerPinCard />
       <AppearanceCard />
+      <PrintingCard />
     </div>
   )
 }
