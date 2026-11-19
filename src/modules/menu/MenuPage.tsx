@@ -352,11 +352,15 @@ export default function MenuPage() {
           category_id: values.categoryId,
           kitchen_station_id: values.kitchenStationId,
           name: values.name,
-          name_bn: values.nameBn,
-          description: values.description,
+          // Cleared text fields must send an explicit null —
+          // supabase-js drops undefined keys from the update, so
+          // `|| undefined` would silently keep the old value
+          // (this is why removing a product image did not stick).
+          name_bn: values.nameBn ?? null,
+          description: values.description ?? null,
           price: values.price,
           cost_price: values.costPrice,
-          image_url: values.imageUrl,
+          image_url: values.imageUrl ?? null,
           sort_order: values.sortOrder,
         })
       } else {
