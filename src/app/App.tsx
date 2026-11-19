@@ -56,6 +56,7 @@ import OrdersPage from '@/modules/orders/OrdersPage'
 import PosPage from '@/modules/pos/PosPage'
 import RolesPage from '@/modules/roles/RolesPage'
 import SettingsPage from '@/modules/settings/SettingsPage'
+import HealthPage from '@/modules/health/HealthPage'
 import SetupPage from '@/modules/settings/SetupPage'
 import StaffPage from '@/modules/staff/StaffPage'
 import BranchesPage from '@/modules/branches/BranchesPage'
@@ -112,6 +113,7 @@ function AdminRoutes({
         <Route path="delivery" element={<DeliveryPage />} />
         <Route path="business" element={<BusinessPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="health" element={<HealthPage />} />
         <Route path="setup" element={<SetupPage />} />
         <Route path="staff" element={<StaffPage />} />
         <Route path="branches" element={<BranchesPage />} />
