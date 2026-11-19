@@ -35,6 +35,7 @@ import { fetchBranches, type Branch } from '@/services/restaurant'
 import { fetchOrderDetail } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useLicenseState } from '@/hooks/useLicenseState'
 import { loadPosCache, savePosCache } from '@/services/catalogCache'
 import {
   addQueuedPayment,
@@ -208,6 +209,10 @@ export default function PosPage() {
 
   const [placing, setPlacing] = useState(false)
   const [placeErrorKey, setPlaceErrorKey] = useState<string | null>(null)
+  const licenseView = useLicenseState()
+  const licenseSuspended =
+    licenseView.reason === 'client_suspended' ||
+    licenseView.reason === 'suspended'
 
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null)
   const [placedLines, setPlacedLines] = useState<PricedLine[]>([])
@@ -740,6 +745,10 @@ export default function PosPage() {
   const handlePlaceOrder = async () => {
     if (!user || !restaurant) return
     setPlaceErrorKey(null)
+    if (licenseSuspended) {
+      setPlaceErrorKey('pos.licenseSuspended')
+      return
+    }
     if (cart.length === 0) {
       setPlaceErrorKey('pos.emptyOrder')
       return
@@ -856,11 +865,13 @@ export default function PosPage() {
       console.error('[POS] place order failed', error)
       const message = error instanceof Error ? error.message : ''
       setPlaceErrorKey(
-        message === 'product_unavailable'
-          ? 'pos.productUnavailable'
-          : message === 'empty_order'
-            ? 'pos.emptyOrder'
-            : 'pos.placeFailed',
+        message === 'license_suspended'
+          ? 'pos.licenseSuspended'
+          : message === 'product_unavailable'
+            ? 'pos.productUnavailable'
+            : message === 'empty_order'
+              ? 'pos.emptyOrder'
+              : 'pos.placeFailed',
       )
     } finally {
       setPlacing(false)
@@ -2410,10 +2421,18 @@ export default function PosPage() {
                 {t(placeErrorKey)}
               </p>
             )}
+            {licenseSuspended && (
+              <p
+                role="alert"
+                className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {t('pos.licenseSuspended')}
+              </p>
+            )}
             <Button
               type="button"
               onClick={() => void handlePlaceOrder()}
-              disabled={placing}
+              disabled={placing || licenseSuspended}
             >
               {placing
                 ? t('pos.placingOrder')

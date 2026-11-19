@@ -345,6 +345,22 @@ export function isFeatureEnabledFromCache(key: DevFeatureKey): boolean {
 }
 
 /**
+ * Suspension gate (user decision 2026-11-19, amending the §53
+ * banner-only behaviour): while the client or its license is
+ * SUSPENDED, NEW orders are refused — existing data stays fully
+ * viewable and in-flight orders can still be served, paid and
+ * completed. No cache (never checked in / unconfigured) means not
+ * suspended, mirroring the feature-flag rule.
+ */
+export function isSuspendedFromCache(): boolean {
+  const cache = readLicenseCache()
+  if (!cache) return false
+  return (
+    cache.client_status === 'SUSPENDED' || cache.license?.status === 'SUSPENDED'
+  )
+}
+
+/**
  * The license limits from the last successful heartbeat (Phase 8
  * R2). Null when unconfigured or never checked in — in both cases
  * nothing is enforced, mirroring the feature-flag rule.

@@ -1,4 +1,5 @@
 // FoodX — POS / order-placement service.
+import { isSuspendedFromCache } from '@/services/heartbeat'
 //
 // THE RULE: the client never decides prices. The POS sends only product /
 // variant / modifier ids and quantities; this service re-reads the prices
@@ -473,6 +474,10 @@ export async function createOrder(
   userId: string,
   settings: { taxRate: number; serviceChargeRate: number },
 ): Promise<Order> {
+  // Suspension gate (2026-11-19): a suspended client/license takes
+  // no NEW orders. syncQueuedOrder deliberately bypasses this — it
+  // persists orders that were placed BEFORE the suspension.
+  if (isSuspendedFromCache()) throw new Error('license_suspended')
   const pricedLines = await priceOrderLines(input.restaurantId, input.lines)
   const totals = computeOrderTotals(
     pricedLines,

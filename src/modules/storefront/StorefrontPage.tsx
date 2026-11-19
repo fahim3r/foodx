@@ -29,7 +29,10 @@ import {
   placeOnlineOrder,
 } from '@/services/storefront'
 import { computeOrderTotals, type PricedLine } from '@/services/pos'
-import { isFeatureEnabledFromCache } from '@/services/heartbeat'
+import {
+  isFeatureEnabledFromCache,
+  isSuspendedFromCache,
+} from '@/services/heartbeat'
 import {
   TERMINAL_ORDER_STATUSES,
   type Category,
@@ -402,7 +405,8 @@ export default function StorefrontPage({
   // ordering is off for this deployment, the menu stays browsable
   // but checkout is replaced by a notice. Read from the license
   // cache the panel maintains on this origin; no cache = enabled.
-  const orderingEnabled = isFeatureEnabledFromCache('online_ordering')
+  const orderingEnabled =
+    isFeatureEnabledFromCache('online_ordering') && !isSuspendedFromCache()
 
   const handlePlaceOrder = async (event: FormEvent) => {
     event.preventDefault()
