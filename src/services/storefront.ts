@@ -211,11 +211,13 @@ export async function placeOnlineOrder(
     order_id: string
     order_number: number
     table_name: string | null
+    token_number: number | null
   }
   return {
     orderId: row.order_id,
     orderNumber: row.order_number,
     tableName: row.table_name,
+    tokenNumber: row.token_number ?? null,
   }
 }
 

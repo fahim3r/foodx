@@ -13,6 +13,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -133,6 +134,7 @@ function LanguageToggle() {
 
 interface PlacedOrder {
   orderNumber: number
+  tokenNumber: number | null
   total: number
   tableName: string | null
   status: OrderStatus
@@ -178,6 +180,46 @@ export default function StorefrontPage({
   const [placing, setPlacing] = useState(false)
   const [placeErrorKey, setPlaceErrorKey] = useState<string | null>(null)
   const [placed, setPlaced] = useState<PlacedOrder | null>(null)
+
+  // Self-KIOSK mode (modifications v2, item 2): ?kiosk=1 turns this
+  // storefront into a counter tablet — pickup only, oversized
+  // tiles, no login/footer links, and a big-token confirmation
+  // that resets itself for the next customer. The flag sticks in
+  // sessionStorage so a reload does not drop out of kiosk mode;
+  // leaving is a deliberate long-press on the header brand.
+  const [kiosk] = useState<boolean>(() => {
+    try {
+      if (
+        new URLSearchParams(window.location.search).get('kiosk') === '1'
+      ) {
+        sessionStorage.setItem('foodx.kiosk', '1')
+        return true
+      }
+      return sessionStorage.getItem('foodx.kiosk') === '1'
+    } catch {
+      return false
+    }
+  })
+  const [kioskExitArmed, setKioskExitArmed] = useState(false)
+  const brandPressTimer = useRef<number | null>(null)
+
+  const resetKiosk = useCallback(() => {
+    setPlaced(null)
+    setCustomerName('')
+    setCustomerPhone('')
+    setDeliveryAddress('')
+  }, [])
+
+  const exitKiosk = () => {
+    try {
+      sessionStorage.removeItem('foodx.kiosk')
+    } catch {
+      // ignore — navigation below still leaves kiosk mode
+    }
+    const url = new URL(window.location.href)
+    url.searchParams.delete('kiosk')
+    window.location.assign(url.toString())
+  }
 
   const isBn = i18n.language === 'bn'
   const taxRate = Number(info?.tax_rate ?? 0)
@@ -401,6 +443,15 @@ export default function StorefrontPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placed, slug])
 
+  // Kiosk: the confirmation resets itself after 8s so the next
+  // customer starts from a clean menu (the timer only arms AFTER
+  // an order is placed — never during checkout).
+  useEffect(() => {
+    if (!kiosk || !placed) return
+    const timer = window.setTimeout(resetKiosk, 8000)
+    return () => window.clearTimeout(timer)
+  }, [kiosk, placed, resetKiosk])
+
   // Vendor feature flag (§60): when the registry says online
   // ordering is off for this deployment, the menu stays browsable
   // but checkout is replaced by a notice. Read from the license
@@ -429,8 +480,9 @@ export default function StorefrontPage({
     try {
       const result = await placeOnlineOrder({
         slug,
-        tableCode: deliveryType === 'dine_in' ? (tableCode ?? null) : null,
-        deliveryType,
+        tableCode:
+          !kiosk && deliveryType === 'dine_in' ? (tableCode ?? null) : null,
+        deliveryType: kiosk ? 'pickup' : deliveryType,
         customerName,
         customerPhone,
         deliveryAddress:
@@ -441,6 +493,7 @@ export default function StorefrontPage({
       })
       setPlaced({
         orderNumber: result.orderNumber,
+        tokenNumber: result.tokenNumber,
         total: grandTotal,
         tableName: result.tableName,
         status: 'CONFIRMED',
@@ -505,6 +558,31 @@ export default function StorefrontPage({
   }
 
   // --- order confirmation ----------------------------------------------------
+  if (placed && kiosk) {
+    return (
+      <main
+        style={brandingStyle}
+        className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background px-6 py-10 text-center"
+      >
+        <p className="text-2xl font-semibold">{displayName}</p>
+        <p className="text-xl text-muted-foreground">{t('kiosk.yourToken')}</p>
+        <p className="text-[9rem] font-bold leading-none tracking-tight">
+          {placed.tokenNumber ?? placed.orderNumber}
+        </p>
+        <p className="text-2xl font-semibold">
+          {formatMoney(placed.total, currency)}
+        </p>
+        <p className="max-w-md text-lg text-muted-foreground">
+          {t('kiosk.payAtCounter')}
+        </p>
+        <Button type="button" size="lg" className="mt-4 h-14 px-10 text-lg" onClick={resetKiosk}>
+          {t('kiosk.startAgain')}
+        </Button>
+        <p className="text-sm text-muted-foreground">{t('kiosk.autoReset')}</p>
+      </main>
+    )
+  }
+
   if (placed) {
     return (
       <main
@@ -554,6 +632,50 @@ export default function StorefrontPage({
     <div style={brandingStyle} className="min-h-svh bg-background">
       <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+          {kiosk ? (
+            <div
+              className="flex min-w-0 flex-1 items-center gap-3"
+              onPointerDown={() => {
+                brandPressTimer.current = window.setTimeout(
+                  () => setKioskExitArmed(true),
+                  3000,
+                )
+              }}
+              onPointerUp={() => {
+                if (brandPressTimer.current) {
+                  window.clearTimeout(brandPressTimer.current)
+                  brandPressTimer.current = null
+                }
+              }}
+              onPointerLeave={() => {
+                if (brandPressTimer.current) {
+                  window.clearTimeout(brandPressTimer.current)
+                  brandPressTimer.current = null
+                }
+              }}
+            >
+              {info.logo_url ? (
+                <img
+                  src={info.logo_url}
+                  alt={displayName}
+                  className="h-12 w-auto max-w-36 rounded-md object-contain"
+                />
+              ) : (
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-primary text-xl font-bold text-primary-foreground">
+                  {displayName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <h1 className="min-w-0 flex-1 truncate text-2xl font-bold tracking-tight">
+                {displayName}
+              </h1>
+              {kioskExitArmed && (
+                <Button type="button" size="sm" variant="outline" onClick={exitKiosk}>
+                  {t('kiosk.exit')}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <>
           {info.logo_url ? (
             <img
               src={info.logo_url}
@@ -575,11 +697,13 @@ export default function StorefrontPage({
           >
             {t('storefront.restaurantLogin')}
           </a>
+            </>
+          )}
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
-        {tableCode && (
+        {!kiosk && tableCode && (
           <p className="mb-4 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900">
             {t('storefront.dineInAtTable', { table: tableDisplayName ?? tableCode })}
           </p>
@@ -628,7 +752,11 @@ export default function StorefrontPage({
                 {t('storefront.noProducts')}
               </p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div
+                className={
+                  kiosk ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-3 sm:grid-cols-2'
+                }
+              >
                 {visibleProducts.map((product) => {
                   const servings = availability.get(product.id)
                   const outOfStock = servings !== undefined && servings <= 0
@@ -640,11 +768,15 @@ export default function StorefrontPage({
                             src={product.image_url}
                             alt=""
                             loading="lazy"
-                            className="h-16 w-16 shrink-0 rounded-md object-cover"
+                            className={
+                              kiosk
+                                ? 'h-24 w-24 shrink-0 rounded-md object-cover'
+                                : 'h-16 w-16 shrink-0 rounded-md object-cover'
+                            }
                           />
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold">
+                          <p className={kiosk ? 'text-lg font-semibold' : 'font-semibold'}>
                             {displayNameOf(product.name, product.name_bn)}
                           </p>
                           {product.description && (
@@ -826,6 +958,7 @@ export default function StorefrontPage({
                     onSubmit={handlePlaceOrder}
                     className="flex flex-col gap-4 border-t pt-4"
                   >
+                    {!kiosk && (
                     <div
                       className="flex flex-wrap gap-2"
                       role="group"
@@ -871,6 +1004,7 @@ export default function StorefrontPage({
                       )}
                     </div>
 
+                    )}
                     {deliveryType === 'delivery' && (
                       <p className="text-xs text-muted-foreground">
                         {t('storefront.deliveryFeeNote', {
@@ -1093,6 +1227,7 @@ export default function StorefrontPage({
         </div>
       )}
 
+      {!kiosk && (
       <footer className="border-t py-6 text-center text-xs text-muted-foreground">
         <p>
           {t('storefront.poweredBy')}{' '}
@@ -1112,6 +1247,7 @@ export default function StorefrontPage({
           </a>
         </p>
       </footer>
+      )}
     </div>
   )
 }

@@ -28,6 +28,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingCart,
+  Smartphone,
   Sparkles,
   Sun,
   Table2,
@@ -60,6 +61,7 @@ import { Button } from '@/components/ui/button'
 const NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard, end: true },
   { to: '/pos', key: 'nav.pos', icon: ShoppingCart, end: false, perm: 'orders.create' },
+  { to: '/waiter', key: 'nav.waiter', icon: Smartphone, end: false, perm: 'orders.create' },
   { to: '/orders', key: 'nav.orders', icon: ClipboardList, end: false, perm: 'orders.view' },
   { to: '/kds', key: 'nav.kds', icon: ChefHat, end: false, perm: 'kitchen.view' },
   { to: '/serve', key: 'nav.serve', icon: BellRing, end: false, perm: 'kitchen.view' },

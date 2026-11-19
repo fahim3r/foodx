@@ -1003,6 +1003,29 @@ These rules come from the project brief and are enforced in this repo:
 7. **Typecheck before you claim a build works:** `npm run build` runs
    `tsc -b` first; `npm run lint` runs oxlint.
 
+## Self-KIOSK setup (counter tablet)
+
+Any storefront becomes a self-order kiosk by opening it with
+`?kiosk=1` — e.g. `https://demo.foodx.bond/?kiosk=1` (on a client
+deployment, that client's own domain). Kiosk mode is pickup-only,
+shows oversized menu tiles, hides the staff-login and footer
+links, and after each order shows the customer a big token
+number ("pay at the counter"); the screen resets itself after
+~8 seconds for the next customer. Staff leave kiosk mode by
+pressing and holding the restaurant name/logo in the header for
+3 seconds, which reveals an "Exit kiosk mode" button.
+
+Locking the tablet itself is the device's job — the web app
+cannot (and does not pretend to) stop someone leaving the
+browser:
+
+- Android: Settings → Security → Screen pinning (or the
+  tablet's kiosk app), Chrome menu → "Add to Home screen".
+- iPad: Settings → Accessibility → Guided Access, then
+  triple-click the side button inside the kiosk page.
+- Put the tablet in fullscreen (panel header toggle, or the
+  browser's fullscreen) and keep it plugged in.
+
 ## License
 
 No license file yet — the license decision is pending. Do not assume a

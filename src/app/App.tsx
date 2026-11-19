@@ -54,6 +54,7 @@ import MenuPage from '@/modules/menu/MenuPage'
 import OrderDetailPage from '@/modules/orders/OrderDetailPage'
 import OrdersPage from '@/modules/orders/OrdersPage'
 import PosPage from '@/modules/pos/PosPage'
+import WaiterPage from '@/modules/waiter/WaiterPage'
 import RolesPage from '@/modules/roles/RolesPage'
 import SettingsPage from '@/modules/settings/SettingsPage'
 import HealthPage from '@/modules/health/HealthPage'
@@ -101,6 +102,7 @@ function AdminRoutes({
       >
         <Route index element={<DashboardPage />} />
         <Route path="pos" element={<PosPage />} />
+        <Route path="waiter" element={<WaiterPage />} />
         <Route path="orders" element={<OrdersPage />} />
         <Route path="orders/:id" element={<OrderDetailPage />} />
         <Route path="kds" element={<KdsPage />} />

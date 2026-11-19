@@ -721,6 +721,7 @@ export interface PlacedOnlineOrder {
   orderId: string
   orderNumber: number
   tableName: string | null
+  tokenNumber: number | null
 }
 
 export interface OnlineOrderStatus {

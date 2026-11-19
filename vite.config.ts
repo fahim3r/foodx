@@ -33,6 +33,12 @@ export default defineConfig({
         scope: '/',
         background_color: '#ffffff',
         theme_color: '#ea580c',
+        shortcuts: [
+          { name: 'Waiter', url: '/panel/waiter' },
+          { name: 'Kitchen', url: '/panel/kds' },
+          { name: 'To Serve', url: '/panel/serve' },
+          { name: 'Waiting Display', url: '/panel/display' },
+        ],
         icons: [
           {
             src: '/pwa-192.png',
