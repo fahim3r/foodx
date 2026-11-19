@@ -49,6 +49,7 @@ import InventoryPage from '@/modules/inventory/InventoryPage'
 import KdsPage from '@/modules/kds/KdsPage'
 import ServePage from '@/modules/serve/ServePage'
 import DisplayPage from '@/modules/display/DisplayPage'
+import ReservationsPage from '@/modules/reservations/ReservationsPage'
 import MenuPage from '@/modules/menu/MenuPage'
 import OrderDetailPage from '@/modules/orders/OrderDetailPage'
 import OrdersPage from '@/modules/orders/OrdersPage'
@@ -103,6 +104,7 @@ function AdminRoutes({
         <Route path="kds" element={<KdsPage />} />
         <Route path="serve" element={<ServePage />} />
         <Route path="display" element={<DisplayPage />} />
+        <Route path="reservations" element={<ReservationsPage />} />
         <Route path="menu" element={<MenuPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="tables" element={<TablesPage />} />

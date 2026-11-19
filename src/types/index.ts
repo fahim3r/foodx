@@ -316,6 +316,30 @@ export interface OrderDetail extends Order {
 
 /** One cart line as the POS builds it (prices are NOT sent — the service
  * re-reads them from the database at order time). */
+export type ReservationStatus =
+  | 'BOOKED'
+  | 'ARRIVED'
+  | 'SEATED'
+  | 'CANCELLED'
+  | 'NO_SHOW'
+
+/** A table booking (migration 0026). Guest fields are snapshots —
+ * walk-in guests may not exist as customers. */
+export interface Reservation {
+  id: string
+  restaurant_id: string
+  table_id: string | null
+  guest_name: string
+  guest_phone: string | null
+  reserved_for: string
+  party_size: number
+  status: ReservationStatus
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface PosOrderLineInput {
   productId: string
   variantId?: string | null
