@@ -1130,3 +1130,36 @@ export interface DevBackupReport {
   created_at: string
 }
 
+
+// --- HRM (modifications v2, item 10) --------------------------------------
+
+export type EmployeeStatus = 'active' | 'inactive'
+
+export interface Employee {
+  id: string
+  restaurant_id: string
+  profile_id: string | null
+  full_name: string
+  phone: string | null
+  designation: string | null
+  monthly_salary: number | null
+  join_date: string | null
+  status: EmployeeStatus
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AttendanceStatus = 'present' | 'absent' | 'leave' | 'half_day'
+
+export interface AttendanceRecord {
+  id: string
+  restaurant_id: string
+  employee_id: string
+  day: string
+  status: AttendanceStatus
+  note: string | null
+  marked_by: string | null
+  created_at: string
+  updated_at: string
+}

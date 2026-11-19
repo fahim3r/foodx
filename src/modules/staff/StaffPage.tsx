@@ -26,6 +26,8 @@ import {
   type StaffMember,
 } from '@/services/staff'
 import type { Role } from '@/types'
+import AttendanceTab from './AttendanceTab'
+import EmployeesTab from './EmployeesTab'
 
 const SELECT_CLASS =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
@@ -38,7 +40,7 @@ const SELECT_CLASS =
  * profiles itself. Non-admins get an honest notice; the function
  * enforces the same rule server-side.
  */
-export default function StaffPage() {
+function StaffAccounts() {
   const { t } = useTranslation()
   const { user, restaurant } = useAuth()
   const restaurantId = restaurant?.id
@@ -491,3 +493,40 @@ export default function StaffPage() {
   )
 }
 
+type StaffTab = 'accounts' | 'employees' | 'attendance'
+
+/**
+ * Staff page shell (HRM, modifications v2 item 10): Accounts
+ * (logins + roles, via manage-staff) | Employees (HR directory)
+ * | Attendance. The HR tabs are admin-level, enforced in the
+ * database (migration 0030).
+ */
+export default function StaffPage() {
+  const { t } = useTranslation()
+  const [tab, setTab] = useState<StaffTab>('accounts')
+  const tabs: { id: StaffTab; label: string }[] = [
+    { id: 'accounts', label: t('staff.accountsTab') },
+    { id: 'employees', label: t('hrm.employeesTab') },
+    { id: 'attendance', label: t('hrm.attendanceTab') },
+  ]
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((entry) => (
+          <Button
+            key={entry.id}
+            type="button"
+            size="sm"
+            variant={tab === entry.id ? 'default' : 'outline'}
+            onClick={() => setTab(entry.id)}
+          >
+            {entry.label}
+          </Button>
+        ))}
+      </div>
+      {tab === 'accounts' && <StaffAccounts />}
+      {tab === 'employees' && <EmployeesTab />}
+      {tab === 'attendance' && <AttendanceTab />}
+    </div>
+  )
+}
