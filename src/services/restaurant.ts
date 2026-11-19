@@ -186,7 +186,12 @@ export async function updateSettingsPartial(
   patch: Partial<
     Pick<
       RestaurantSettings,
-      'currency' | 'tax_rate' | 'branding_name' | 'onboarding_completed'
+      | 'currency'
+      | 'tax_rate'
+      | 'branding_name'
+      | 'onboarding_completed'
+      | 'delivery_enabled'
+      | 'modules'
     >
   >,
 ): Promise<void> {

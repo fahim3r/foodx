@@ -21,6 +21,13 @@ export interface Restaurant {
   license_id: string | null
 }
 
+export interface RestaurantModules {
+  loyalty?: boolean
+  reservations?: boolean
+  business?: boolean
+  customers?: boolean
+}
+
 export interface RestaurantSettings {
   id: string
   restaurant_id: string
@@ -39,6 +46,7 @@ export interface RestaurantSettings {
   delivery_fee: number
   min_order_amount: number
   onboarding_completed: boolean
+  modules: RestaurantModules | null
 }
 
 export interface Role {

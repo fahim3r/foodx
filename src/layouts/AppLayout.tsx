@@ -47,6 +47,7 @@ import {
   type UpdateRequestResult,
 } from '@/services/heartbeat'
 import { refreshInstanceConfig } from '@/services/activation'
+import { isModuleOn, type ModuleKey } from '@/services/modules'
 import type { DevFeatureKey } from '@/types'
 import logoWordmark from '@/assets/brand/logo-wordmark.webp'
 import { cn } from '@/lib/utils'
@@ -59,17 +60,18 @@ const NAV_ITEMS = [
   { to: '/kds', key: 'nav.kds', icon: ChefHat, end: false },
   { to: '/serve', key: 'nav.serve', icon: BellRing, end: false },
   { to: '/display', key: 'nav.display', icon: Monitor, end: false },
-  { to: '/reservations', key: 'nav.reservations', icon: CalendarCheck, end: false },
+  { to: '/reservations', key: 'nav.reservations', icon: CalendarCheck, end: false, module: 'reservations' as ModuleKey },
   { to: '/menu', key: 'nav.menu', icon: UtensilsCrossed, end: false },
   { to: '/inventory', key: 'nav.inventory', icon: Boxes, end: false },
   { to: '/tables', key: 'nav.tables', icon: Table2, end: false },
-  { to: '/customers', key: 'nav.customers', icon: Users, end: false },
+  { to: '/customers', key: 'nav.customers', icon: Users, end: false, module: 'customers' as ModuleKey },
   {
     to: '/delivery',
     key: 'nav.delivery',
     icon: Truck,
     end: false,
     feature: 'delivery' as DevFeatureKey,
+    module: 'delivery' as ModuleKey,
   },
   {
     to: '/business',
@@ -77,6 +79,7 @@ const NAV_ITEMS = [
     icon: Wallet,
     end: false,
     feature: 'accounting' as DevFeatureKey,
+    module: 'business' as ModuleKey,
   },
   {
     to: '/branches',
@@ -192,8 +195,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <nav className="flex flex-col gap-1 px-3 py-2" aria-label={t('layout.nav')}>
         {NAV_ITEMS.filter(
           (item) =>
-            !('feature' in item && item.feature) ||
-            isModuleEnabled(licenseView, item.feature),
+            (!('feature' in item && item.feature) ||
+              isModuleEnabled(licenseView, item.feature)) &&
+            (!('module' in item && item.module) ||
+              isModuleOn(settings, item.module)),
         ).map(({ to, key, icon: Icon, end }) => (
           <NavLink
             key={to}

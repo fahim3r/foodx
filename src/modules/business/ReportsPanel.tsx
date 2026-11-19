@@ -17,6 +17,8 @@ import { formatMoney } from '@/lib/money'
 import { escapeHtml, printHtml } from '@/lib/print'
 import { useLicenseState } from '@/hooks/useLicenseState'
 import { isModuleEnabled } from '@/services/heartbeat'
+import { isModuleOn } from '@/services/modules'
+import { useAuth } from '@/hooks/useAuth'
 import {
   fetchBranchSales,
   fetchCategorySales,
@@ -256,7 +258,9 @@ export default function ReportsPanel({
   // Vendor feature flag (§60): loyalty off removes the loyalty
   // report from the picker; if it was selected, fall back.
   const licenseView = useLicenseState()
-  const loyaltyEnabled = isModuleEnabled(licenseView, 'loyalty')
+  const { settings } = useAuth()
+  const loyaltyEnabled =
+    isModuleEnabled(licenseView, 'loyalty') && isModuleOn(settings, 'loyalty')
   const visibleReportKeys = REPORT_KEYS.filter(
     (key) => key !== 'loyalty' || loyaltyEnabled,
   )

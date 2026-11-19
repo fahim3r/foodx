@@ -57,6 +57,7 @@ import PosPage from '@/modules/pos/PosPage'
 import RolesPage from '@/modules/roles/RolesPage'
 import SettingsPage from '@/modules/settings/SettingsPage'
 import HealthPage from '@/modules/health/HealthPage'
+import ModuleGate from '@/components/ModuleGate'
 import SetupPage from '@/modules/settings/SetupPage'
 import StaffPage from '@/modules/staff/StaffPage'
 import BranchesPage from '@/modules/branches/BranchesPage'
@@ -105,13 +106,13 @@ function AdminRoutes({
         <Route path="kds" element={<KdsPage />} />
         <Route path="serve" element={<ServePage />} />
         <Route path="display" element={<DisplayPage />} />
-        <Route path="reservations" element={<ReservationsPage />} />
+        <Route path="reservations" element={<ModuleGate module="reservations"><ReservationsPage /></ModuleGate>} />
         <Route path="menu" element={<MenuPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="tables" element={<TablesPage />} />
-        <Route path="customers" element={<CustomersPage />} />
-        <Route path="delivery" element={<DeliveryPage />} />
-        <Route path="business" element={<BusinessPage />} />
+        <Route path="customers" element={<ModuleGate module="customers"><CustomersPage /></ModuleGate>} />
+        <Route path="delivery" element={<ModuleGate module="delivery"><DeliveryPage /></ModuleGate>} />
+        <Route path="business" element={<ModuleGate module="business"><BusinessPage /></ModuleGate>} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="health" element={<HealthPage />} />
         <Route path="setup" element={<SetupPage />} />

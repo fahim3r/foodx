@@ -51,6 +51,7 @@ import {
 import { printHtml } from '@/lib/print'
 import { buildKitchenTicketHtml, buildReceiptHtml } from '@/lib/receipt'
 import { loadPrintSettings } from '@/services/printSettings'
+import { isModuleOn } from '@/services/modules'
 import type {
   Category,
   Coupon,
@@ -453,11 +454,13 @@ export default function PosPage() {
     return Math.max(0, Math.min(customerBalance, byTotal))
   }, [selectedCustomer, customerBalance, totalsAfterCoupon, loyaltyRates])
 
+  const loyaltyModuleOn = isModuleOn(settings, 'loyalty')
   const redeemPointsEffective = useMemo(() => {
+    if (!loyaltyModuleOn) return 0
     const wanted = Number.parseInt(redeemPoints, 10)
     if (!Number.isFinite(wanted) || wanted <= 0) return 0
     return Math.min(wanted, maxRedeemablePoints)
-  }, [redeemPoints, maxRedeemablePoints])
+  }, [redeemPoints, maxRedeemablePoints, loyaltyModuleOn])
 
   const loyaltyDiscount = useMemo(
     () => roundMoney(redeemPointsEffective * loyaltyRates.pointValue),
@@ -2347,7 +2350,7 @@ export default function PosPage() {
                 </p>
               )}
             </div>
-            {selectedCustomer && (
+            {selectedCustomer && loyaltyModuleOn && (
               <div className="flex flex-col gap-2">
                 <Label htmlFor="redeemPoints">
                   {t('pos.redeemPoints')}

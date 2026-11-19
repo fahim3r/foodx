@@ -15,6 +15,7 @@ import { formatMoney, roundMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
 import { useLicenseState } from '@/hooks/useLicenseState'
 import { isModuleEnabled } from '@/services/heartbeat'
+import { isModuleOn } from '@/services/modules'
 import {
   adjustLoyaltyPoints,
   fetchCustomerBalance,
@@ -151,7 +152,8 @@ export default function CustomersPage() {
 
   // Vendor feature flag (§60): loyalty off hides the Loyalty tab.
   const licenseView = useLicenseState()
-  const loyaltyEnabled = isModuleEnabled(licenseView, 'loyalty')
+  const loyaltyEnabled =
+    isModuleEnabled(licenseView, 'loyalty') && isModuleOn(settings, 'loyalty')
   const visibleTabs = TABS.filter(
     (item) => item !== 'loyalty' || loyaltyEnabled,
   )
