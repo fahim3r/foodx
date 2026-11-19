@@ -2,12 +2,13 @@
 // Categories, products (with variants + offered modifiers), kitchen
 // stations and modifiers for the current restaurant. All data loads in
 // parallel on mount; every mutation re-fetches the affected list.
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney, roundMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
+import { UploadError, uploadProductImage } from '@/services/uploads'
 import {
   createCategory,
   createModifier,
@@ -119,6 +120,35 @@ export default function MenuPage() {
 
   const [categoryError, setCategoryError] = useState<string | null>(null)
   const [productError, setProductError] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const imageFileRef = useRef<HTMLInputElement | null>(null)
+
+  // Item 5: upload fills the same image_url field a pasted link
+  // uses — the last action wins, and Save persists whichever URL
+  // is in the field.
+  const handleImageFile = async (file: File | undefined) => {
+    if (!file || !restaurantId) return
+    setProductError(null)
+    setUploadingImage(true)
+    try {
+      const url = await uploadProductImage(restaurantId, file)
+      setProductForm((prev) => ({ ...prev, imageUrl: url }))
+    } catch (error) {
+      if (error instanceof UploadError) {
+        setProductError(
+          error.code === 'upload_bad_type'
+            ? 'menu.uploadBadType'
+            : error.code === 'upload_too_large'
+              ? 'menu.uploadTooLarge'
+              : 'menu.uploadFailed',
+        )
+      } else {
+        setProductError('menu.uploadFailed')
+      }
+    } finally {
+      setUploadingImage(false)
+    }
+  }
   const [stationError, setStationError] = useState<string | null>(null)
   const [modifierError, setModifierError] = useState<string | null>(null)
 
@@ -1030,6 +1060,48 @@ export default function MenuPage() {
                     }
                     placeholder={t('menu.imageUrlPlaceholder')}
                   />
+                  <div className="flex flex-wrap items-center gap-3">
+                    {productForm.imageUrl.trim() && (
+                      <img
+                        src={productForm.imageUrl.trim()}
+                        alt=""
+                        className="h-16 w-16 rounded-md border object-cover"
+                      />
+                    )}
+                    <input
+                      ref={imageFileRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        void handleImageFile(e.target.files?.[0])
+                        e.target.value = ''
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={uploadingImage}
+                      onClick={() => imageFileRef.current?.click()}
+                    >
+                      {uploadingImage
+                        ? t('menu.uploadingImage')
+                        : t('menu.uploadImage')}
+                    </Button>
+                    {productForm.imageUrl.trim() && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setProductForm((prev) => ({ ...prev, imageUrl: '' }))
+                        }
+                      >
+                        {t('menu.removeImage')}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
 
