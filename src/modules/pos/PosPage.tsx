@@ -982,7 +982,8 @@ export default function PosPage() {
   // Easy Mode (item 9): one big button settles the exact balance in
   // cash — the common counter case, no form fields to fill.
   const handleEasyPaidInFull = async () => {
-    if (!user || !placedOrder || paymentSummary.balance <= 0) return
+    if (!user || !placedOrder || !paymentSummary || paymentSummary.balance <= 0)
+      return
     setPaymentErrorKey(null)
     setPaymentRecorded(false)
     setRecordingPayment(true)
@@ -1638,7 +1639,7 @@ export default function PosPage() {
                 </p>
               </div>
             )}
-            {easy && paymentSummary.balance > 0 && (
+            {easy && paymentSummary && paymentSummary.balance > 0 && (
               <Button
                 type="button"
                 size="lg"
