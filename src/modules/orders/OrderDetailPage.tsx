@@ -34,6 +34,7 @@ import {
 import {
   ORDER_TRANSITIONS,
   TERMINAL_ORDER_STATUSES,
+  type Order,
   type OrderDetail,
   type OrderSource,
   type OrderStatus,
