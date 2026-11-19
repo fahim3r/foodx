@@ -100,6 +100,7 @@ export default function WaiterPage() {
   const [tables, setTables] = useState<DiningTable[]>([])
   const [mainBranchId, setMainBranchId] = useState<string | null>(null)
   const [openOrders, setOpenOrders] = useState<Order[]>([])
+  const [ordersLoaded, setOrdersLoaded] = useState(false)
   const [myOrders, setMyOrders] = useState<Order[]>([])
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(
     'loading',
@@ -151,6 +152,7 @@ export default function WaiterPage() {
   const loadOpenOrders = useCallback(async () => {
     if (!restaurantId) return
     const orders = await fetchOrders(restaurantId, { limit: 100 })
+    setOrdersLoaded(true)
     setOpenOrders(
       orders.filter((o) => !TERMINAL_ORDER_STATUSES.includes(o.status)),
     )
@@ -208,7 +210,7 @@ export default function WaiterPage() {
           setLoadState('error')
         }
       }
-      void loadOpenOrders().catch(() => undefined)
+      void loadOpenOrders().catch(() => setOrdersLoaded(true))
     })()
   }, [restaurantId, loadOpenOrders])
 
@@ -442,7 +444,10 @@ export default function WaiterPage() {
         ))}
       </div>
 
-      {tab === 'tables' && (
+      {tab === 'tables' && !ordersLoaded && (
+        <p className="text-muted-foreground">{t('common.loading')}</p>
+      )}
+      {tab === 'tables' && ordersLoaded && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {tables.length === 0 && (
             <p className="text-sm text-muted-foreground">{t('waiter.noTables')}</p>

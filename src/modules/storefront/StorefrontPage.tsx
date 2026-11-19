@@ -762,7 +762,11 @@ export default function StorefrontPage({
                   const outOfStock = servings !== undefined && servings <= 0
                   return (
                     <Card key={product.id}>
-                      <CardContent className="flex gap-3 pt-6">
+                      <CardContent
+                        className={
+                          kiosk ? 'flex gap-4 px-5 pb-5 pt-7' : 'flex gap-3 pt-6'
+                        }
+                      >
                         {product.image_url && (
                           <img
                             src={product.image_url}
@@ -776,7 +780,7 @@ export default function StorefrontPage({
                           />
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className={kiosk ? 'text-lg font-semibold' : 'font-semibold'}>
+                          <p className={kiosk ? 'text-xl font-semibold' : 'font-semibold'}>
                             {displayNameOf(product.name, product.name_bn)}
                           </p>
                           {product.description && (
@@ -784,7 +788,13 @@ export default function StorefrontPage({
                               {product.description}
                             </p>
                           )}
-                          <p className="mt-1 text-sm font-semibold">
+                          <p
+                            className={
+                              kiosk
+                                ? 'mt-1.5 text-lg font-bold'
+                                : 'mt-1 text-sm font-semibold'
+                            }
+                          >
                             {formatMoney(Number(product.price), currency)}
                           </p>
                           {outOfStock ? (
@@ -799,7 +809,8 @@ export default function StorefrontPage({
                         </div>
                         <Button
                           type="button"
-                          size="sm"
+                          size={kiosk ? 'lg' : 'sm'}
+                          className={kiosk ? 'h-12 px-6 text-base' : undefined}
                           disabled={outOfStock || !product.is_available}
                           onClick={() => openChooser(product)}
                         >
