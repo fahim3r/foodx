@@ -42,6 +42,25 @@ function fail(code: string, status: number): Response {
   return json({ error: code }, status)
 }
 
+const STAFF_MODULE_KEYS = [
+  'pos', 'waiter', 'orders', 'kds', 'serve', 'display', 'reservations',
+  'menu', 'inventory', 'tables', 'customers', 'delivery', 'business',
+  'branches', 'settings', 'health', 'staff', 'roles',
+]
+
+// A staff member's module set arrives from the panel; keep only known
+// keys. null (or a non-array) clears the restriction entirely.
+function sanitizeModules(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (typeof entry === 'string' && STAFF_MODULE_KEYS.includes(entry)) {
+      seen.add(entry)
+    }
+  }
+  return [...seen]
+}
+
 interface StaffRow {
   id: string
   email: string | null
@@ -49,6 +68,7 @@ interface StaffRow {
   phone: string | null
   branch_id: string | null
   is_active: boolean
+  modules: string[] | null
   roles: { id: string; name: string; display_name: string | null }[]
   last_sign_in_at: string | null
 }
@@ -62,7 +82,7 @@ async function loadStaff(
 ): Promise<StaffRow[]> {
   const { data: profiles, error } = await admin
     .from('profiles')
-    .select('id, full_name, phone, branch_id, is_active')
+    .select('id, full_name, phone, branch_id, is_active, modules')
     .eq('restaurant_id', restaurantId)
     .order('full_name', { ascending: true })
   if (error) throw error
@@ -113,6 +133,7 @@ async function loadStaff(
       phone: string | null
       branch_id: string | null
       is_active: boolean
+      modules: string[] | null
     }) => ({
       id: p.id,
       email: authById.get(p.id)?.email ?? null,
@@ -120,6 +141,7 @@ async function loadStaff(
       phone: p.phone,
       branch_id: p.branch_id,
       is_active: p.is_active,
+      modules: p.modules ?? null,
       roles: rolesByUser.get(p.id) ?? [],
       last_sign_in_at: authById.get(p.id)?.last_sign_in_at ?? null,
     }),
@@ -219,6 +241,7 @@ Deno.serve(async (req) => {
         typeof body.branch_id === 'string' && body.branch_id
           ? body.branch_id
           : null
+      const modules = sanitizeModules(body.modules)
       if (!email.includes('@') || password.length < 6 || !fullName || !roleId) {
         return fail('validation', 422)
       }
@@ -261,6 +284,7 @@ Deno.serve(async (req) => {
         phone,
         branch_id: branchId,
         is_active: true,
+        modules,
       })
       if (profileError) {
         // Roll back the orphan login so the email can be retried.
@@ -358,6 +382,16 @@ Deno.serve(async (req) => {
         { ban_duration: isActive ? 'none' : '876000h' },
       )
       if (banError) return fail('server_error', 500)
+      return json({ staff: await loadStaff(admin, restaurantId) })
+    }
+
+    if (action === 'set_modules') {
+      const modules = sanitizeModules(body.modules)
+      const { error: modulesError } = await admin
+        .from('profiles')
+        .update({ modules })
+        .eq('id', targetId)
+      if (modulesError) return fail('server_error', 500)
       return json({ staff: await loadStaff(admin, restaurantId) })
     }
 

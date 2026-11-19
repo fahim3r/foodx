@@ -9,6 +9,7 @@ export interface Profile {
   phone: string | null
   avatar_url: string | null
   is_active: boolean
+  modules: string[] | null
 }
 
 export interface Restaurant {
@@ -47,6 +48,7 @@ export interface RestaurantSettings {
   min_order_amount: number
   onboarding_completed: boolean
   modules: RestaurantModules | null
+  auto_send_to_kitchen: boolean
 }
 
 export interface Role {

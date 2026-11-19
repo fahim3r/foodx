@@ -27,6 +27,7 @@ export interface StaffMember {
   phone: string | null
   branch_id: string | null
   is_active: boolean
+  modules: string[] | null
   roles: StaffRole[]
   last_sign_in_at: string | null
 }
@@ -102,6 +103,7 @@ export interface CreateStaffInput {
   phone?: string
   role_id: string
   branch_id?: string | null
+  modules?: string[] | null
 }
 
 export async function createStaff(
@@ -131,6 +133,18 @@ export async function setStaffActive(
     action: 'set_active',
     user_id: userId,
     is_active: isActive,
+  })
+  return data.staff ?? []
+}
+
+export async function setStaffModules(
+  userId: string,
+  modules: string[] | null,
+): Promise<StaffMember[]> {
+  const data = await callManageStaff({
+    action: 'set_modules',
+    user_id: userId,
+    modules,
   })
   return data.staff ?? []
 }

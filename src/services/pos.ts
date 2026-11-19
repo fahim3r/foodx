@@ -317,6 +317,7 @@ async function persistPricedOrder(args: {
   totals: OrderTotals
   userId: string
   historyNote: string
+  autoSendToKitchen?: boolean
 }): Promise<Order> {
   const { orderId, input, pricedLines, totals, userId, historyNote } = args
   const itemIds = pricedLines.map(() => crypto.randomUUID())
@@ -458,6 +459,35 @@ async function persistPricedOrder(args: {
   } catch (error) {
     console.error('[POS] stock deduction failed', error)
   }
+
+  // Auto-send to kitchen (setting, migration 0032): when the
+  // restaurant turned it on, a placed order skips the manual
+  // "Send to kitchen" click and advances straight away, with its
+  // own history row. Best-effort like the stock deduction — a
+  // failure leaves a normal CONFIRMED order, never a lost one.
+  if (args.autoSendToKitchen) {
+    try {
+      const { error: sendError } = await supabase
+        .from('orders')
+        .update({ status: 'SENT_TO_KITCHEN' })
+        .eq('id', orderId)
+      if (sendError) throw sendError
+      const { error: sendHistoryError } = await supabase
+        .from('order_status_history')
+        .insert({
+          id: crypto.randomUUID(),
+          order_id: orderId,
+          from_status: 'CONFIRMED',
+          to_status: 'SENT_TO_KITCHEN',
+          changed_by: userId,
+          note: 'Auto-sent to kitchen',
+        })
+      if (sendHistoryError) throw sendHistoryError
+      order = { ...order, status: 'SENT_TO_KITCHEN' as Order['status'] }
+    } catch (error) {
+      console.error('[POS] auto-send to kitchen failed', error)
+    }
+  }
   return order
 }
 
@@ -472,7 +502,7 @@ async function persistPricedOrder(args: {
 export async function createOrder(
   input: CreateOrderInput,
   userId: string,
-  settings: { taxRate: number; serviceChargeRate: number },
+  settings: { taxRate: number; serviceChargeRate: number; autoSendToKitchen?: boolean },
 ): Promise<Order> {
   // Suspension gate (2026-11-19): a suspended client/license takes
   // no NEW orders. syncQueuedOrder deliberately bypasses this — it
@@ -498,6 +528,7 @@ export async function createOrder(
     totals,
     userId,
     historyNote: 'Order placed',
+    autoSendToKitchen: settings.autoSendToKitchen === true,
   })
 
 
@@ -641,6 +672,17 @@ export async function syncQueuedOrder(
     throw new Error('sync_payment_exceeds')
   }
 
+  // The auto-kitchen setting is read live at sync time — the order
+  // goes where the restaurant wants orders to go NOW.
+  const { data: settingsRow } = await supabase
+    .from('restaurant_settings')
+    .select('auto_send_to_kitchen')
+    .eq('restaurant_id', input.restaurantId)
+    .maybeSingle()
+  const autoSendToKitchen =
+    (settingsRow as { auto_send_to_kitchen?: boolean } | null)
+      ?.auto_send_to_kitchen === true
+
   const order = await persistPricedOrder({
     orderId: entry.id,
     input,
@@ -648,6 +690,7 @@ export async function syncQueuedOrder(
     totals,
     userId,
     historyNote: `Offline order - placed ${entry.queuedAt} on device ${entry.deviceId.slice(0, 8)}; synced ${new Date().toISOString()}`,
+    autoSendToKitchen,
   })
 
   for (const payment of entry.payments) {

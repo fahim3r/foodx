@@ -362,6 +362,7 @@ export default function WaiterPage() {
       const order = await createOrder(input, user.id, {
         taxRate,
         serviceChargeRate,
+        autoSendToKitchen: settings?.auto_send_to_kitchen === true,
       })
       setSentInfo({ kind: 'online', orderNumber: order.order_number })
       setCart([])

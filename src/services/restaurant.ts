@@ -192,6 +192,7 @@ export async function updateSettingsPartial(
       | 'onboarding_completed'
       | 'delivery_enabled'
       | 'modules'
+      | 'auto_send_to_kitchen'
     >
   >,
 ): Promise<void> {

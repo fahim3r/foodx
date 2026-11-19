@@ -860,6 +860,7 @@ export default function PosPage() {
       const order = await createOrder(input, user.id, {
         taxRate,
         serviceChargeRate,
+        autoSendToKitchen: settings?.auto_send_to_kitchen === true,
       })
       setPlacedLines(previewLines)
       setPlacedOrder(order)

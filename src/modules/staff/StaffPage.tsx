@@ -22,12 +22,46 @@ import {
   fetchStaff,
   resetStaffPassword,
   setStaffActive,
+  setStaffModules,
   setStaffRole,
   type StaffMember,
 } from '@/services/staff'
+import {
+  ALL_STAFF_MODULES,
+  STAFF_MODULE_KEYS,
+  defaultModulesForRole,
+  type StaffModuleKey,
+} from '@/services/staffModules'
 import type { Role } from '@/types'
 import AttendanceTab from './AttendanceTab'
 import EmployeesTab from './EmployeesTab'
+
+function ModuleCheckboxes({
+  value,
+  onChange,
+}: {
+  value: StaffModuleKey[]
+  onChange: (next: StaffModuleKey[]) => void
+}) {
+  const { t } = useTranslation()
+  const toggle = (key: StaffModuleKey, on: boolean) =>
+    onChange(on ? [...value, key] : value.filter((k) => k !== key))
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+      {STAFF_MODULE_KEYS.map((key) => (
+        <label key={key} className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4 shrink-0 accent-primary"
+            checked={value.includes(key)}
+            onChange={(e) => toggle(key, e.target.checked)}
+          />
+          {t(`nav.${key}`)}
+        </label>
+      ))}
+    </div>
+  )
+}
 
 const SELECT_CLASS =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
@@ -63,6 +97,12 @@ function StaffAccounts() {
   const [branchId, setBranchId] = useState('')
   const [creating, setCreating] = useState(false)
   const [createdOk, setCreatedOk] = useState(false)
+  const [createModules, setCreateModules] =
+    useState<StaffModuleKey[]>(ALL_STAFF_MODULES)
+
+  // Per-row module editor
+  const [modulesFor, setModulesFor] = useState<string | null>(null)
+  const [editModules, setEditModules] = useState<StaffModuleKey[]>([])
 
   // Per-row password reset
   const [resetFor, setResetFor] = useState<string | null>(null)
@@ -140,6 +180,7 @@ function StaffAccounts() {
         phone: phone.trim() || undefined,
         role_id: roleId,
         branch_id: branchId || null,
+        modules: createModules,
       })
       setStaff(updated)
       setFullName('')
@@ -300,7 +341,12 @@ function StaffAccounts() {
                 <select
                   id="staff-role"
                   value={roleId}
-                  onChange={(e) => setRoleId(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value
+                    setRoleId(next)
+                    const role = roles.find((r) => r.id === next)
+                    setCreateModules(defaultModulesForRole(role?.name))
+                  }}
                   className={SELECT_CLASS}
                   required
                 >
@@ -330,6 +376,16 @@ function StaffAccounts() {
                   ))}
                 </select>
               </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>{t('staff.modulesTitle')}</Label>
+              <p className="text-xs text-muted-foreground">
+                {t('staff.modulesHint')}
+              </p>
+              <ModuleCheckboxes
+                value={createModules}
+                onChange={setCreateModules}
+              />
             </div>
             {createdOk && (
               <p role="status" className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
@@ -388,6 +444,16 @@ function StaffAccounts() {
                         ? new Date(member.last_sign_in_at).toLocaleString()
                         : t('staff.neverSignedIn')}
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('staff.modulesTitle')}:{' '}
+                      {member.modules === null
+                        ? t('staff.modulesAll')
+                        : member.modules.length === 0
+                          ? t('staff.modulesNone')
+                          : member.modules
+                              .map((key) => t(`nav.${key}`))
+                              .join(', ')}
+                    </p>
                   </div>
                   <span
                     className={
@@ -442,6 +508,27 @@ function StaffAccounts() {
                     </Button>
                     <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busyId === member.id}
+                      onClick={() => {
+                        setModulesFor(
+                          modulesFor === member.id ? null : member.id,
+                        )
+                        setEditModules(
+                          member.modules !== null
+                            ? member.modules.filter(
+                                (k): k is StaffModuleKey =>
+                                  (STAFF_MODULE_KEYS as readonly string[]).includes(k),
+                              )
+                            : defaultModulesForRole(member.roles[0]?.name),
+                        )
+                      }}
+                    >
+                      {t('staff.modulesEdit')}
+                    </Button>
+                    <Button
+                      type="button"
                       variant={member.is_active ? 'destructive' : 'outline'}
                       size="sm"
                       disabled={busyId === member.id}
@@ -477,6 +564,50 @@ function StaffAccounts() {
                     >
                       {t('staff.setPasswordButton')}
                     </Button>
+                  </div>
+                )}
+                {!isSelf && modulesFor === member.id && (
+                  <div className="flex flex-col gap-3 rounded-md bg-muted/40 p-3">
+                    {member.modules === null && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('staff.modulesAll')}
+                      </p>
+                    )}
+                    <ModuleCheckboxes
+                      value={editModules}
+                      onChange={setEditModules}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busyId === member.id}
+                        onClick={() => {
+                          void runRowAction(member, () =>
+                            setStaffModules(member.id, editModules),
+                          )
+                          setModulesFor(null)
+                        }}
+                      >
+                        {t('staff.modulesSave')}
+                      </Button>
+                      {member.modules !== null && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={busyId === member.id}
+                          onClick={() => {
+                            void runRowAction(member, () =>
+                              setStaffModules(member.id, null),
+                            )
+                            setModulesFor(null)
+                          }}
+                        >
+                          {t('staff.modulesClear')}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
                 {passwordOkFor === member.id && (

@@ -21,6 +21,7 @@ import ManagerPinCard from './ManagerPinCard'
 import AppearanceCard from './AppearanceCard'
 import PrintingCard from './PrintingCard'
 import ModulesCard from './ModulesCard'
+import OrderFlowCard from './OrderFlowCard'
 import EasyModeCard from './EasyModeCard'
 import { Link } from 'react-router-dom'
 import type { RestaurantFormValues } from '@/types'
@@ -638,6 +639,7 @@ export default function SettingsPage() {
       <AppearanceCard />
       <PrintingCard />
       <ModulesCard />
+      <OrderFlowCard />
       <EasyModeCard />
     </div>
   )

@@ -60,17 +60,17 @@ import { Button } from '@/components/ui/button'
 
 const NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard, end: true },
-  { to: '/pos', key: 'nav.pos', icon: ShoppingCart, end: false, perm: 'orders.create' },
-  { to: '/waiter', key: 'nav.waiter', icon: Smartphone, end: false, perm: 'orders.create' },
-  { to: '/orders', key: 'nav.orders', icon: ClipboardList, end: false, perm: 'orders.view' },
-  { to: '/kds', key: 'nav.kds', icon: ChefHat, end: false, perm: 'kitchen.view' },
-  { to: '/serve', key: 'nav.serve', icon: BellRing, end: false, perm: 'kitchen.view' },
-  { to: '/display', key: 'nav.display', icon: Monitor, end: false, perm: 'kitchen.view' },
-  { to: '/reservations', key: 'nav.reservations', icon: CalendarCheck, end: false, module: 'reservations' as ModuleKey, perm: 'tables.view' },
-  { to: '/menu', key: 'nav.menu', icon: UtensilsCrossed, end: false, perm: 'products.view' },
-  { to: '/inventory', key: 'nav.inventory', icon: Boxes, end: false, perm: 'inventory.view' },
-  { to: '/tables', key: 'nav.tables', icon: Table2, end: false, perm: 'tables.view' },
-  { to: '/customers', key: 'nav.customers', icon: Users, end: false, module: 'customers' as ModuleKey, perm: 'customers.view' },
+  { to: '/pos', key: 'nav.pos', icon: ShoppingCart, end: false, perm: 'orders.create', staffModule: 'pos' },
+  { to: '/waiter', key: 'nav.waiter', icon: Smartphone, end: false, perm: 'orders.create', staffModule: 'waiter' },
+  { to: '/orders', key: 'nav.orders', icon: ClipboardList, end: false, perm: 'orders.view', staffModule: 'orders' },
+  { to: '/kds', key: 'nav.kds', icon: ChefHat, end: false, perm: 'kitchen.view', staffModule: 'kds' },
+  { to: '/serve', key: 'nav.serve', icon: BellRing, end: false, perm: 'kitchen.view', staffModule: 'serve' },
+  { to: '/display', key: 'nav.display', icon: Monitor, end: false, perm: 'kitchen.view', staffModule: 'display' },
+  { to: '/reservations', key: 'nav.reservations', icon: CalendarCheck, end: false, module: 'reservations' as ModuleKey, perm: 'tables.view', staffModule: 'reservations' },
+  { to: '/menu', key: 'nav.menu', icon: UtensilsCrossed, end: false, perm: 'products.view', staffModule: 'menu' },
+  { to: '/inventory', key: 'nav.inventory', icon: Boxes, end: false, perm: 'inventory.view', staffModule: 'inventory' },
+  { to: '/tables', key: 'nav.tables', icon: Table2, end: false, perm: 'tables.view', staffModule: 'tables' },
+  { to: '/customers', key: 'nav.customers', icon: Users, end: false, module: 'customers' as ModuleKey, perm: 'customers.view', staffModule: 'customers' },
   {
     to: '/delivery',
     key: 'nav.delivery',
@@ -79,6 +79,7 @@ const NAV_ITEMS = [
     perm: 'delivery.view',
     feature: 'delivery' as DevFeatureKey,
     module: 'delivery' as ModuleKey,
+    staffModule: 'delivery',
   },
   {
     to: '/business',
@@ -88,6 +89,7 @@ const NAV_ITEMS = [
     perm: 'reports.view',
     feature: 'accounting' as DevFeatureKey,
     module: 'business' as ModuleKey,
+    staffModule: 'business',
   },
   {
     to: '/branches',
@@ -96,11 +98,12 @@ const NAV_ITEMS = [
     end: false,
     perm: 'settings.view',
     feature: 'multi_branch' as DevFeatureKey,
+    staffModule: 'branches',
   },
-  { to: '/settings', key: 'nav.settings', icon: Settings, end: false, perm: 'settings.view' },
-  { to: '/health', key: 'nav.health', icon: Activity, end: false, perm: 'settings.view' },
-  { to: '/staff', key: 'nav.staff', icon: UserCog, end: false, perm: 'staff.view' },
-  { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false, perm: 'staff.view' },
+  { to: '/settings', key: 'nav.settings', icon: Settings, end: false, perm: 'settings.view', staffModule: 'settings' },
+  { to: '/health', key: 'nav.health', icon: Activity, end: false, perm: 'settings.view', staffModule: 'health' },
+  { to: '/staff', key: 'nav.staff', icon: UserCog, end: false, perm: 'staff.view', staffModule: 'staff' },
+  { to: '/roles', key: 'nav.roles', icon: ShieldCheck, end: false, perm: 'staff.view', staffModule: 'roles' },
 ] as const
 
 function LanguageSwitcher() {
@@ -169,9 +172,9 @@ function EasyModeToggleButton() {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const licenseView = useLicenseState()
   const { easy } = useEasyMode()
-  const { can } = usePermissions()
+  const { can, isAdminLevel } = usePermissions()
   const { t } = useTranslation()
-  const { restaurant, settings } = useAuth()
+  const { restaurant, settings, profile } = useAuth()
   const { pathname } = useLocation()
   // The admin lives under /panel in both mountings, but the router
   // reports the path differently: under basename /panel (restaurant
@@ -189,6 +192,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   // only when a display name is set in Settings → Branding; otherwise
   // just the logo shows.
   const sidebarName = settings?.branding_name?.trim() ?? ''
+  // Per-staff module restriction (migration 0032): null = none set.
+  const staffModules: string[] | null = Array.isArray(profile?.modules)
+    ? profile.modules
+    : null
 
   return (
     <div className="flex h-full flex-col">
@@ -229,7 +236,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             (!('module' in item && item.module) ||
               isModuleOn(settings, item.module)) &&
             (!easy || EASY_NAV.includes(item.to)) &&
-            (!('perm' in item && item.perm) || can(item.perm)),
+            (!('perm' in item && item.perm) || can(item.perm)) &&
+            (!('staffModule' in item && item.staffModule) ||
+              isAdminLevel ||
+              staffModules === null ||
+              staffModules.includes(item.staffModule)),
         ).map(({ to, key, icon: Icon, end }) => (
           <NavLink
             key={to}
