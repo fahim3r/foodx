@@ -995,6 +995,7 @@ export default function PosPage() {
       third_party_company: entry.input.thirdPartyCompany ?? null,
       token_number: null,
       token_day: null,
+      merged_into_id: null,
       status: 'CONFIRMED',
       subtotal: entry.totals.subtotal,
       discount_amount: entry.totals.discountAmount,

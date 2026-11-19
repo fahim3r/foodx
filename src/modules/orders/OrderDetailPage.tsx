@@ -16,9 +16,13 @@ import {
   markOrderServed,
   refundOrder,
   sendOrderToKitchen,
+  MERGEABLE_STATUSES,
+  fetchMergeCandidates,
+  mergeOrders,
 } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
 import { fetchManagerPinIsSet } from '@/services/pin'
+import { fetchOrderPayments, summarizePayments } from '@/services/pos'
 import { fetchBranches, type Branch } from '@/services/restaurant'
 import { printHtml } from '@/lib/print'
 import {
@@ -105,6 +109,14 @@ export default function OrderDetailPage() {
   const [pinIsSet, setPinIsSet] = useState(false)
   const [cancelPin, setCancelPin] = useState('')
   const [refundPin, setRefundPin] = useState('')
+  // Order merge (gap 3): pick a target, see the combined money, merge.
+  const [showMergeForm, setShowMergeForm] = useState(false)
+  const [mergeCandidates, setMergeCandidates] = useState<Order[]>([])
+  const [mergeTargetId, setMergeTargetId] = useState('')
+  const [mergeTargetPaid, setMergeTargetPaid] = useState<number | null>(null)
+  const [mergePin, setMergePin] = useState('')
+  const [mergeFormError, setMergeFormError] = useState<string | null>(null)
+  const [merging, setMerging] = useState(false)
 
   const currency =
     settings?.currency ?? restaurant?.default_currency ?? 'BDT'
@@ -135,6 +147,71 @@ export default function OrderDetailPage() {
     kitchenTicket: t('print.kitchenTicket'),
     notes: t('print.notes'),
     poweredBy: t('print.poweredBy'),
+  }
+
+  const openMergeForm = async () => {
+    if (!detail || !restaurant) return
+    setShowMergeForm(true)
+    setShowCancelForm(false)
+    setShowRefundForm(false)
+    setActionError(null)
+    setMergeFormError(null)
+    setMergeTargetId('')
+    setMergeTargetPaid(null)
+    try {
+      const candidates = await fetchMergeCandidates(restaurant.id, detail.id)
+      // Same table first, then oldest first (the service's order).
+      candidates.sort(
+        (a, b) =>
+          (b.table_id === detail.table_id ? 1 : 0) -
+          (a.table_id === detail.table_id ? 1 : 0),
+      )
+      setMergeCandidates(candidates)
+    } catch (error) {
+      console.error('[OrderDetail] merge candidates failed', error)
+      setMergeCandidates([])
+    }
+  }
+
+  const selectMergeTarget = async (targetId: string) => {
+    setMergeTargetId(targetId)
+    setMergeTargetPaid(null)
+    if (!targetId) return
+    try {
+      const payments = await fetchOrderPayments(targetId)
+      setMergeTargetPaid(summarizePayments(payments, 0).paid)
+    } catch {
+      setMergeTargetPaid(null)
+    }
+  }
+
+  const handleMerge = async () => {
+    if (!detail || !mergeTargetId) return
+    setMergeFormError(null)
+    setMerging(true)
+    try {
+      await mergeOrders(detail.id, mergeTargetId, mergePin)
+      setShowMergeForm(false)
+      setMergePin('')
+      await reload()
+    } catch (error) {
+      console.error('[OrderDetail] merge failed', error)
+      const code = error instanceof Error ? error.message : ''
+      if (code === 'pin_incorrect') setMergeFormError('orders.pinIncorrect')
+      else if (code === 'pin_required') {
+        setMergeFormError('orders.pinRequired')
+      } else if (code === 'merge_invalid_status') {
+        setMergeFormError('orders.mergeInvalidStatus')
+      } else if (code === 'merge_delivery_not_supported') {
+        setMergeFormError('orders.mergeDelivery')
+      } else if (code === 'merge_loyalty_coupon_not_supported') {
+        setMergeFormError('orders.mergeLoyaltyCoupon')
+      } else {
+        setMergeFormError('orders.mergeFailed')
+      }
+    } finally {
+      setMerging(false)
+    }
   }
 
   const receiptContext = (target: OrderDetail): ReceiptContext => {
@@ -480,6 +557,11 @@ export default function OrderDetailPage() {
               {detail.notes}
             </p>
           )}
+          {detail.merged_into_id && (
+            <p className="font-medium text-amber-600">
+              {t('orders.mergedAwayNote')}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -518,6 +600,16 @@ export default function OrderDetailPage() {
             {t('orders.completeOrder')}
           </Button>
         )}
+        {MERGEABLE_STATUSES.includes(detail.status) &&
+          detail.type !== 'delivery' && (
+            <Button
+              variant="outline"
+              onClick={() => void openMergeForm()}
+              disabled={acting}
+            >
+              {t('orders.mergeInto')}
+            </Button>
+          )}
         {!isTerminal && (
           <Button
             variant="outline"
@@ -677,6 +769,124 @@ export default function OrderDetailPage() {
                 </Button>
               </div>
             </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {showMergeForm && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('orders.mergeTitle')}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {mergeCandidates.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t('orders.mergeNoCandidates')}
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="mergeTarget">
+                    {t('orders.mergeTarget')}
+                  </Label>
+                  <select
+                    id="mergeTarget"
+                    value={mergeTargetId}
+                    onChange={(e) => void selectMergeTarget(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  >
+                    <option value="">{t('orders.mergeSelect')}</option>
+                    {mergeCandidates.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        #{candidate.order_number} · {typeLabel(candidate.type)}
+                        {candidate.table_id
+                          ? ` · ${tableNames[candidate.table_id] ?? ''}`
+                          : ''}{' '}
+                        · {formatMoney(candidate.total_amount, currency)} ·{' '}
+                        {statusLabel(candidate.status)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {mergeTargetId &&
+                  (() => {
+                    const target = mergeCandidates.find(
+                      (c) => c.id === mergeTargetId,
+                    )
+                    if (!target) return null
+                    const combinedTotal =
+                      Number(detail.total_amount) + Number(target.total_amount)
+                    const combinedPaid =
+                      summarizePayments(detail.payments, 0).paid +
+                      (mergeTargetPaid ?? 0)
+                    return (
+                      <div className="flex flex-col gap-1 text-sm">
+                        <p className="flex items-center justify-between gap-2">
+                          <span>{t('orders.mergeCombinedTotal')}</span>
+                          <span className="font-semibold">
+                            {formatMoney(combinedTotal, currency)}
+                          </span>
+                        </p>
+                        <p className="flex items-center justify-between gap-2">
+                          <span>{t('orders.mergeCombinedPaid')}</span>
+                          <span>
+                            {formatMoney(combinedPaid, currency)}
+                          </span>
+                        </p>
+                        <p className="flex items-center justify-between gap-2">
+                          <span>{t('orders.mergeCombinedDue')}</span>
+                          <span>
+                            {formatMoney(
+                              Math.max(0, combinedTotal - combinedPaid),
+                              currency,
+                            )}
+                          </span>
+                        </p>
+                      </div>
+                    )
+                  })()}
+                {pinIsSet && (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="mergePin">{t('orders.managerPin')}</Label>
+                    <Input
+                      id="mergePin"
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      maxLength={8}
+                      value={mergePin}
+                      onChange={(e) => setMergePin(e.target.value)}
+                      className="max-w-56"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+            {mergeFormError && (
+              <p role="alert" className="text-sm text-destructive">
+                {t(mergeFormError)}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                disabled={merging || !mergeTargetId}
+                onClick={() => void handleMerge()}
+              >
+                {t('orders.mergeConfirm')}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setShowMergeForm(false)
+                  setMergePin('')
+                  setMergeFormError(null)
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

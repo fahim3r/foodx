@@ -287,3 +287,74 @@ export async function fetchTodayOrders(
   if (error) throw error
   return (data ?? []) as Order[]
 }
+
+/** Statuses an order can be merged from / into (roadmap gap 3). */
+export const MERGEABLE_STATUSES: OrderStatus[] = [
+  'CONFIRMED',
+  'SENT_TO_KITCHEN',
+  'PREPARING',
+  'READY',
+  'SERVED',
+]
+
+/**
+ * Orders this one could merge into: same restaurant, open, not a
+ * delivery order, not the order itself, oldest first. The page sorts
+ * same-table candidates to the top.
+ */
+export async function fetchMergeCandidates(
+  restaurantId: string,
+  excludeOrderId: string,
+): Promise<Order[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .in('status', MERGEABLE_STATUSES)
+    .neq('type', 'delivery')
+    .neq('id', excludeOrderId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as Order[]
+}
+
+/** Map a merge_orders failure to a stable error code for the UI. */
+export function mergeErrorCode(error: unknown): string {
+  const raw = (error as { message?: unknown } | null | undefined)?.message
+  const message =
+    typeof raw === 'string'
+      ? raw
+      : error instanceof Error
+        ? error.message
+        : String(error)
+  if (message.includes('pin_incorrect')) return 'pin_incorrect'
+  if (message.includes('pin_required')) return 'pin_required'
+  if (message.includes('merge_same_order')) return 'merge_same_order'
+  if (message.includes('merge_invalid_status')) return 'merge_invalid_status'
+  if (message.includes('merge_delivery_not_supported')) {
+    return 'merge_delivery_not_supported'
+  }
+  if (message.includes('merge_loyalty_coupon_not_supported')) {
+    return 'merge_loyalty_coupon_not_supported'
+  }
+  return 'merge_failed'
+}
+
+/**
+ * Merge the source order into the target (migration 0025 RPC — the
+ * move is atomic in the database). When the restaurant has a manager
+ * PIN set, the RPC verifies it. Throws an Error whose message is a
+ * stable code (see mergeErrorCode).
+ */
+export async function mergeOrders(
+  sourceId: string,
+  targetId: string,
+  pin?: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('merge_orders', {
+    p_source_id: sourceId,
+    p_target_id: targetId,
+    p_pin: pin?.trim() || null,
+  })
+  if (error) throw new Error(mergeErrorCode(error))
+}

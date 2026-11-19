@@ -238,6 +238,9 @@ export interface Order {
    * the token belongs to (YYYY-MM-DD). */
   token_number: number | null
   token_day: string | null
+  /** Set when this order was merged into another order (migration
+   * 0025); the order itself is CANCELLED. Null for normal orders. */
+  merged_into_id: string | null
   customer_id: string | null
   /** Guest contact for QR / online orders (the POS leaves these null —
    * its customers live on the customer record instead). */
