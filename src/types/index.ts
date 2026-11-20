@@ -370,10 +370,20 @@ export interface CreateOrderInput {
   externalOrderId?: string | null
   thirdPartyCompany?: string | null
   /** Guest contact written to orders.customer_name / customer_phone
-   * (third-party entry; the normal POS flow leaves them null and
-   * attaches a customer record instead). */
+   * (third-party entry and POS delivery; the normal counter flow
+   * leaves them null and attaches a customer record instead). */
   customerName?: string | null
   customerPhone?: string | null
+  /** Delivery address written to orders.delivery_address (POS
+   * delivery orders; the online flow passes its address to
+   * place_online_order instead). */
+  deliveryAddress?: string | null
+  /** Delivery zone picked at the counter (orders.delivery_zone_id)
+   * and that zone's fee (orders.delivery_fee). The fee joins the
+   * order total after tax / service charge — the same rule
+   * place_online_order applies online. */
+  deliveryZoneId?: string | null
+  deliveryFee?: number
   notes?: string
   discountAmount: number
   customerId?: string | null
@@ -394,6 +404,10 @@ export interface OrderTotals {
   loyaltyDiscount: number
   taxAmount: number
   serviceChargeAmount: number
+  /** Delivery fee included in totalAmount (0 / absent unless a
+   * delivery zone was picked). Never taxed — added last, exactly
+   * like place_online_order. */
+  deliveryFee?: number
   totalAmount: number
 }
 

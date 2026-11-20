@@ -70,7 +70,11 @@ export function computeOrderTotals(
   discountAmount: number,
   taxRate: number,
   serviceChargeRate: number,
-  extra?: { couponDiscount?: number; loyaltyDiscount?: number },
+  extra?: {
+    couponDiscount?: number
+    loyaltyDiscount?: number
+    deliveryFee?: number
+  },
 ): OrderTotals {
   const subtotal = roundMoney(
     lines.reduce((sum, line) => sum + line.lineTotal, 0),
@@ -89,6 +93,9 @@ export function computeOrderTotals(
   const taxable = roundMoney(afterCoupon - loyaltyDiscount)
   const taxAmount = roundMoney((taxable * taxRate) / 100)
   const serviceChargeAmount = roundMoney((taxable * serviceChargeRate) / 100)
+  // The delivery fee is never taxed and never discounted: it joins
+  // the total last, mirroring place_online_order (migration 0012).
+  const deliveryFee = roundMoney(Math.max(extra?.deliveryFee ?? 0, 0))
   return {
     subtotal,
     discountAmount: discount,
@@ -96,7 +103,10 @@ export function computeOrderTotals(
     loyaltyDiscount: roundMoney(loyaltyDiscount),
     taxAmount,
     serviceChargeAmount,
-    totalAmount: roundMoney(taxable + taxAmount + serviceChargeAmount),
+    deliveryFee,
+    totalAmount: roundMoney(
+      taxable + taxAmount + serviceChargeAmount + deliveryFee,
+    ),
   }
 }
 
@@ -349,6 +359,16 @@ async function persistPricedOrder(args: {
           third_party_company: input.thirdPartyCompany ?? null,
           customer_name: input.customerName?.trim() || null,
           customer_phone: input.customerPhone?.trim() || null,
+          delivery_address: input.deliveryAddress?.trim() || null,
+          // Zone + fee only ever apply to delivery orders (the same
+          // gating place_online_order uses); anything else stores
+          // the neutral defaults.
+          delivery_zone_id:
+            input.type === 'delivery' ? (input.deliveryZoneId ?? null) : null,
+          delivery_fee:
+            input.type === 'delivery'
+              ? roundMoney(Math.max(input.deliveryFee ?? 0, 0))
+              : 0,
           status: 'CONFIRMED',
           subtotal: totals.subtotal,
           discount_amount: totals.discountAmount,
@@ -517,6 +537,8 @@ export async function createOrder(
     {
       couponDiscount: input.couponDiscount ?? 0,
       loyaltyDiscount: input.loyaltyDiscount ?? 0,
+      deliveryFee:
+        input.type === 'delivery' ? (input.deliveryFee ?? 0) : 0,
     },
   )
 
@@ -647,6 +669,10 @@ export async function syncQueuedOrder(
     input.discountAmount,
     entry.taxRate,
     entry.serviceChargeRate,
+    {
+      deliveryFee:
+        input.type === 'delivery' ? (input.deliveryFee ?? 0) : 0,
+    },
   )
   const queued = entry.totals
   if (
@@ -654,6 +680,7 @@ export async function syncQueuedOrder(
     totals.discountAmount !== queued.discountAmount ||
     totals.taxAmount !== queued.taxAmount ||
     totals.serviceChargeAmount !== queued.serviceChargeAmount ||
+    (totals.deliveryFee ?? 0) !== (queued.deliveryFee ?? 0) ||
     totals.totalAmount !== queued.totalAmount ||
     totals.couponDiscount !== 0 ||
     totals.loyaltyDiscount !== 0

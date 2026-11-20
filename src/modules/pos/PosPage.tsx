@@ -32,6 +32,7 @@ import {
   THIRD_PARTY_COMPANIES,
 } from '@/services/pos'
 import { fetchBranches, type Branch } from '@/services/restaurant'
+import { fetchDeliveryZones } from '@/services/delivery'
 import { fetchOrderDetail } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -58,6 +59,7 @@ import type {
   Coupon,
   CreateOrderInput,
   Customer,
+  DeliveryZone,
   DiningTable,
   Order,
   OrderDetail,
@@ -122,6 +124,9 @@ const EASY_PAYMENT_METHODS: PaymentMethod[] = ['cash', 'bkash', 'card']
 const SELECT_CLASSNAME =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
 
+const TEXTAREA_CLASSNAME =
+  'flex w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
+
 function cartKey(line: CartLine): string {
   return `${line.productId}|${line.variantId ?? ''}|${[...line.modifierIds].sort().join(',')}|${line.note.trim()}`
 }
@@ -179,6 +184,16 @@ export default function PosPage() {
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
   const isThirdParty = orderType === 'delivery' && deliveryChannel === 'third_party'
+  // Own-delivery orders carry the customer's contact + address on the
+  // order row (the delivery board reads them from there). The zone is
+  // optional: picking one charges that zone's fee.
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([])
+  const [selectedZoneId, setSelectedZoneId] = useState('')
+  const isOwnDelivery = orderType === 'delivery' && deliveryChannel === 'own'
+  const selectedZone =
+    deliveryZones.find((zone) => zone.id === selectedZoneId) ?? null
+  const deliveryFee = isOwnDelivery ? Number(selectedZone?.fee ?? 0) : 0
   const [selectedTableId, setSelectedTableId] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
   const [search, setSearch] = useState('')
@@ -322,6 +337,27 @@ export default function PosPage() {
       }
     }
     void load()
+    return () => {
+      cancelled = true
+    }
+  }, [restaurant])
+
+  // Delivery zones for the zone picker. Best-effort and separate
+  // from the catalog load above: zones only decorate delivery
+  // orders, so a failure here just leaves the picker hidden.
+  useEffect(() => {
+    if (!restaurant) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const zones = await fetchDeliveryZones(restaurant.id)
+        if (!cancelled) {
+          setDeliveryZones(zones.filter((zone) => zone.is_active))
+        }
+      } catch (error) {
+        console.error('[POS] delivery zones load failed', error)
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -486,6 +522,7 @@ export default function PosPage() {
       computeOrderTotals(previewLines, discount, taxRate, serviceChargeRate, {
         couponDiscount,
         loyaltyDiscount,
+        deliveryFee,
       }),
     [
       previewLines,
@@ -494,6 +531,7 @@ export default function PosPage() {
       serviceChargeRate,
       couponDiscount,
       loyaltyDiscount,
+      deliveryFee,
     ],
   )
 
@@ -678,6 +716,8 @@ export default function PosPage() {
     setExternalOrderId('')
     setGuestName('')
     setGuestPhone('')
+    setDeliveryAddress('')
+    setSelectedZoneId('')
     setPlaceErrorKey(null)
     setPaymentErrorKey(null)
     setPaymentRecorded(false)
@@ -778,6 +818,10 @@ export default function PosPage() {
       setPlaceErrorKey('pos.externalIdRequired')
       return
     }
+    if (isOwnDelivery && (!guestPhone.trim() || !deliveryAddress.trim())) {
+      setPlaceErrorKey('pos.deliveryDetailsRequired')
+      return
+    }
     const lines: PosOrderLineInput[] = cart.map((line) => ({
       productId: line.productId,
       variantId: line.variantId,
@@ -796,8 +840,11 @@ export default function PosPage() {
       source: isThirdParty ? 'THIRD_PARTY' : undefined,
       externalOrderId: isThirdParty ? externalOrderId : undefined,
       thirdPartyCompany: isThirdParty ? thirdPartyCompany : undefined,
-      customerName: isThirdParty ? guestName : undefined,
-      customerPhone: isThirdParty ? guestPhone : undefined,
+      customerName: isThirdParty || isOwnDelivery ? guestName : undefined,
+      customerPhone: isThirdParty || isOwnDelivery ? guestPhone : undefined,
+      deliveryAddress: isOwnDelivery ? deliveryAddress : undefined,
+      deliveryZoneId: isOwnDelivery ? (selectedZone?.id ?? null) : undefined,
+      deliveryFee: isOwnDelivery ? deliveryFee : undefined,
       notes,
       discountAmount: discount,
       customerId: selectedCustomer?.id ?? null,
@@ -841,6 +888,8 @@ export default function PosPage() {
       setCart([])
       setDiscount(0)
       setNotes('')
+      setDeliveryAddress('')
+      setSelectedZoneId('')
       setChooserProduct(null)
       setPaymentAmount(String(totals.totalAmount))
       setPaymentReference('')
@@ -868,6 +917,8 @@ export default function PosPage() {
       setCart([])
       setDiscount(0)
       setNotes('')
+      setDeliveryAddress('')
+      setSelectedZoneId('')
       setChooserProduct(null)
       // Stock changed (the order deducted recipe ingredients) — refresh
       // availability so the next order sees honest servings.
@@ -1074,12 +1125,13 @@ export default function PosPage() {
       tax_amount: entry.totals.taxAmount,
       service_charge_amount: entry.totals.serviceChargeAmount,
       total_amount: entry.totals.totalAmount,
-      delivery_fee: 0,
-      delivery_zone_id: null,
+      delivery_fee:
+        entry.input.type === 'delivery' ? (entry.input.deliveryFee ?? 0) : 0,
+      delivery_zone_id: entry.input.deliveryZoneId ?? null,
       customer_id: null,
       customer_name: entry.input.customerName ?? null,
       customer_phone: entry.input.customerPhone ?? null,
-      delivery_address: null,
+      delivery_address: entry.input.deliveryAddress ?? null,
       coupon_id: null,
       coupon_discount: 0,
       loyalty_points_redeemed: 0,
@@ -1969,6 +2021,60 @@ export default function PosPage() {
                   </div>
                 </div>
               )}
+              {isOwnDelivery && (
+                <div className="flex flex-col gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="dlv-guest-name">{t('pos.guestName')}</Label>
+                      <Input
+                        id="dlv-guest-name"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        maxLength={120}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="dlv-guest-phone">{t('pos.guestPhone')}</Label>
+                      <Input
+                        id="dlv-guest-phone"
+                        value={guestPhone}
+                        onChange={(e) => setGuestPhone(e.target.value)}
+                        maxLength={32}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="dlv-address">{t('pos.deliveryAddress')}</Label>
+                    <textarea
+                      id="dlv-address"
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      placeholder={t('pos.deliveryAddressPlaceholder')}
+                      maxLength={500}
+                      rows={2}
+                      className={TEXTAREA_CLASSNAME}
+                    />
+                  </div>
+                  {deliveryZones.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="dlv-zone">{t('pos.deliveryZone')}</Label>
+                      <select
+                        id="dlv-zone"
+                        value={selectedZoneId}
+                        onChange={(e) => setSelectedZoneId(e.target.value)}
+                        className={SELECT_CLASSNAME}
+                      >
+                        <option value="">{t('pos.deliveryZoneNone')}</option>
+                        {deliveryZones.map((zone) => (
+                          <option key={zone.id} value={zone.id}>
+                            {zone.name} ({formatMoney(Number(zone.fee), currency)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {orderType === 'dine_in' && (
@@ -2490,6 +2596,12 @@ export default function PosPage() {
                 <span>{t('pos.serviceCharge', { rate: serviceChargeRate })}</span>
                 <span>{formatMoney(totals.serviceChargeAmount, currency)}</span>
               </p>
+              {deliveryFee > 0 && (
+                <p className="flex justify-between">
+                  <span>{t('pos.deliveryFee')}</span>
+                  <span>{formatMoney(deliveryFee, currency)}</span>
+                </p>
+              )}
               <p className="flex justify-between font-semibold">
                 <span>{t('pos.total')}</span>
                 <span>{formatMoney(totals.totalAmount, currency)}</span>
