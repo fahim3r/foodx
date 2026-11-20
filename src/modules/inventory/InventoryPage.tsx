@@ -853,6 +853,14 @@ export default function InventoryPage() {
       setPoConfirm(null)
       await reloadPurchaseOrders()
       await reloadItems()
+      if (to === 'RECEIVED') {
+        // A receive changes what the restaurant owes its supplier:
+        // refresh the suppliers list and the balances ledger too, or
+        // both keep showing the pre-receive figures until a manual
+        // reload (audit wave 3 — the stored data was always right).
+        if (restaurantId) setSuppliers(await fetchSuppliers(restaurantId))
+        await loadSupplierPayments()
+      }
     } catch (error) {
       console.error('[Inventory] purchase order action failed', error)
       const message = error instanceof Error ? error.message : ''

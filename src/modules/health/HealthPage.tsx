@@ -87,6 +87,13 @@ export default function HealthPage() {
     }
   }, [])
 
+  // Branches / users in use (audit wave 3): counted locally from
+  // this restaurant's own rows — plain row reads whose length is
+  // the count, with the PostgREST error checked explicitly. (The
+  // earlier head-count version read the count header off the
+  // response and silently stayed on "—" whenever that came back
+  // empty.) The registry is never called for this; the max side
+  // comes from the cached license limits below.
   useEffect(() => {
     let cancelled = false
     if (!restaurant) return
@@ -94,18 +101,27 @@ export default function HealthPage() {
       const [branches, users] = await Promise.allSettled([
         supabase
           .from('branches')
-          .select('id', { count: 'exact', head: true })
+          .select('id')
           .eq('restaurant_id', restaurant.id),
         supabase
           .from('profiles')
-          .select('id', { count: 'exact', head: true })
+          .select('id')
           .eq('restaurant_id', restaurant.id),
       ])
       if (cancelled) return
+      const rowCount = (
+        result: PromiseSettledResult<{ data: unknown[] | null; error: unknown }>,
+      ): number | null => {
+        if (result.status !== 'fulfilled') return null
+        if (result.value.error) {
+          console.error('[Health] in-use count failed', result.value.error)
+          return null
+        }
+        return (result.value.data ?? []).length
+      }
       setCounts({
-        branches:
-          branches.status === 'fulfilled' ? (branches.value.count ?? null) : null,
-        users: users.status === 'fulfilled' ? (users.value.count ?? null) : null,
+        branches: rowCount(branches),
+        users: rowCount(users),
       })
     })()
     return () => {

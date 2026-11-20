@@ -5,7 +5,7 @@
 // services/pos.ts re-reads prices from the database before storing.
 // Receipt printing (§62, Phase 7 Step 2A) prints the placed order
 // from the summary card via lib/receipt + lib/print.
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Mic } from 'lucide-react'
@@ -91,6 +91,23 @@ interface CartLine {
   quantity: number
   /** Per-item kitchen note (gap 5); part of the merge signature. */
   note: string
+}
+
+/**
+ * Saved in-progress cart (audit wave 3): the same ids-only shape as
+ * the live cart, kept in localStorage per restaurant so a page
+ * reload mid-order restores it. A draft is NOT an order — the
+ * Phase 9 offline queue is the order pipeline; this only protects
+ * the cart being keyed in.
+ */
+interface PosCartDraft {
+  lines: CartLine[]
+  orderType: OrderType
+  tableId: string
+}
+
+function posCartDraftKey(restaurantId: string): string {
+  return `foodx.pos_cart.${restaurantId}`
 }
 
 const ORDER_TYPE_KEYS: Record<OrderType, string> = {
@@ -341,6 +358,83 @@ export default function PosPage() {
       cancelled = true
     }
   }, [restaurant])
+
+  // Cart draft restore (audit wave 3): once the catalog has loaded,
+  // bring back the cart that was in progress when the page was last
+  // closed or reloaded. Lines whose product is no longer in the
+  // catalog are dropped — the preview would skip them anyway, and a
+  // stale row must never crash the page. Runs once per restaurant;
+  // a failed catalog load leaves the saved draft untouched.
+  const cartDraftForRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!restaurant || !loaded || loadState !== 'ok') return
+    if (cartDraftForRef.current === restaurant.id) return
+    cartDraftForRef.current = restaurant.id
+    try {
+      const raw = localStorage.getItem(posCartDraftKey(restaurant.id))
+      if (!raw) return
+      const draft = JSON.parse(raw) as Partial<PosCartDraft>
+      const catalogIds = new Set(products.map((product) => product.id))
+      const lines: CartLine[] = []
+      for (const line of Array.isArray(draft.lines) ? draft.lines : []) {
+        if (!line || !catalogIds.has(line.productId)) continue
+        lines.push({
+          id: typeof line.id === 'string' ? line.id : crypto.randomUUID(),
+          productId: line.productId,
+          variantId:
+            typeof line.variantId === 'string' ? line.variantId : null,
+          modifierIds: Array.isArray(line.modifierIds)
+            ? line.modifierIds.filter(
+                (id): id is string => typeof id === 'string',
+              )
+            : [],
+          quantity:
+            Number.isFinite(line.quantity) && line.quantity > 0
+              ? Math.floor(line.quantity)
+              : 1,
+          note: typeof line.note === 'string' ? line.note : '',
+        })
+      }
+      if (lines.length === 0) return
+      setCart(lines)
+      if (draft.orderType && ORDER_TYPES.includes(draft.orderType)) {
+        setOrderType(draft.orderType)
+      }
+      if (typeof draft.tableId === 'string') {
+        setSelectedTableId(draft.tableId)
+      }
+    } catch {
+      // A corrupt draft is ignored — the POS simply starts empty.
+    }
+  }, [restaurant, loaded, loadState, products])
+
+  // Cart draft save: write on every cart change, but only after the
+  // restore above has run for this restaurant (the initial empty
+  // cart must not wipe a saved draft). An empty cart removes the
+  // draft, so a successful placement, an offline queueing and the
+  // New-order reset — all of which empty the cart — clear it too.
+  useEffect(() => {
+    if (!restaurant) return
+    if (cartDraftForRef.current !== restaurant.id) return
+    try {
+      if (cart.length === 0) {
+        localStorage.removeItem(posCartDraftKey(restaurant.id))
+      } else {
+        const draft: PosCartDraft = {
+          lines: cart,
+          orderType,
+          tableId: selectedTableId,
+        }
+        localStorage.setItem(
+          posCartDraftKey(restaurant.id),
+          JSON.stringify(draft),
+        )
+      }
+    } catch {
+      // Storage full or blocked: the cart simply does not persist.
+    }
+  }, [cart, orderType, selectedTableId, restaurant])
 
   // Delivery zones for the zone picker. Best-effort and separate
   // from the catalog load above: zones only decorate delivery
@@ -1652,6 +1746,14 @@ export default function PosPage() {
                   {formatMoney(Number(placedOrder.service_charge_amount), currency)}
                 </span>
               </p>
+              {Number(placedOrder.delivery_fee) > 0 && (
+                <p className="flex justify-between">
+                  <span>{t('pos.deliveryFee')}</span>
+                  <span>
+                    {formatMoney(Number(placedOrder.delivery_fee), currency)}
+                  </span>
+                </p>
+              )}
               <p className="flex justify-between font-semibold">
                 <span>{t('pos.total')}</span>
                 <span>

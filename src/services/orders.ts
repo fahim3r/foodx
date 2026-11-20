@@ -149,7 +149,11 @@ export async function sendOrderToKitchen(
 
 /** READY → SERVED: the food left the kitchen / was handed over. */
 /** The To Serve board (gap 2): today's token orders that are READY
- * (waiting to be called) or SERVED (handed over), token order. */
+ * (waiting to be called) or SERVED (handed over), token order.
+ * Dine-in orders carry no token (migration 0023), so they join the
+ * board through a second query: every READY dine-in order (the page
+ * presents those by table), plus dine-in orders served today so the
+ * served column stays complete. */
 export async function fetchServeBoard(
   restaurantId: string,
   tokenDay: string,
@@ -163,7 +167,15 @@ export async function fetchServeBoard(
     .in('status', ['READY', 'SERVED'])
     .order('token_number', { ascending: true })
   if (error) throw error
-  return (data ?? []) as Order[]
+  const { data: dineInData, error: dineInError } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('type', 'dine_in')
+    .or(`status.eq.READY,and(status.eq.SERVED,updated_at.gte.${tokenDay})`)
+    .order('created_at', { ascending: true })
+  if (dineInError) throw dineInError
+  return [...((data ?? []) as Order[]), ...((dineInData ?? []) as Order[])]
 }
 
 export async function markOrderServed(

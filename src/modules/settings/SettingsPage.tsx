@@ -15,6 +15,8 @@ import {
   updateRestaurant,
   upsertSettings,
 } from '@/services/restaurant'
+import { isFeatureEnabledFromCache } from '@/services/heartbeat'
+import { isModuleOn } from '@/services/modules'
 import DomainSection from '@/modules/settings/DomainSection'
 import LicenseCard from './LicenseCard'
 import ManagerPinCard from './ManagerPinCard'
@@ -234,6 +236,16 @@ export default function SettingsPage() {
       setSaving(false)
     }
   }
+
+  // Loyalty zero-rate warning (audit wave 3): loyalty can be on
+  // while both rates sit at 0 — customers then earn nothing and
+  // nobody notices. Warn in place, under the rates; the values
+  // themselves are the admin's to set, never changed here.
+  const loyaltyZeroRate =
+    isModuleOn(settings, 'loyalty') &&
+    isFeatureEnabledFromCache('loyalty') &&
+    (Number.parseFloat(loyaltyEarn) === 0 ||
+      Number.parseFloat(loyaltyPointValue) === 0)
 
   const setupMode = !restaurant
   const previewStyle = {
@@ -539,6 +551,14 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+            {loyaltyZeroRate && (
+              <p
+                role="alert"
+                className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+              >
+                {t('settings.loyaltyZeroRateWarning')}
+              </p>
+            )}
           </CardContent>
         </Card>
 

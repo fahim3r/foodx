@@ -4,9 +4,10 @@ import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fetchServeBoard, markOrderServed } from '@/services/orders'
+import { fetchTables } from '@/services/tables'
 import { subscribeKitchenOrders } from '@/services/kds'
 import { elapsedMinutes, useNow } from '@/lib/time'
-import type { Order } from '@/types'
+import type { DiningTable, Order } from '@/types'
 
 /** The restaurant-local calendar day (YYYY-MM-DD) — the token day. */
 function localToday(timeZone?: string | null): string {
@@ -25,7 +26,8 @@ function localToday(timeZone?: string | null): string {
 /**
  * To Serve board (roadmap gap 2): the counter screen the RestoraPOS
  * study showed. The kitchen stops at READY; this board is where
- * READY orders with a token wait to be called out and handed over.
+ * READY orders wait to be called out and handed over — token orders
+ * by their token, dine-in orders (which have no token) by table.
  * Serving reuses the existing READY → SERVED transition. The board
  * is read-mostly and refreshes on a poll + the orders realtime
  * channel, so it can sit open on a counter tablet all day.
@@ -34,6 +36,7 @@ export default function ServePage() {
   const { t } = useTranslation()
   const { user, restaurant } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
+  const [tables, setTables] = useState<DiningTable[]>([])
   const [loading, setLoading] = useState(true)
   const [servingId, setServingId] = useState<string | null>(null)
   const now = useNow()
@@ -57,6 +60,29 @@ export default function ServePage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Table names label the dine-in cards (audit wave 3): names only,
+  // so a failure here never takes the board down with it.
+  useEffect(() => {
+    if (!restaurant) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const rows = await fetchTables(restaurant.id)
+        if (!cancelled) setTables(rows)
+      } catch {
+        // Keep the names already shown; the next mount retries.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [restaurant])
+
+  const tableNameFor = (order: Order): string | null =>
+    order.table_id
+      ? (tables.find((table) => table.id === order.table_id)?.name ?? null)
+      : null
 
   useEffect(() => {
     const id = window.setInterval(() => void load(), 15000)
@@ -111,12 +137,27 @@ export default function ServePage() {
                       key={order.id}
                       className="flex flex-col items-center gap-2 rounded-lg border-2 border-orange-500 bg-orange-50 p-4 text-center dark:bg-orange-950"
                     >
-                      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        {t('orders.token', { number: order.token_number })}
-                      </span>
-                      <span className="text-5xl font-bold tabular-nums">
-                        {order.token_number}
-                      </span>
+                      {order.token_number != null ? (
+                        <>
+                          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {t('orders.token', {
+                              number: order.token_number,
+                            })}
+                          </span>
+                          <span className="text-5xl font-bold tabular-nums">
+                            {order.token_number}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {t('orders.table')}
+                          </span>
+                          <span className="text-5xl font-bold">
+                            {tableNameFor(order) ?? '—'}
+                          </span>
+                        </>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {t('serve.orderRef', {
                           number: order.order_number,
@@ -158,7 +199,11 @@ export default function ServePage() {
                       className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm"
                     >
                       <span className="font-semibold tabular-nums">
-                        {t('orders.token', { number: order.token_number })}
+                        {order.token_number != null
+                          ? t('orders.token', {
+                              number: order.token_number,
+                            })
+                          : (tableNameFor(order) ?? t('orders.table'))}
                       </span>
                       <span className="text-muted-foreground">
                         {t('serve.orderRef', {

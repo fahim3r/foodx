@@ -29,6 +29,7 @@ import {
   summarizePayments,
 } from '@/services/pos'
 import { fetchBranches, type Branch } from '@/services/restaurant'
+import { fetchDeliveryZones } from '@/services/delivery'
 import { printHtml } from '@/lib/print'
 import {
   buildKitchenTicketHtml,
@@ -109,6 +110,9 @@ export default function OrderDetailPage() {
     dbPending,
   } = useAuth()
   const [detail, setDetail] = useState<OrderDetail | null>(null)
+  const [deliveryZoneName, setDeliveryZoneName] = useState<string | null>(
+    null,
+  )
   const [tableNames, setTableNames] = useState<Record<string, string>>({})
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(true)
@@ -291,6 +295,28 @@ export default function OrderDetailPage() {
     printHtml(title, html, css)
   }
 
+  /** Best-effort delivery-zone name for the totals card (audit
+   * wave 3): resolved from the zones list; any failure just leaves
+   * the name off — the fee line still shows. */
+  const resolveZoneName = useCallback(
+    async (target: OrderDetail) => {
+      if (!restaurant || !target.delivery_zone_id) {
+        setDeliveryZoneName(null)
+        return
+      }
+      try {
+        const zones = await fetchDeliveryZones(restaurant.id)
+        setDeliveryZoneName(
+          zones.find((zone) => zone.id === target.delivery_zone_id)?.name ??
+            null,
+        )
+      } catch {
+        setDeliveryZoneName(null)
+      }
+    },
+    [restaurant],
+  )
+
   const load = useCallback(async () => {
     if (!restaurant || !id) return
     setLoading(true)
@@ -303,6 +329,7 @@ export default function OrderDetailPage() {
         fetchBranches(restaurant.id),
       ])
       setDetail(fetchedDetail)
+      void resolveZoneName(fetchedDetail)
       setBranches(branchRows)
       const names: Record<string, string> = {}
       for (const table of tables) {
@@ -319,18 +346,20 @@ export default function OrderDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [restaurant, id])
+  }, [restaurant, id, resolveZoneName])
 
   /** Re-fetch the detail after an action, without the loading flash. */
   const reload = useCallback(async () => {
     if (!id) return
     try {
-      setDetail(await fetchOrderDetail(id))
+      const fresh = await fetchOrderDetail(id)
+      setDetail(fresh)
+      void resolveZoneName(fresh)
     } catch (error) {
       console.error('[OrderDetail] reload failed', error)
       setLoadError(true)
     }
-  }, [id])
+  }, [id, resolveZoneName])
 
   useEffect(() => {
     if (authLoading) return
@@ -1044,6 +1073,18 @@ export default function OrderDetailPage() {
             <span>{t('orders.serviceCharge')}</span>
             <span>{formatMoney(detail.service_charge_amount, currency)}</span>
           </p>
+          {Number(detail.delivery_fee) > 0 && (
+            <p className="flex items-center justify-between gap-2">
+              <span>{t('pos.deliveryFee')}</span>
+              <span>{formatMoney(detail.delivery_fee, currency)}</span>
+            </p>
+          )}
+          {detail.delivery_zone_id && deliveryZoneName && (
+            <p className="flex items-center justify-between gap-2">
+              <span>{t('storefront.zone')}</span>
+              <span>{deliveryZoneName}</span>
+            </p>
+          )}
           <p className="flex items-center justify-between gap-2 border-t pt-2 font-semibold">
             <span>{t('orders.total')}</span>
             <span>{formatMoney(detail.total_amount, currency)}</span>

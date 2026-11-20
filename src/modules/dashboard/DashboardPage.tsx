@@ -71,6 +71,10 @@ export default function DashboardPage() {
   const currency = settings?.currency ?? restaurant?.default_currency ?? 'BDT'
   const name = profile?.full_name ?? user?.email ?? ''
 
+  // First-load flag for the stat cards (audit wave 3): until the
+  // first stats fetch settles, the cards render as skeletons — a
+  // real-looking ৳0.00 reads as "no sales today" and misleads.
+  const [statsLoading, setStatsLoading] = useState(true)
   const [todaySales, setTodaySales] = useState(0)
   const [ordersToday, setOrdersToday] = useState(0)
   const [occupiedTables, setOccupiedTables] = useState(0)
@@ -113,6 +117,9 @@ export default function DashboardPage() {
         // error: stay on the honest zero states; the layout banner
         // explains the pending-database case.
         console.error('[Dashboard] could not load today’s stats', error)
+      })
+      .finally(() => {
+        if (!cancelled) setStatsLoading(false)
       })
     // Business widgets (Phase 7): today's expenses, the 7-day sales
     // series, today's payment breakdown and top products.
@@ -266,9 +273,27 @@ export default function DashboardPage() {
       </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        {stats
-          .filter((stat) => !stat.financial || showFinancials)
-          .map(({ key, icon: Icon, label, value, hint }) => (
+        {statsLoading && restaurant ? (
+          <>
+            {(showFinancials
+              ? ['sales', 'orders', 'tables']
+              : ['orders', 'tables']
+            ).map((key) => (
+              <Card key={key} aria-hidden="true">
+                <CardHeader className="pb-2">
+                  <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+                </CardHeader>
+                <CardContent>
+                  <div className="h-9 w-32 animate-pulse rounded bg-muted" />
+                  <div className="mt-2 h-4 w-40 animate-pulse rounded bg-muted" />
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        ) : (
+          stats
+            .filter((stat) => !stat.financial || showFinancials)
+            .map(({ key, icon: Icon, label, value, hint }) => (
           <Card key={key}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">{label}</CardTitle>
@@ -284,7 +309,8 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
-          ))}
+            ))
+        )}
       </div>
 
       {showAlerts && restaurant && (
