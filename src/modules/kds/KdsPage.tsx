@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { useAuth } from '@/hooks/useAuth'
 import { isMissingTableError } from '@/lib/errors'
 import { elapsedMinutes } from '@/lib/time'
@@ -166,6 +167,7 @@ export default function KdsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{t('kds.title')}</h2>
           <p className="text-muted-foreground">{t('kds.subtitle')}</p>
+          <EasyHelpLine labelKey="easy.help.kds" />
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-900">

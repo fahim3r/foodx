@@ -43,6 +43,8 @@ import type {
   PaymentMethod,
   ShiftCashMovement,
 } from '@/types'
+import EasyConfirmNote from '@/components/EasyConfirmNote'
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -140,6 +142,7 @@ export default function BusinessPage() {
       <div>
         <h1 className="text-2xl font-semibold">{t('business.title')}</h1>
         <p className="text-muted-foreground">{t('business.subtitle')}</p>
+        <EasyHelpLine labelKey="easy.help.business" />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -608,6 +611,17 @@ function ExpensesTab({
                             : t('business.void')}
                         </Button>
                       </div>
+                    )}
+                    {voidConfirmId === expense.id && (
+                      <EasyConfirmNote
+                        className="basis-full"
+                        text={t('easy.confirm.voidExpense', {
+                          amount: formatMoney(
+                            Number(expense.amount),
+                            currency,
+                          ),
+                        })}
+                      />
                     )}
                   </div>
                 )

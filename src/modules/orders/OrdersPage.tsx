@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { useAuth } from '@/hooks/useAuth'
 import { useEasyMode } from '@/hooks/useEasyMode'
 import { isMissingTableError } from '@/lib/errors'
@@ -194,6 +195,7 @@ export default function OrdersPage() {
           {t('orders.title')}
         </h2>
         <p className="text-muted-foreground">{t('orders.subtitle')}</p>
+        <EasyHelpLine labelKey="easy.help.orders" />
       </header>
 
       <div className="flex flex-col gap-2">

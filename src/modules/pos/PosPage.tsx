@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Mic } from 'lucide-react'
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { isMissingTableError, isNetworkError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
@@ -1892,6 +1893,7 @@ export default function PosPage() {
       <header>
         <h2 className="text-2xl font-bold tracking-tight">{t('pos.title')}</h2>
         <p className="text-muted-foreground">{t('pos.subtitle')}</p>
+        <EasyHelpLine labelKey="easy.help.pos" />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {!online && (
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">

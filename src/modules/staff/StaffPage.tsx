@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -275,6 +276,7 @@ function StaffAccounts() {
         <p className="mt-1 text-sm text-muted-foreground">
           {t('staff.subtitle')}
         </p>
+        <EasyHelpLine labelKey="easy.help.staff" />
       </div>
 
       {actionError && (

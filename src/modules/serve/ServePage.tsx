@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fetchServeBoard, markOrderServed } from '@/services/orders'
@@ -115,6 +116,7 @@ export default function ServePage() {
       <div>
         <h1 className="text-2xl font-semibold">{t('serve.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('serve.subtitle')}</p>
+        <EasyHelpLine labelKey="easy.help.serve" />
       </div>
 
       {loading ? (

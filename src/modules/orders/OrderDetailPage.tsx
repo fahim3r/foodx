@@ -47,6 +47,7 @@ import {
   type OrderType,
   type PaymentMethod,
 } from '@/types'
+import EasyConfirmNote from '@/components/EasyConfirmNote'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -768,6 +769,12 @@ export default function OrderDetailPage() {
             <CardTitle>{t('orders.confirmCancel')}</CardTitle>
           </CardHeader>
           <CardContent>
+            <EasyConfirmNote
+              className="mb-4"
+              text={t('easy.confirm.cancelOrder', {
+                number: detail.order_number,
+              })}
+            />
             <form onSubmit={handleCancel} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="cancelReason">
@@ -828,6 +835,12 @@ export default function OrderDetailPage() {
             <CardTitle>{t('orders.confirmRefund')}</CardTitle>
           </CardHeader>
           <CardContent>
+            <EasyConfirmNote
+              className="mb-4"
+              text={t('easy.confirm.refundOrder', {
+                number: detail.order_number,
+              })}
+            />
             <form onSubmit={handleRefund} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="refundReason">

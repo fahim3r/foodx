@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { isMissingTableError, isUniqueViolationError } from '@/lib/errors'
 import { elapsedMinutes, useNow } from '@/lib/time'
 import { useAuth } from '@/hooks/useAuth'
@@ -354,6 +355,7 @@ export default function TablesPage() {
             {t('tables.title')}
           </h2>
           <p className="text-muted-foreground">{t('tables.subtitle')}</p>
+          <EasyHelpLine labelKey="easy.help.tables" />
         </div>
         <Button type="button" onClick={openAddForm}>
           {t('tables.addTable')}

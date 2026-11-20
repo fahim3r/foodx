@@ -57,6 +57,14 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
+/** Per-device "the welcome guide has been seen" marker (design
+ * §9): the guide auto-opens on a device's FIRST visit to easy
+ * mode; closing it writes this key, and from then on it stays
+ * closed until the "How it works" button re-opens it. */
+function guideSeenKey(restaurantId: string): string {
+  return `foodx.easy_guide_seen.${restaurantId}`
+}
+
 export default function EasyHomePage() {
   const { t } = useTranslation()
   const { profile, restaurant, settings } = useAuth()
@@ -89,6 +97,36 @@ export default function EasyHomePage() {
   )
   const [duesRows, setDuesRows] = useState<SupplierBalanceRow[] | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
+  const [guideChecked, setGuideChecked] = useState(false)
+
+  // First visit to easy mode on this device: the welcome guide
+  // starts OPEN (design §9). Once the restaurant is known, check
+  // the seen marker exactly once; closing the guide (below)
+  // writes it, so later visits start closed.
+  useEffect(() => {
+    if (!restaurant || guideChecked) return
+    let seen = true
+    try {
+      seen = localStorage.getItem(guideSeenKey(restaurant.id)) === '1'
+    } catch {
+      // Storage unavailable: treat as seen rather than nagging on
+      // every visit.
+      seen = true
+    }
+    if (!seen) setGuideOpen(true)
+    setGuideChecked(true)
+  }, [restaurant, guideChecked])
+
+  const closeGuide = () => {
+    setGuideOpen(false)
+    if (!restaurant) return
+    try {
+      localStorage.setItem(guideSeenKey(restaurant.id), '1')
+    } catch {
+      // Storage unavailable: the guide may auto-open again on the
+      // next visit — acceptable, it is one tap to close.
+    }
+  }
 
   useEffect(() => {
     if (!restaurant) return
@@ -388,7 +426,7 @@ export default function EasyHomePage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setGuideOpen((open) => !open)}
+              onClick={() => (guideOpen ? closeGuide() : setGuideOpen(true))}
               aria-expanded={guideOpen}
             >
               {t('easy.guide.title')}
@@ -417,7 +455,7 @@ export default function EasyHomePage() {
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => setGuideOpen(false)}
+                      onClick={closeGuide}
                     >
                       {t('easy.guide.close')}
                     </Button>

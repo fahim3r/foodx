@@ -18,6 +18,8 @@ import {
 import { isFeatureEnabledFromCache } from '@/services/heartbeat'
 import { isModuleOn } from '@/services/modules'
 import DomainSection from '@/modules/settings/DomainSection'
+import { useEasyMode } from '@/hooks/useEasyMode'
+import EasySettings from './EasySettings'
 import LicenseCard from './LicenseCard'
 import ManagerPinCard from './ManagerPinCard'
 import AppearanceCard from './AppearanceCard'
@@ -103,6 +105,7 @@ function parseLoyaltyRate(
 
 export default function SettingsPage() {
   const { t } = useTranslation()
+  const { easy } = useEasyMode()
   const { user, profile, restaurant, settings, dbPending, refreshWorkspace } =
     useAuth()
   const [values, setValues] = useState<RestaurantFormValues>(DEFAULTS)
@@ -286,6 +289,15 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
     )
+  }
+
+  // Easy Mode v2 (wave E2; design §7): while easy mode is on, the
+  // Settings page is the calm everyday set (EasySettings) instead
+  // of the full form below. With easy mode off — or before a
+  // restaurant exists (setup mode) — this page renders exactly as
+  // it always has.
+  if (easy && restaurant) {
+    return <EasySettings />
   }
 
   return (

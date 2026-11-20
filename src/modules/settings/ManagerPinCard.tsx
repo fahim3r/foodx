@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useEasyMode } from '@/hooks/useEasyMode'
 import {
   fetchManagerPinIsSet,
   guardedErrorCode,
@@ -27,6 +28,7 @@ import {
  */
 export default function ManagerPinCard() {
   const { t } = useTranslation()
+  const { easy } = useEasyMode()
   const [pinIsSet, setPinIsSet] = useState<boolean | null>(null)
   const [pin, setPin] = useState('')
   const [pinConfirm, setPinConfirm] = useState('')
@@ -106,6 +108,11 @@ export default function ManagerPinCard() {
       <CardHeader>
         <CardTitle>{t('settings.pinTitle')}</CardTitle>
         <CardDescription>{t('settings.pinBody')}</CardDescription>
+        {easy && (
+          <p className="text-base font-medium">
+            {t('settings.pinEasyNote')}
+          </p>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {pinIsSet === null ? (

@@ -10,6 +10,7 @@
 // is not implemented and the page says so.
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { isMissingTableError, isUniqueViolationError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
@@ -944,6 +945,7 @@ export default function InventoryPage() {
           {t('inventory.title')}
         </h2>
         <p className="text-muted-foreground">{t('inventory.subtitle')}</p>
+        <EasyHelpLine labelKey="easy.help.inventory" />
       </header>
 
       <div className="flex flex-wrap gap-2">

@@ -191,6 +191,7 @@ export async function updateSettingsPartial(
       | 'branding_name'
       | 'onboarding_completed'
       | 'delivery_enabled'
+      | 'delivery_fee'
       | 'modules'
       | 'auto_send_to_kitchen'
       | 'easy_mode'

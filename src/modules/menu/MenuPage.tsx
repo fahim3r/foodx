@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney, roundMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
+import { useEasyMode } from '@/hooks/useEasyMode'
 import { UploadError, uploadProductImage } from '@/services/uploads'
 import {
   createCategory,
@@ -38,6 +39,8 @@ import type {
   ProductVariant,
   ProductWithDetails,
 } from '@/types'
+import EasyConfirmNote from '@/components/EasyConfirmNote'
+import EasyHelpLine from '@/components/EasyHelpLine'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -105,6 +108,7 @@ const EMPTY_PRODUCT: ProductForm = {
 
 export default function MenuPage() {
   const { t } = useTranslation()
+  const { easy } = useEasyMode()
   const { loading: authLoading, restaurant, settings } = useAuth()
   const restaurantId = restaurant?.id
   const currency = settings?.currency ?? 'BDT'
@@ -155,6 +159,11 @@ export default function MenuPage() {
   // Two-step delete: the id awaiting its confirming click (ids are
   // UUIDs, unique across tables, so one shared state is enough).
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  // Easy mode only (wave E2; design §9): hiding a product also
+  // becomes a two-step action with a big plain-language warning —
+  // the id whose first click has armed the confirmation. Never
+  // set outside easy mode, so the normal panel is unchanged.
+  const [confirmHideId, setConfirmHideId] = useState<string | null>(null)
 
   // --- category form -------------------------------------------------------
   const [categoryForm, setCategoryForm] = useState<CategoryForm>(EMPTY_CATEGORY)
@@ -407,6 +416,20 @@ export default function MenuPage() {
     }
   }
 
+  // Availability toggle click. In easy mode, HIDING a product
+  // (available → unavailable) asks first: the first click only
+  // arms the big warning (confirmHideId), the second performs the
+  // toggle. Showing a product again, and every click in the
+  // normal panel, goes straight through as before.
+  const handleProductToggleClick = (product: ProductWithDetails) => {
+    if (easy && product.is_available && confirmHideId !== product.id) {
+      setConfirmHideId(product.id)
+      return
+    }
+    setConfirmHideId(null)
+    void handleProductToggle(product)
+  }
+
   const handleVariantAdd = async () => {
     if (!editingProductId || !newVariantName.trim()) return
     setProductError(null)
@@ -616,6 +639,7 @@ export default function MenuPage() {
       <header>
         <h2 className="text-2xl font-bold tracking-tight">{t('menu.title')}</h2>
         <p className="text-muted-foreground">{t('menu.subtitle')}</p>
+        <EasyHelpLine labelKey="easy.help.menu" />
       </header>
 
       {/* Categories */}
@@ -894,9 +918,11 @@ export default function MenuPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant={
+                        confirmHideId === product.id ? 'destructive' : 'outline'
+                      }
                       size="sm"
-                      onClick={() => void handleProductToggle(product)}
+                      onClick={() => handleProductToggleClick(product)}
                     >
                       {product.is_available ? t('menu.unavailable') : t('menu.available')}
                     </Button>
@@ -911,6 +937,22 @@ export default function MenuPage() {
                         : t('common.delete')}
                     </Button>
                   </span>
+                  {confirmHideId === product.id && (
+                    <EasyConfirmNote
+                      className="basis-full"
+                      text={t('easy.confirm.hideProduct', {
+                        name: product.name,
+                      })}
+                    />
+                  )}
+                  {confirmDeleteId === product.id && (
+                    <EasyConfirmNote
+                      className="basis-full"
+                      text={t('easy.confirm.deleteProduct', {
+                        name: product.name,
+                      })}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
