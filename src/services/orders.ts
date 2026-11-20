@@ -9,6 +9,7 @@ import {
   reverseLoyaltyEarn,
   reverseLoyaltyRedemption,
 } from '@/services/loyalty'
+import { fetchOrderPayments, summarizePayments } from '@/services/pos'
 import { setTableStatus } from '@/services/tables'
 import {
   canTransitionOrderStatus,
@@ -175,11 +176,21 @@ export async function markOrderServed(
 /** SERVED → COMPLETED: the order is done and the table frees up.
  * Completing awards loyalty points (one EARN per order, idempotent).
  * Best-effort — an award failure is logged and never fails the
- * completion. */
+ * completion.
+ *
+ * Payment gate (audit fix, user rule 2026-11-20): an order cannot be
+ * completed while it still has a balance — the money must be collected,
+ * or the remainder explicitly recorded as a 'due' payment, first.
+ * Throws Error('payment_required') while the balance is above zero;
+ * the check runs before the status change and before any loyalty
+ * award, so a blocked completion changes nothing. */
 export async function completeOrder(
   order: Order,
   userId: string,
 ): Promise<Order> {
+  const payments = await fetchOrderPayments(order.id)
+  const summary = summarizePayments(payments, Number(order.total_amount))
+  if (summary.balance > 0) throw new Error('payment_required')
   const completed = await advanceOrderStatus(order, 'COMPLETED', userId)
   try {
     await awardLoyaltyPoints(completed)

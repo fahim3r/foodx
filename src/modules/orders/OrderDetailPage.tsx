@@ -23,7 +23,11 @@ import {
 } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
 import { fetchManagerPinIsSet } from '@/services/pin'
-import { fetchOrderPayments, summarizePayments } from '@/services/pos'
+import {
+  fetchOrderPayments,
+  recordPayment,
+  summarizePayments,
+} from '@/services/pos'
 import { fetchBranches, type Branch } from '@/services/restaurant'
 import { printHtml } from '@/lib/print'
 import {
@@ -74,10 +78,23 @@ const PAYMENT_METHOD_KEYS: Record<PaymentMethod, string> = {
   due: 'pos.methodDue',
 }
 
+const PAYMENT_METHODS: PaymentMethod[] = [
+  'cash',
+  'card',
+  'bkash',
+  'nagad',
+  'bank',
+  'due',
+]
+
 function actionErrorKey(error: unknown): string {
-  return error instanceof Error && error.message === 'invalid_status_transition'
-    ? 'orders.invalidTransition'
-    : 'orders.updateFailed'
+  if (error instanceof Error && error.message === 'invalid_status_transition') {
+    return 'orders.invalidTransition'
+  }
+  if (error instanceof Error && error.message === 'payment_required') {
+    return 'orders.paymentRequired'
+  }
+  return 'orders.updateFailed'
 }
 
 export default function OrderDetailPage() {
@@ -120,6 +137,19 @@ export default function OrderDetailPage() {
   const [mergePin, setMergePin] = useState('')
   const [mergeFormError, setMergeFormError] = useState<string | null>(null)
   const [merging, setMerging] = useState(false)
+  // Record payment (audit fix 1): the detail page settles an order's
+  // balance directly — method, amount (defaults to the balance) and an
+  // optional reference. The attempt id is the payment's idempotency
+  // key; it is regenerated after every successful recording.
+  const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
+  const [payAmount, setPayAmount] = useState('')
+  const [payReference, setPayReference] = useState('')
+  const [payErrorKey, setPayErrorKey] = useState<string | null>(null)
+  const [payRecorded, setPayRecorded] = useState(false)
+  const [recordingPayment, setRecordingPayment] = useState(false)
+  const [payAttemptId, setPayAttemptId] = useState(() =>
+    crypto.randomUUID(),
+  )
 
   const currency =
     settings?.currency ?? restaurant?.default_currency ?? 'BDT'
@@ -321,6 +351,17 @@ export default function OrderDetailPage() {
     })()
   }, [])
 
+  const paymentBalance = detail
+    ? summarizePayments(detail.payments, Number(detail.total_amount)).balance
+    : null
+
+  // Keep the payment form's amount at the current balance: it starts at
+  // the full balance and, after a partial payment is recorded, drops to
+  // what is left.
+  useEffect(() => {
+    if (paymentBalance !== null) setPayAmount(String(paymentBalance))
+  }, [detail?.id, paymentBalance])
+
   const runAction = async (
     fn: (order: OrderDetail, userId: string) => Promise<unknown>,
   ) => {
@@ -416,6 +457,42 @@ export default function OrderDetailPage() {
     }
   }
 
+  const handleRecordPayment = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!detail || !user) return
+    setPayErrorKey(null)
+    setPayRecorded(false)
+    setRecordingPayment(true)
+    try {
+      await recordPayment(
+        detail,
+        {
+          method: payMethod,
+          amount: Number(payAmount),
+          reference: payReference,
+        },
+        user.id,
+        payAttemptId,
+      )
+      setPayReference('')
+      setPayRecorded(true)
+      setPayAttemptId(crypto.randomUUID())
+      await reload()
+    } catch (error) {
+      console.error('[OrderDetail] record payment failed', error)
+      const message = error instanceof Error ? error.message : ''
+      setPayErrorKey(
+        message === 'payment_exceeds_balance'
+          ? 'pos.paymentExceedsBalance'
+          : message === 'invalid_payment_amount'
+            ? 'pos.invalidPaymentAmount'
+            : 'pos.paymentFailed',
+      )
+    } finally {
+      setRecordingPayment(false)
+    }
+  }
+
   if (authLoading || loading) {
     return <p className="text-muted-foreground">{t('common.loading')}</p>
   }
@@ -463,6 +540,10 @@ export default function OrderDetailPage() {
 
   const allowed = ORDER_TRANSITIONS[detail.status] ?? []
   const isTerminal = TERMINAL_ORDER_STATUSES.includes(detail.status)
+  const paymentSummary = summarizePayments(
+    detail.payments,
+    Number(detail.total_amount),
+  )
   const tableName = detail.table_id
     ? (tableNames[detail.table_id] ?? detail.table_id.slice(0, 8))
     : null
@@ -598,7 +679,7 @@ export default function OrderDetailPage() {
         {detail.status === 'SERVED' && allowed.includes('COMPLETED') && (
           <Button
             onClick={() => void runAction(completeOrder)}
-            disabled={acting}
+            disabled={acting || paymentSummary.balance > 0}
           >
             {t('orders.completeOrder')}
           </Button>
@@ -641,6 +722,16 @@ export default function OrderDetailPage() {
           </Button>
         )}
       </div>
+
+      {detail.status === 'SERVED' &&
+        allowed.includes('COMPLETED') &&
+        paymentSummary.balance > 0 && (
+          <p className="text-sm text-muted-foreground">
+            {t('orders.paymentRequiredNote', {
+              amount: formatMoney(paymentSummary.balance, currency),
+            })}
+          </p>
+        )}
 
       {showCancelForm && (
         <Card>
@@ -984,6 +1075,95 @@ export default function OrderDetailPage() {
                 </span>
               </p>
             ))
+          )}
+          <div className="flex flex-col gap-1 border-t pt-2 text-sm">
+            <p className="flex items-center justify-between gap-2">
+              <span>{t('pos.paid')}</span>
+              <span>{formatMoney(paymentSummary.paid, currency)}</span>
+            </p>
+            <p className="flex items-center justify-between gap-2">
+              <span>{t('pos.due')}</span>
+              <span>{formatMoney(paymentSummary.due, currency)}</span>
+            </p>
+            <p className="flex items-center justify-between gap-2 font-semibold">
+              <span>{t('pos.balance')}</span>
+              <span>{formatMoney(paymentSummary.balance, currency)}</span>
+            </p>
+          </div>
+          {!isTerminal && paymentSummary.balance > 0 && (
+            <form
+              onSubmit={handleRecordPayment}
+              className="flex flex-col gap-4 border-t pt-4"
+            >
+              <p className="text-sm font-medium">{t('pos.addPayment')}</p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="detailPaymentMethod">
+                    {t('pos.paymentMethod')}
+                  </Label>
+                  <select
+                    id="detailPaymentMethod"
+                    value={payMethod}
+                    onChange={(e) =>
+                      setPayMethod(e.target.value as PaymentMethod)
+                    }
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  >
+                    {PAYMENT_METHODS.map((method) => (
+                      <option key={method} value={method}>
+                        {t(PAYMENT_METHOD_KEYS[method])}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="detailPaymentAmount">
+                    {t('pos.amount')}
+                  </Label>
+                  <Input
+                    id="detailPaymentAmount"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="detailPaymentReference">
+                    {t('pos.reference')}
+                  </Label>
+                  <Input
+                    id="detailPaymentReference"
+                    value={payReference}
+                    onChange={(e) => setPayReference(e.target.value)}
+                    placeholder={t('pos.referencePlaceholder')}
+                  />
+                </div>
+              </div>
+              {payErrorKey && (
+                <p
+                  role="alert"
+                  className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  {t(payErrorKey)}
+                </p>
+              )}
+              {payRecorded && (
+                <p
+                  role="status"
+                  className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+                >
+                  {t('pos.paymentRecorded')}
+                </p>
+              )}
+              <div>
+                <Button type="submit" disabled={recordingPayment}>
+                  {t('pos.recordPayment')}
+                </Button>
+              </div>
+            </form>
           )}
         </CardContent>
       </Card>
