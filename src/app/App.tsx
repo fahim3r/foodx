@@ -64,6 +64,10 @@ import StaffPage from '@/modules/staff/StaffPage'
 import BranchesPage from '@/modules/branches/BranchesPage'
 import TablesPage from '@/modules/tables/TablesPage'
 import DevPanelPage from '@/modules/devpanel/DevPanelPage'
+import AddExpenseWizardPage from '@/modules/easy/AddExpenseWizardPage'
+import AddItemWizardPage from '@/modules/easy/AddItemWizardPage'
+import AddStaffWizardPage from '@/modules/easy/AddStaffWizardPage'
+import DayEndWizardPage from '@/modules/easy/DayEndWizardPage'
 import LandingPage from '@/modules/landing/LandingPage'
 import DomainNotConnectedPage from '@/modules/storefront/DomainNotConnectedPage'
 import StorefrontPage from '@/modules/storefront/StorefrontPage'
@@ -115,6 +119,10 @@ function AdminRoutes({
         <Route path="customers" element={<ModuleGate module="customers"><CustomersPage /></ModuleGate>} />
         <Route path="delivery" element={<ModuleGate module="delivery"><DeliveryPage /></ModuleGate>} />
         <Route path="business" element={<ModuleGate module="business"><BusinessPage /></ModuleGate>} />
+        <Route path="easy/add-item" element={<AddItemWizardPage />} />
+        <Route path="easy/add-expense" element={<ModuleGate module="business"><AddExpenseWizardPage /></ModuleGate>} />
+        <Route path="easy/add-staff" element={<AddStaffWizardPage />} />
+        <Route path="easy/day-end" element={<ModuleGate module="business"><DayEndWizardPage /></ModuleGate>} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="health" element={<HealthPage />} />
         <Route path="setup" element={<SetupPage />} />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link, useLocation } from 'react-router-dom'
 
 import EasyHelpLine from '@/components/EasyHelpLine'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/useAuth'
+import { useEasyMode } from '@/hooks/useEasyMode'
+import { usePermissions } from '@/hooks/usePermissions'
 import { isMissingTableError } from '@/lib/errors'
 import { fetchBranches, type Branch } from '@/services/restaurant'
 import { getLicenseLimitsFromCache } from '@/services/heartbeat'
@@ -78,6 +81,15 @@ const SELECT_CLASS =
 function StaffAccounts() {
   const { t } = useTranslation()
   const { user, restaurant } = useAuth()
+  const { easy } = useEasyMode()
+  const { ready: permissionsReady, isAdminLevel } = usePermissions()
+  const { pathname } = useLocation()
+  // Same panel-root derivation as EasyHomePage/AppLayout, so the
+  // easy wizard link is right under both router mountings.
+  const panelBase =
+    pathname === '/panel' || pathname.startsWith('/panel/') ? '/panel' : ''
+  const navTo = (to: string) =>
+    to === '/' ? panelBase || '/' : `${panelBase}${to}`
   const restaurantId = restaurant?.id
 
   const [staff, setStaff] = useState<StaffMember[]>([])
@@ -277,6 +289,16 @@ function StaffAccounts() {
           {t('staff.subtitle')}
         </p>
         <EasyHelpLine labelKey="easy.help.staff" />
+        {/* Easy Mode v2 (wave E3; design §8): the guided add-staff
+            entry — easy mode AND admin-level only, matching this
+            page's own gate; the form below stays the Advanced way. */}
+        {easy && permissionsReady && isAdminLevel && (
+          <Button asChild size="lg" className="mt-4">
+            <Link to={navTo('/easy/add-staff')}>
+              + {t('easy.wizard.addStaffTitle')}
+            </Link>
+          </Button>
+        )}
       </div>
 
       {actionError && (

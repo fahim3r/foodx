@@ -244,7 +244,7 @@ export default function EasyHomePage() {
     },
     {
       key: 'expense',
-      to: '/business',
+      to: '/easy/add-expense',
       icon: Receipt,
       label: t('easy.tile.addExpense'),
       show: businessOk,
@@ -265,7 +265,7 @@ export default function EasyHomePage() {
     },
     {
       key: 'dayEnd',
-      to: '/business',
+      to: '/easy/day-end',
       icon: CalendarCheck,
       label: t('easy.tile.dayEnd'),
       show: businessOk,

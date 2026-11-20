@@ -8,9 +8,11 @@
 //   only on submit — the Phase 3 number-input lesson.
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link, useLocation } from 'react-router-dom'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney, roundMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
+import { useEasyMode } from '@/hooks/useEasyMode'
 import { useLicenseState } from '@/hooks/useLicenseState'
 import { isModuleEnabled } from '@/services/heartbeat'
 import {
@@ -86,6 +88,14 @@ function methodKey(method: PaymentMethod): string {
 
 export default function BusinessPage() {
   const { t } = useTranslation()
+  const { easy } = useEasyMode()
+  const { pathname } = useLocation()
+  // Same panel-root derivation as EasyHomePage/AppLayout, so the
+  // easy wizard link is right under both router mountings.
+  const panelBase =
+    pathname === '/panel' || pathname.startsWith('/panel/') ? '/panel' : ''
+  const navTo = (to: string) =>
+    to === '/' ? panelBase || '/' : `${panelBase}${to}`
   const { loading: authLoading, user, restaurant, settings } = useAuth()
   const licenseView = useLicenseState()
   const [tab, setTab] = useState<Tab>('expenses')
@@ -143,6 +153,16 @@ export default function BusinessPage() {
         <h1 className="text-2xl font-semibold">{t('business.title')}</h1>
         <p className="text-muted-foreground">{t('business.subtitle')}</p>
         <EasyHelpLine labelKey="easy.help.business" />
+        {/* Easy Mode v2 (wave E3; design §8): the guided expense
+            entry — easy mode only; the tabs below stay the
+            Advanced way and are untouched. */}
+        {easy && (
+          <Button asChild size="lg" className="mt-4">
+            <Link to={navTo('/easy/add-expense')}>
+              + {t('easy.tile.addExpense')}
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">

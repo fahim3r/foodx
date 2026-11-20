@@ -3,7 +3,7 @@
 // stations and modifiers for the current restaurant. All data loads in
 // parallel on mount; every mutation re-fetches the affected list.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney, roundMoney } from '@/lib/money'
@@ -109,6 +109,13 @@ const EMPTY_PRODUCT: ProductForm = {
 export default function MenuPage() {
   const { t } = useTranslation()
   const { easy } = useEasyMode()
+  const { pathname } = useLocation()
+  // Same panel-root derivation as EasyHomePage/AppLayout, so the
+  // easy wizard link is right under both router mountings.
+  const panelBase =
+    pathname === '/panel' || pathname.startsWith('/panel/') ? '/panel' : ''
+  const navTo = (to: string) =>
+    to === '/' ? panelBase || '/' : `${panelBase}${to}`
   const { loading: authLoading, restaurant, settings } = useAuth()
   const restaurantId = restaurant?.id
   const currency = settings?.currency ?? 'BDT'
@@ -640,6 +647,16 @@ export default function MenuPage() {
         <h2 className="text-2xl font-bold tracking-tight">{t('menu.title')}</h2>
         <p className="text-muted-foreground">{t('menu.subtitle')}</p>
         <EasyHelpLine labelKey="easy.help.menu" />
+        {/* Easy Mode v2 (wave E3; design §8): the guided add-item
+            entry — easy mode only, the normal form below is the
+            Advanced way and stays untouched. */}
+        {easy && (
+          <Button asChild size="lg" className="mt-4">
+            <Link to={navTo('/easy/add-item')}>
+              + {t('easy.wizard.addItemTitle')}
+            </Link>
+          </Button>
+        )}
       </header>
 
       {/* Categories */}
