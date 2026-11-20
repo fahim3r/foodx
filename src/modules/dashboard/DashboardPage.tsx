@@ -43,6 +43,7 @@ import { fetchLowStockItems } from '@/services/inventory'
 import type { InventoryItem } from '@/types'
 import { fetchTodayOrders } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
+import EasyHomePage from './EasyHomePage'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -196,6 +197,11 @@ export default function DashboardPage() {
   )
   const showAlerts =
     lowStockItems !== null || (duesRows !== null && showFinancials)
+
+  // Easy Mode v2 (wave E1): the panel home is Easy Home while the
+  // restaurant-wide easy mode is on. All hooks above still run;
+  // the normal dashboard simply never renders.
+  if (easy) return <EasyHomePage />
 
   const hasData = todaySales > 0 || ordersToday > 0 || occupiedTables > 0
   const netToday =

@@ -311,6 +311,21 @@ export async function fetchTodayOrders(
   return (data ?? []) as Order[]
 }
 
+/** Payments for a set of orders in one query (Easy Home's due
+ * total, wave E1) — fetchOrderPayments is per-order; this batches
+ * the same read for a list of order ids. */
+export async function fetchPaymentsForOrders(
+  orderIds: string[],
+): Promise<OrderPayment[]> {
+  if (orderIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('order_payments')
+    .select('*')
+    .in('order_id', orderIds)
+  if (error) throw error
+  return (data ?? []) as OrderPayment[]
+}
+
 /** Statuses an order can be merged from / into (roadmap gap 3). */
 export const MERGEABLE_STATUSES: OrderStatus[] = [
   'CONFIRMED',

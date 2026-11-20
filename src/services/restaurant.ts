@@ -193,6 +193,7 @@ export async function updateSettingsPartial(
       | 'delivery_enabled'
       | 'modules'
       | 'auto_send_to_kitchen'
+      | 'easy_mode'
     >
   >,
 ): Promise<void> {

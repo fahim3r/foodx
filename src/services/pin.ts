@@ -22,6 +22,21 @@ export async function removeManagerPin(): Promise<void> {
   if (error) throw error
 }
 
+/**
+ * Verify a PIN without performing an action (migration 0034). The
+ * guarded cancel/refund RPCs check the PIN inside the action; the
+ * Easy Mode switch in Settings has no guarded RPC, so it verifies
+ * through this function first, then writes the setting. Returns
+ * false when no PIN is set or the PIN does not match.
+ */
+export async function verifyManagerPin(pin: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('verify_manager_pin', {
+    p_pin: pin,
+  })
+  if (error) throw error
+  return data === true
+}
+
 /** Map a guarded-RPC failure to a stable error code the UI keys on.
  * PostgREST errors are plain objects (not Error instances), so the
  * message is read off the object as well as off real Errors. */

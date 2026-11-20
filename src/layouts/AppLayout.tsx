@@ -16,6 +16,7 @@ import {
   Building2,
   BellRing,
   Monitor,
+  MoreHorizontal,
   CalendarCheck,
   ChefHat,
   ClipboardList,
@@ -29,7 +30,6 @@ import {
   ShieldCheck,
   ShoppingCart,
   Smartphone,
-  Sparkles,
   Sun,
   Table2,
   Truck,
@@ -151,22 +151,29 @@ function LanguageSwitcher() {
   )
 }
 
-const EASY_NAV = ['/', '/pos', '/orders', '/kds', '/tables', '/serve']
-
-function EasyModeToggleButton() {
-  const { t } = useTranslation()
-  const { easy, toggle } = useEasyMode()
-  return (
-    <Button
-      variant={easy ? 'default' : 'ghost'}
-      size="icon"
-      onClick={toggle}
-      aria-label={t('common.easyMode')}
-      title={t('common.easyMode')}
-    >
-      <Sparkles className="size-5" />
-    </Button>
-  )
+/**
+ * Easy Mode v2 (wave E1; design §5): the easy sidebar subset, as a
+ * route → easy-label map. Routes absent from this map are hidden
+ * in easy mode (they live behind "আরও অপশন" → Settings); the
+ * label layer swaps module names for task names. Every other gate
+ * (vendor flag, restaurant module toggle, role permission,
+ * per-staff modules) applies exactly as in the normal sidebar.
+ * There is no topbar mode toggle anymore: v2's mode is
+ * restaurant-wide and changes only through the PIN-gated Settings
+ * switch (§6) — a casual per-device escape would contradict it.
+ */
+const EASY_NAV_LABELS: Record<string, string> = {
+  '/': 'easy.nav.today',
+  '/pos': 'easy.nav.newOrder',
+  '/orders': 'easy.nav.orders',
+  '/kds': 'easy.nav.kitchen',
+  '/serve': 'easy.nav.serve',
+  '/tables': 'easy.nav.tables',
+  '/menu': 'easy.nav.menu',
+  '/business': 'easy.nav.money',
+  '/inventory': 'easy.nav.stock',
+  '/staff': 'easy.nav.staff',
+  '/settings': 'easy.nav.settings',
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -246,13 +253,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             ))}
           </div>
         ) : (
-          NAV_ITEMS.filter(
+          <>
+          {NAV_ITEMS.filter(
           (item) =>
             (!('feature' in item && item.feature) ||
               isModuleEnabled(licenseView, item.feature)) &&
             (!('module' in item && item.module) ||
               isModuleOn(settings, item.module)) &&
-            (!easy || EASY_NAV.includes(item.to)) &&
+            (!easy || item.to in EASY_NAV_LABELS) &&
             (!('perm' in item && item.perm) || can(item.perm)) &&
             (!('staffModule' in item && item.staffModule) ||
               isAdminLevel ||
@@ -274,9 +282,31 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             }
           >
             <Icon className="size-4 shrink-0" />
-            {t(key)}
+            {easy ? t(EASY_NAV_LABELS[to] ?? key) : t(key)}
           </NavLink>
-          ))
+          ))}
+          {easy && isAdminLevel && (
+            // আরও অপশন (design §5/§6): owner/admin-level only, and
+            // it switches nothing by itself — it leads to Settings,
+            // where the PIN-gated mode switch lives. Staff never
+            // see it and stay in the easy world entirely.
+            <NavLink
+              to={navTo('/settings')}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                )
+              }
+            >
+              <MoreHorizontal className="size-4 shrink-0" />
+              {t('easy.nav.more')}
+            </NavLink>
+          )}
+          </>
         )}
       </nav>
       <div className="mt-auto px-5 py-4">
@@ -296,6 +326,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 function AppLayoutShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
   const licenseView = useLicenseState()
+  const { easy } = useEasyMode()
+  const { isAdminLevel } = usePermissions()
 
   // Phone home on panel load and every 6 hours while open (Phase 8
   // step 2). The activation-written instance_config is loaded first
@@ -411,7 +443,6 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
             {displayName}
           </h1>
           <LanguageSwitcher />
-          <EasyModeToggleButton />
           <Button
             variant="ghost"
             size="icon"
@@ -595,6 +626,26 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
                             ? t('license.updateNotActive')
                             : t('license.updateFailed')}
                   </p>
+                )}
+              </div>
+            )}
+            {easy && (
+              // Easy Mode v2 banner (§6): the mode is always visible
+              // as a state, and for owner/admin-level users it
+              // carries the one deliberate way out — Settings, where
+              // the PIN-gated switch lives. Staff see the banner
+              // without the link.
+              <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border bg-muted/50 p-4 text-sm">
+                <p className="font-medium">{t('easy.banner')}</p>
+                {isAdminLevel && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={() => void navigate('/settings')}
+                  >
+                    {t('layout.goToSettings')}
+                  </Button>
                 )}
               </div>
             )}

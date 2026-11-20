@@ -49,6 +49,8 @@ export interface RestaurantSettings {
   onboarding_completed: boolean
   modules: RestaurantModules | null
   auto_send_to_kitchen: boolean
+  /** Easy Mode v2 (migration 0034): restaurant-wide simple panel. */
+  easy_mode: boolean
 }
 
 export interface Role {
