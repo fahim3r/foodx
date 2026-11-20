@@ -38,6 +38,7 @@ import {
   TERMINAL_ORDER_STATUSES,
   type Category,
   type DeliveryZone,
+  type OnlineOrderStatus,
   type OrderStatus,
   type OrderType,
   type ProductWithDetails,
@@ -138,6 +139,54 @@ interface PlacedOrder {
   total: number
   tableName: string | null
   status: OrderStatus
+  /** The type the order was actually placed as (kiosk = pickup). */
+  type: OrderType
+}
+
+/**
+ * The last order placed on this device (audit wave 2). Remembered so
+ * a customer who left the confirmation can still track it: the
+ * tracking form pre-fills from this, and the token — which
+ * get_online_order_status does NOT return (status + total only) —
+ * can still be shown when the lookup matches this order.
+ */
+interface LastOrderMemory {
+  orderNumber: number
+  phone: string
+  tokenNumber: number | null
+}
+
+function readLastOrder(slug: string): LastOrderMemory | null {
+  try {
+    const raw = window.localStorage.getItem(`foodx.lastOrder.${slug}`)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<LastOrderMemory>
+    if (
+      typeof parsed.orderNumber !== 'number' ||
+      typeof parsed.phone !== 'string'
+    ) {
+      return null
+    }
+    return {
+      orderNumber: parsed.orderNumber,
+      phone: parsed.phone,
+      tokenNumber:
+        typeof parsed.tokenNumber === 'number' ? parsed.tokenNumber : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeLastOrder(slug: string, value: LastOrderMemory): void {
+  try {
+    window.localStorage.setItem(
+      `foodx.lastOrder.${slug}`,
+      JSON.stringify(value),
+    )
+  } catch {
+    // Storage unavailable — tracking still works with manual entry.
+  }
 }
 
 export default function StorefrontPage({
@@ -180,6 +229,20 @@ export default function StorefrontPage({
   const [placing, setPlacing] = useState(false)
   const [placeErrorKey, setPlaceErrorKey] = useState<string | null>(null)
   const [placed, setPlaced] = useState<PlacedOrder | null>(null)
+
+  // Order tracking (audit wave 2): after leaving the confirmation a
+  // customer re-checks a status with order number + phone — the same
+  // pair get_online_order_status already validates server-side.
+  const [trackingOpen, setTrackingOpen] = useState(false)
+  const [trackOrderNumber, setTrackOrderNumber] = useState('')
+  const [trackPhone, setTrackPhone] = useState('')
+  const [trackState, setTrackState] = useState<
+    'idle' | 'searching' | 'found' | 'notFound' | 'failed'
+  >('idle')
+  const [trackResult, setTrackResult] = useState<OnlineOrderStatus | null>(
+    null,
+  )
+  const [trackToken, setTrackToken] = useState<number | null>(null)
 
   // Self-KIOSK mode (modifications v2, item 2): ?kiosk=1 turns this
   // storefront into a counter tablet — pickup only, oversized
@@ -452,6 +515,78 @@ export default function StorefrontPage({
     return () => window.clearTimeout(timer)
   }, [kiosk, placed, resetKiosk])
 
+  const runTrackingLookup = useCallback(
+    async (orderNumberText: string, phone: string) => {
+      const orderNumber = Number.parseInt(orderNumberText, 10)
+      if (
+        !Number.isFinite(orderNumber) ||
+        orderNumber <= 0 ||
+        !phone.trim()
+      ) {
+        setTrackResult(null)
+        setTrackToken(null)
+        setTrackState('notFound')
+        return
+      }
+      setTrackState('searching')
+      try {
+        const result = await getOnlineOrderStatus(slug, orderNumber, phone)
+        if (!result) {
+          setTrackResult(null)
+          setTrackToken(null)
+          setTrackState('notFound')
+          return
+        }
+        // The status RPC returns status + total only; the token is
+        // shown when this lookup is the order remembered from
+        // placement on this device.
+        const memory = readLastOrder(slug)
+        setTrackToken(
+          memory &&
+            memory.orderNumber === orderNumber &&
+            memory.phone === phone.trim()
+            ? memory.tokenNumber
+            : null,
+        )
+        setTrackResult(result)
+        setTrackState('found')
+      } catch (error) {
+        console.error('[Storefront] tracking lookup failed', error)
+        setTrackResult(null)
+        setTrackToken(null)
+        setTrackState('failed')
+      }
+    },
+    [slug],
+  )
+
+  const openTracking = useCallback(
+    (prefill?: { orderNumber: number; phone: string }) => {
+      const memory = readLastOrder(slug)
+      const numberText = prefill
+        ? String(prefill.orderNumber)
+        : memory
+          ? String(memory.orderNumber)
+          : ''
+      const phoneText = prefill ? prefill.phone : (memory?.phone ?? '')
+      setTrackOrderNumber(numberText)
+      setTrackPhone(phoneText)
+      setTrackResult(null)
+      setTrackToken(null)
+      setTrackState('idle')
+      setTrackingOpen(true)
+      if (numberText && phoneText) {
+        void runTrackingLookup(numberText, phoneText)
+      }
+    },
+    [slug, runTrackingLookup],
+  )
+
+  const handleTrackSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    void runTrackingLookup(trackOrderNumber, trackPhone)
+  }
+
   // Vendor feature flag (§60): when the registry says online
   // ordering is off for this deployment, the menu stays browsable
   // but checkout is replaced by a notice. Read from the license
@@ -497,7 +632,15 @@ export default function StorefrontPage({
         total: grandTotal,
         tableName: result.tableName,
         status: 'CONFIRMED',
+        type: kiosk ? 'pickup' : deliveryType,
       })
+      if (!kiosk) {
+        writeLastOrder(slug, {
+          orderNumber: result.orderNumber,
+          phone: customerPhone.trim(),
+          tokenNumber: result.tokenNumber,
+        })
+      }
       setCart([])
     } catch (error) {
       console.error('[Storefront] place order failed', error)
@@ -593,10 +736,22 @@ export default function StorefrontPage({
           <CardHeader className="text-center">
             <CardTitle>{t('storefront.orderPlaced')}</CardTitle>
             <CardDescription>
-              {t('storefront.payAtRestaurant')}
+              {placed.type === 'delivery'
+                ? t('storefront.payRider')
+                : t('storefront.payAtRestaurant')}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-3 text-center">
+            {placed.tokenNumber !== null && (
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {t('storefront.yourToken')}
+                </p>
+                <p className="text-7xl font-bold leading-none tracking-tight">
+                  {placed.tokenNumber}
+                </p>
+              </div>
+            )}
             <p className="text-5xl font-bold tracking-tight">
               #{placed.orderNumber}
             </p>
@@ -614,13 +769,124 @@ export default function StorefrontPage({
             <p className="text-xs text-muted-foreground">
               {t('storefront.statusChecking')}
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPlaced(null)}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                type="button"
+                onClick={() => {
+                  const orderNumber = placed.orderNumber
+                  const phone = customerPhone
+                  setPlaced(null)
+                  openTracking({ orderNumber, phone })
+                }}
+              >
+                {t('storefront.trackOrder')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPlaced(null)}
+              >
+                {t('storefront.backToMenu')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
+    )
+  }
+
+  // --- order tracking ---------------------------------------------------------
+  if (trackingOpen) {
+    return (
+      <main
+        style={brandingStyle}
+        className="flex min-h-svh items-center justify-center bg-background px-4 py-10"
+      >
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>{t('storefront.trackTitle')}</CardTitle>
+            <CardDescription>{t('storefront.trackBody')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={handleTrackSubmit}
+              className="flex flex-col gap-3"
             >
-              {t('storefront.backToMenu')}
-            </Button>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="track-order-number">
+                  {t('storefront.orderNumber')}
+                </Label>
+                <Input
+                  id="track-order-number"
+                  inputMode="numeric"
+                  value={trackOrderNumber}
+                  onChange={(e) => setTrackOrderNumber(e.target.value)}
+                  placeholder={t('storefront.orderNumberPlaceholder')}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="track-phone">{t('storefront.phone')}</Label>
+                <Input
+                  id="track-phone"
+                  inputMode="tel"
+                  value={trackPhone}
+                  onChange={(e) => setTrackPhone(e.target.value)}
+                  placeholder={t('storefront.phonePlaceholder')}
+                />
+              </div>
+              <Button type="submit" disabled={trackState === 'searching'}>
+                {trackState === 'searching'
+                  ? t('storefront.trackSearching')
+                  : t('storefront.trackButton')}
+              </Button>
+            </form>
+            {trackState === 'notFound' && (
+              <p
+                role="alert"
+                className="mt-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {t('storefront.trackNotFound')}
+              </p>
+            )}
+            {trackState === 'failed' && (
+              <p
+                role="alert"
+                className="mt-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {t('storefront.trackFailed')}
+              </p>
+            )}
+            {trackState === 'found' && trackResult && (
+              <div className="mt-5 flex flex-col items-center gap-3 text-center">
+                {trackToken !== null && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      {t('storefront.yourToken')}
+                    </p>
+                    <p className="text-6xl font-bold leading-none tracking-tight">
+                      {trackToken}
+                    </p>
+                  </div>
+                )}
+                <p className="rounded-full bg-muted px-3 py-1 text-sm font-medium">
+                  {t('storefront.orderStatus')}:{' '}
+                  {t(STATUS_KEYS[trackResult.status])}
+                </p>
+                <p className="text-lg font-semibold">
+                  {t('storefront.total')}:{' '}
+                  {formatMoney(trackResult.totalAmount, currency)}
+                </p>
+              </div>
+            )}
+            <div className="mt-5 text-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setTrackingOpen(false)}
+              >
+                {t('storefront.backToMenu')}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </main>
@@ -691,6 +957,14 @@ export default function StorefrontPage({
             {displayName}
           </h1>
           <LanguageToggle />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => openTracking()}
+          >
+            {t('storefront.trackOrder')}
+          </Button>
           <a
             href={loginHref}
             className="hidden text-sm font-medium text-primary hover:underline sm:inline"

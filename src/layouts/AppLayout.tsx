@@ -172,7 +172,7 @@ function EasyModeToggleButton() {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const licenseView = useLicenseState()
   const { easy } = useEasyMode()
-  const { can, isAdminLevel } = usePermissions()
+  const { can, isAdminLevel, ready: permissionsReady } = usePermissions()
   const { t } = useTranslation()
   const { restaurant, settings, profile } = useAuth()
   const { pathname } = useLocation()
@@ -229,7 +229,24 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         ) : null}
       </a>
       <nav className="flex flex-col gap-1 px-3 py-2" aria-label={t('layout.nav')}>
-        {NAV_ITEMS.filter(
+        {!permissionsReady ? (
+          // Permissions still loading: neutral placeholders instead
+          // of the nav list. can() deliberately fails OPEN while
+          // loading, which used to flash the full admin sidebar at
+          // restricted staff on every page load (audit wave 2). A
+          // settled load — success OR error — flips `ready` and the
+          // real list renders with its usual fail-open semantics, so
+          // an error still cannot lock anyone out.
+          <div aria-hidden className="flex flex-col gap-1">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-9 animate-pulse rounded-md bg-muted"
+              />
+            ))}
+          </div>
+        ) : (
+          NAV_ITEMS.filter(
           (item) =>
             (!('feature' in item && item.feature) ||
               isModuleEnabled(licenseView, item.feature)) &&
@@ -259,7 +276,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <Icon className="size-4 shrink-0" />
             {t(key)}
           </NavLink>
-        ))}
+          ))
+        )}
       </nav>
       <div className="mt-auto px-5 py-4">
         <img

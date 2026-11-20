@@ -24,6 +24,7 @@ import {
 } from 'recharts'
 import { useAuth } from '@/hooks/useAuth'
 import { useEasyMode } from '@/hooks/useEasyMode'
+import { usePermissions } from '@/hooks/usePermissions'
 import { formatMoney, roundMoney } from '@/lib/money'
 import {
   fetchDailySalesSeries,
@@ -53,7 +54,18 @@ import {
 
 export default function DashboardPage() {
   const { easy } = useEasyMode()
+  const { can, ready: permissionsReady } = usePermissions()
   const { t } = useTranslation()
+  // Financial figures (audit wave 2): today's sales / expenses /
+  // net, the sales chart, payment + product money lists and the
+  // supplier-dues alert are report data, so they ride on
+  // reports.view — the same key that already gates the Business
+  // section. The waiter role does not hold it (owner / admin /
+  // manager / accountant do); order counts, table counts and the
+  // low-stock alert stay visible to everyone. `ready` is required
+  // too: while permissions load, can() fails open and a waiter
+  // would briefly see the money cards before they vanished.
+  const showFinancials = permissionsReady && can('reports.view')
   const { profile, user, restaurant, settings } = useAuth()
 
   const currency = settings?.currency ?? restaurant?.default_currency ?? 'BDT'
@@ -175,7 +187,8 @@ export default function DashboardPage() {
   const duesTotal = roundMoney(
     duesOwed.reduce((sum, row) => sum + row.due, 0),
   )
-  const showAlerts = lowStockItems !== null || duesRows !== null
+  const showAlerts =
+    lowStockItems !== null || (duesRows !== null && showFinancials)
 
   const hasData = todaySales > 0 || ordersToday > 0 || occupiedTables > 0
   const netToday =
@@ -184,6 +197,7 @@ export default function DashboardPage() {
   const stats = [
     {
       key: 'sales',
+      financial: true,
       icon: ShoppingBag,
       label: t('dashboard.todaySales'),
       value: formatMoney(todaySales, currency),
@@ -194,6 +208,7 @@ export default function DashboardPage() {
     },
     {
       key: 'orders',
+      financial: false,
       icon: ClipboardList,
       label: t('dashboard.ordersToday'),
       value: String(ordersToday),
@@ -204,6 +219,7 @@ export default function DashboardPage() {
     },
     {
       key: 'tables',
+      financial: false,
       icon: Table2,
       label: t('dashboard.activeTables'),
       value: String(occupiedTables),
@@ -219,6 +235,7 @@ export default function DashboardPage() {
       ? [
           {
             key: 'expenses',
+            financial: true,
             icon: Wallet,
             label: t('dashboard.todayExpenses'),
             value: formatMoney(todayExpenses, currency),
@@ -226,6 +243,7 @@ export default function DashboardPage() {
           },
           {
             key: 'net',
+            financial: true,
             icon: TrendingUp,
             label: t('dashboard.netToday'),
             value: formatMoney(netToday ?? 0, currency),
@@ -248,7 +266,9 @@ export default function DashboardPage() {
       </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        {stats.map(({ key, icon: Icon, label, value, hint }) => (
+        {stats
+          .filter((stat) => !stat.financial || showFinancials)
+          .map(({ key, icon: Icon, label, value, hint }) => (
           <Card key={key}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">{label}</CardTitle>
@@ -264,7 +284,7 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
-        ))}
+          ))}
       </div>
 
       {showAlerts && restaurant && (
@@ -325,7 +345,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
             )}
-            {duesRows !== null && (
+            {duesRows !== null && showFinancials && (
               <div>
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <Wallet className="size-4 text-amber-700" />
@@ -380,7 +400,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {!easy && todayExpenses !== null && (
+      {!easy && showFinancials && todayExpenses !== null && (
         <Card>
           <CardHeader>
             <CardTitle>{t('dashboard.salesLast7Days')}</CardTitle>
@@ -406,7 +426,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {!easy && todayExpenses !== null && (
+      {!easy && showFinancials && todayExpenses !== null && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
