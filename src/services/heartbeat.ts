@@ -170,6 +170,30 @@ export function heartbeatInstanceId(): string | null {
   return resolveConfig()?.instanceId ?? null
 }
 
+export interface RegistryCallConfig {
+  registryUrl: string
+  anonKey: string
+  token: string
+}
+
+/**
+ * The resolved config for one-off instance-authenticated registry
+ * calls beyond the heartbeat itself (Help → submit-ticket, H2).
+ * Same resolution as everything above — the instance_config cache
+ * wins, env provisioning is the fallback — so there is exactly
+ * one config path in the codebase. Null when this deployment is
+ * unconfigured; callers degrade quietly, like the heartbeat does.
+ */
+export function registryCallConfig(): RegistryCallConfig | null {
+  const config = resolveConfig()
+  if (!config) return null
+  return {
+    registryUrl: config.registryUrl,
+    anonKey: config.anonKey,
+    token: config.token,
+  }
+}
+
 export function readLicenseCache(): LicenseStateCache | null {
   try {
     const raw = window.localStorage.getItem(CACHE_KEY)

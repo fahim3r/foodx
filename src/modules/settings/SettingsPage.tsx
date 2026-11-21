@@ -27,6 +27,7 @@ import PrintingCard from './PrintingCard'
 import ModulesCard from './ModulesCard'
 import OrderFlowCard from './OrderFlowCard'
 import EasyModeCard from './EasyModeCard'
+import HelpSection from './HelpSection'
 import { Link } from 'react-router-dom'
 import type { RestaurantFormValues } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -673,6 +674,7 @@ export default function SettingsPage() {
       <ModulesCard />
       <OrderFlowCard />
       <EasyModeCard />
+      <HelpSection />
     </div>
   )
 }

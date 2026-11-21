@@ -26,6 +26,7 @@ import {
   type Branch,
 } from '@/services/restaurant'
 import EasyModeCard from './EasyModeCard'
+import HelpSection from './HelpSection'
 import ManagerPinCard from './ManagerPinCard'
 import PrintingCard from './PrintingCard'
 
@@ -81,6 +82,7 @@ export default function EasySettings() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   // The main branch carries the restaurant's phone + address.
   useEffect(() => {
@@ -340,6 +342,26 @@ export default function EasySettings() {
 
       <ManagerPinCard />
       <EasyModeCard />
+
+      {/* Help (wave H2; design §2-Q4): one row at the very bottom
+          opening the same HelpSection as the advanced page — the
+          five everyday cards above stay exactly as they were. */}
+      <div>
+        <Button
+          type="button"
+          size="lg"
+          variant="outline"
+          className="w-full"
+          aria-expanded={helpOpen}
+          onClick={() => setHelpOpen((open) => !open)}
+        >
+          {t('settings.help.rowTitle')}
+        </Button>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t('settings.help.rowHint')}
+        </p>
+      </div>
+      {helpOpen && <HelpSection />}
     </div>
   )
 }
