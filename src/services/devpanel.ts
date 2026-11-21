@@ -28,6 +28,8 @@ import {
   type DevRelease,
   type DevReleaseStatus,
   type DevSupportNote,
+  type DevSupportTicket,
+  type DevTicketStatus,
   type LicensePlan,
   type LicenseStatus,
 } from '@/types'
@@ -548,4 +550,43 @@ export async function triggerClientUpdate(clientId: string): Promise<void> {
     data?.error ?? 'trigger_failed',
     data?.hook_status,
   )
+}
+
+// ---------------------------------------------------------------------------
+// Support tickets (Help section H1, registry migration 0002)
+// ---------------------------------------------------------------------------
+
+const TICKET_STATUS_RANK: Record<DevTicketStatus, number> = {
+  open: 0,
+  in_progress: 1,
+  resolved: 2,
+}
+
+/** All support tickets in worked-queue order: open first, then
+ * in-progress, then resolved; newest first inside each group (the
+ * query's created_at-desc order survives the stable rank sort).
+ * Rows are written only by the submit-ticket function (service
+ * role); the panel reads them and updates status under the
+ * developer SELECT/UPDATE policies. */
+export async function fetchDevSupportTickets(): Promise<DevSupportTicket[]> {
+  const { data, error } = await supabase
+    .from('dev_support_tickets')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const rows = (data ?? []) as unknown as DevSupportTicket[]
+  return rows.sort(
+    (a, b) => TICKET_STATUS_RANK[a.status] - TICKET_STATUS_RANK[b.status],
+  )
+}
+
+export async function setDevTicketStatus(
+  id: string,
+  status: DevTicketStatus,
+): Promise<void> {
+  const { error } = await supabase
+    .from('dev_support_tickets')
+    .update({ status })
+    .eq('id', id)
+  if (error) throw error
 }

@@ -45,6 +45,7 @@ import {
   fetchDevLicenses,
   fetchDevReleases,
   fetchDevSupportNotes,
+  fetchDevSupportTickets,
   generateInstanceToken,
   latestPublishedRelease,
   licenseDaysLeft,
@@ -53,6 +54,7 @@ import {
   setDevClientStatus,
   setDevLicenseStatus,
   setDevReleaseStatus,
+  setDevTicketStatus,
   updateDevClient,
   updatePendingClients,
   type DevClientInput,
@@ -73,6 +75,8 @@ import {
   type DevLicense,
   type DevReleaseStatus,
   type DevSupportNote,
+  type DevSupportTicket,
+  type DevTicketStatus,
   type LicensePlan,
   type LicenseStatus,
 } from '@/types'
@@ -83,7 +87,7 @@ const SELECT_CLASS =
 const TEXTAREA_CLASS =
   'flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
 
-type Tab = 'dashboard' | 'clients' | 'licenses' | 'releases'
+type Tab = 'dashboard' | 'clients' | 'licenses' | 'releases' | 'tickets'
 
 /**
  * §72 "last update": when the client's current version first
@@ -132,13 +136,16 @@ function badgeClass(status: string): string {
   switch (status) {
     case 'ACTIVE':
     case 'PUBLISHED':
+    case 'resolved':
       return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
     case 'EXPIRED':
       return 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
     case 'SUSPENDED':
+    case 'open':
       return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
     case 'PENDING':
     case 'DRAFT':
+    case 'in_progress':
       return 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300'
     default:
       return 'bg-muted text-muted-foreground'
@@ -230,6 +237,7 @@ export default function DevPanelPage() {
   const [releases, setReleases] = useState<
     Awaited<ReturnType<typeof fetchDevReleases>>
   >([])
+  const [tickets, setTickets] = useState<DevSupportTicket[]>([])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -279,6 +287,20 @@ export default function DevPanelPage() {
   const [relTarget, setRelTarget] = useState('ALL')
   const [relBusy, setRelBusy] = useState(false)
 
+  // Support tickets (Help section H1)
+  const [ticketStatusFilter, setTicketStatusFilter] =
+    useState<'ALL' | DevTicketStatus>('ALL')
+  const [ticketClientFilter, setTicketClientFilter] = useState('ALL')
+  const [expandedTicketId, setExpandedTicketId] = useState<string | null>(
+    null,
+  )
+  const [ticketNoteBusyId, setTicketNoteBusyId] = useState<string | null>(
+    null,
+  )
+  const [ticketNoteAddedId, setTicketNoteAddedId] = useState<string | null>(
+    null,
+  )
+
   const today = useMemo(() => todayLocal(), [])
 
   // --- Session -------------------------------------------------------------
@@ -327,6 +349,10 @@ export default function DevPanelPage() {
       setClients(c)
       setLicenses(l)
       setReleases(r)
+      // Tickets load apart: before registry migration 0002 is
+      // applied the table does not exist yet, and that must not
+      // take the whole panel down — the tab just reads empty.
+      setTickets(await fetchDevSupportTickets().catch(() => []))
     } catch {
       setLoadError(t('devpanel.loadError'))
     } finally {
@@ -395,6 +421,22 @@ export default function DevPanelPage() {
     [pendingUpdates],
   )
 
+  const filteredTickets = useMemo(
+    () =>
+      tickets.filter(
+        (tk) =>
+          (ticketStatusFilter === 'ALL' ||
+            tk.status === ticketStatusFilter) &&
+          (ticketClientFilter === 'ALL' ||
+            tk.client_id === ticketClientFilter),
+      ),
+    [tickets, ticketStatusFilter, ticketClientFilter],
+  )
+  const selectedTicket = useMemo(
+    () => tickets.find((tk) => tk.id === expandedTicketId) ?? null,
+    [tickets, expandedTicketId],
+  )
+
   const licenseCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const lic of licenses) {
@@ -452,6 +494,7 @@ export default function DevPanelPage() {
     setClients([])
     setLicenses([])
     setReleases([])
+    setTickets([])
   }
 
   async function runAction(fn: () => Promise<void>) {
@@ -571,6 +614,35 @@ export default function DevPanelPage() {
     } finally {
       setNoteBusy(false)
     }
+  }
+
+  /** "Add as support note" (§3.4): copy the ticket into the client's
+   * append-only notes timeline, so the history survives there too. */
+  async function handleTicketToNote(ticket: DevSupportTicket) {
+    setTicketNoteBusyId(ticket.id)
+    setTicketNoteAddedId(null)
+    try {
+      await addDevSupportNote(
+        ticket.client_id,
+        `${ticket.title}\n\n${ticket.message}`,
+        session?.user?.id ?? null,
+      )
+      setTicketNoteAddedId(ticket.id)
+      // If the ticket's client is the one open in the Clients tab,
+      // refresh its notes timeline so the copy shows up there too.
+      if (selectedClientId === ticket.client_id) {
+        setSupportNotes(await fetchDevSupportNotes(ticket.client_id))
+      }
+    } catch {
+      setActionError(t('devpanel.loadError'))
+    } finally {
+      setTicketNoteBusyId(null)
+    }
+  }
+
+  function openTicketClient(ticket: DevSupportTicket) {
+    setSelectedClientId(ticket.client_id)
+    setTab('clients')
   }
 
   function openLicenseForm(clientId: string, renew: DevLicense | null) {
@@ -759,6 +831,7 @@ export default function DevPanelPage() {
     { key: 'clients', label: t('devpanel.tabClients') },
     { key: 'licenses', label: t('devpanel.tabLicenses') },
     { key: 'releases', label: t('devpanel.tabReleases') },
+    { key: 'tickets', label: t('devpanel.tabTickets') },
   ]
 
   return (
@@ -2122,6 +2195,250 @@ export default function DevPanelPage() {
                 )}
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {tab === 'tickets' && (
+          <div className="mt-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">
+                {t('devpanel.ticketsTitle')}
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                <div className="w-44">
+                  <select
+                    className={SELECT_CLASS}
+                    value={ticketStatusFilter}
+                    onChange={(e) =>
+                      setTicketStatusFilter(
+                        e.target.value as 'ALL' | DevTicketStatus,
+                      )
+                    }
+                  >
+                    <option value="ALL">
+                      {t('devpanel.ticketFilterStatusAll')}
+                    </option>
+                    <option value="open">
+                      {t('devpanel.ticketStatus_open')}
+                    </option>
+                    <option value="in_progress">
+                      {t('devpanel.ticketStatus_in_progress')}
+                    </option>
+                    <option value="resolved">
+                      {t('devpanel.ticketStatus_resolved')}
+                    </option>
+                  </select>
+                </div>
+                <div className="w-56">
+                  <select
+                    className={SELECT_CLASS}
+                    value={ticketClientFilter}
+                    onChange={(e) => setTicketClientFilter(e.target.value)}
+                  >
+                    <option value="ALL">
+                      {t('devpanel.ticketFilterClientAll')}
+                    </option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.client_code} — {c.restaurant_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <Card>
+              <CardContent className="py-2">
+                {filteredTickets.length === 0 ? (
+                  <p className="py-4 text-sm text-muted-foreground">
+                    {t('devpanel.noTickets')}
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-muted-foreground">
+                          <th className="py-2 pr-3 font-medium">
+                            {t('devpanel.ticketTitle')}
+                          </th>
+                          <th className="py-2 pr-3 font-medium">
+                            {t('devpanel.ticketClient')}
+                          </th>
+                          <th className="py-2 pr-3 font-medium">
+                            {t('devpanel.ticketFrom')}
+                          </th>
+                          <th className="py-2 pr-3 font-medium">
+                            {t('devpanel.ticketCategory')}
+                          </th>
+                          <th className="py-2 pr-3 font-medium">
+                            {t('devpanel.status')}
+                          </th>
+                          <th className="py-2 pr-3 font-medium">
+                            {t('devpanel.ticketTime')}
+                          </th>
+                          <th className="py-2 font-medium"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredTickets.map((ticket) => {
+                          const client = clients.find(
+                            (c) => c.id === ticket.client_id,
+                          )
+                          return (
+                            <tr
+                              key={ticket.id}
+                              className="border-b last:border-0"
+                            >
+                              <td className="py-2 pr-3 font-medium">
+                                {ticket.title}
+                              </td>
+                              <td className="py-2 pr-3">
+                                {client
+                                  ? `${client.client_code} — ${client.restaurant_name}`
+                                  : ticket.client_id}
+                              </td>
+                              <td className="py-2 pr-3">
+                                {ticket.sender_name ?? '—'}
+                              </td>
+                              <td className="py-2 pr-3">
+                                {t(
+                                  `devpanel.ticketCategory_${ticket.category}`,
+                                )}
+                              </td>
+                              <td className="py-2 pr-3">
+                                <Badge
+                                  status={ticket.status}
+                                  label={t(
+                                    `devpanel.ticketStatus_${ticket.status}`,
+                                  )}
+                                />
+                              </td>
+                              <td className="py-2 pr-3">
+                                {new Date(
+                                  ticket.created_at,
+                                ).toLocaleString()}
+                              </td>
+                              <td className="py-2">
+                                <div className="flex justify-end">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setExpandedTicketId(
+                                        expandedTicketId === ticket.id
+                                          ? null
+                                          : ticket.id,
+                                      )
+                                    }
+                                  >
+                                    {expandedTicketId === ticket.id
+                                      ? t('devpanel.ticketHide')
+                                      : t('devpanel.ticketDetails')}
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {selectedTicket && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {selectedTicket.title}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {(() => {
+                      const client = clients.find(
+                        (c) => c.id === selectedTicket.client_id,
+                      )
+                      return client
+                        ? `${client.client_code} — ${client.restaurant_name}`
+                        : selectedTicket.client_id
+                    })()}{' '}
+                    — {t(`devpanel.ticketCategory_${selectedTicket.category}`)}{' '}
+                    — {new Date(selectedTicket.created_at).toLocaleString()}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      {t('devpanel.ticketMessage')}
+                    </h3>
+                    <p className="mt-1 whitespace-pre-wrap text-sm">
+                      {selectedTicket.message}
+                    </p>
+                  </div>
+                  <div className="grid gap-2 text-sm sm:grid-cols-2">
+                    <p>
+                      <span className="text-muted-foreground">
+                        {t('devpanel.ticketFrom')}:{' '}
+                      </span>
+                      {selectedTicket.sender_name ?? '—'}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        {t('devpanel.ticketEmail')}:{' '}
+                      </span>
+                      {selectedTicket.sender_email ?? '—'}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      {t('devpanel.status')}:
+                    </span>
+                    {(
+                      ['open', 'in_progress', 'resolved'] as DevTicketStatus[]
+                    ).map((s) => (
+                      <Button
+                        key={s}
+                        size="sm"
+                        variant={
+                          selectedTicket.status === s ? 'default' : 'outline'
+                        }
+                        disabled={selectedTicket.status === s}
+                        onClick={() =>
+                          void runAction(() =>
+                            setDevTicketStatus(selectedTicket.id, s),
+                          )
+                        }
+                      >
+                        {t(`devpanel.ticketStatus_${s}`)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openTicketClient(selectedTicket)}
+                    >
+                      {t('devpanel.ticketViewClient')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={ticketNoteBusyId === selectedTicket.id}
+                      onClick={() => void handleTicketToNote(selectedTicket)}
+                    >
+                      {t('devpanel.ticketAddAsNote')}
+                    </Button>
+                    {ticketNoteAddedId === selectedTicket.id && (
+                      <span className="text-sm text-emerald-600 dark:text-emerald-400">
+                        {t('devpanel.ticketNoteAdded')}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </div>

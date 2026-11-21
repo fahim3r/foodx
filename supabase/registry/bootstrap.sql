@@ -386,3 +386,53 @@ grant select, insert, update, delete on public.dev_backup_reports to service_rol
 -- request-update Edge Functions, which POST it server-side.
 -- ----------------------------------------------------------------------------
 alter table public.dev_clients add column if not exists deploy_hook_url text;
+
+-- ----------------------------------------------------------------------------
+-- H1 amendment (Help section support tickets, 2026-11-21;
+-- HELP_SECTION_DESIGN.md §3 — registry migration 0002): support
+-- tickets filed BY client deployments, with a lifecycle
+-- (open → in_progress → resolved). Rows are created only by the
+-- submit-ticket Edge Function (service role), which stamps the
+-- client_id it resolved from the instance token; developers read
+-- them and change status from the DevPanel Tickets tab. There is
+-- deliberately NO insert policy and NO anon policy — a client never
+-- touches this table directly.
+-- ----------------------------------------------------------------------------
+create table if not exists public.dev_support_tickets (
+  id               uuid        primary key default gen_random_uuid(),
+  client_id        uuid        not null references public.dev_clients (id) on delete cascade,
+  title            text        not null,
+  category         text        not null default 'other',
+  message          text        not null,
+  sender_name      text,
+  sender_email     text,
+  status           text        not null default 'open',
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint dev_support_tickets_status_check
+    check (status in ('open', 'in_progress', 'resolved')),
+  constraint dev_support_tickets_category_check
+    check (category in ('order_payment', 'printer_hardware', 'menu_settings', 'other'))
+);
+
+create index if not exists idx_dev_support_tickets_queue
+  on public.dev_support_tickets (status, created_at desc);
+create index if not exists idx_dev_support_tickets_client
+  on public.dev_support_tickets (client_id, created_at desc);
+
+drop trigger if exists trg_dev_support_tickets_updated_at on public.dev_support_tickets;
+create trigger trg_dev_support_tickets_updated_at
+  before update on public.dev_support_tickets
+  for each row execute function public.set_updated_at();
+
+alter table public.dev_support_tickets enable row level security;
+
+drop policy if exists dev_support_tickets_select on public.dev_support_tickets;
+create policy dev_support_tickets_select on public.dev_support_tickets
+  for select to authenticated using (public.is_developer());
+drop policy if exists dev_support_tickets_update on public.dev_support_tickets;
+create policy dev_support_tickets_update on public.dev_support_tickets
+  for update to authenticated using (public.is_developer()) with check (public.is_developer());
+
+grant select, update on public.dev_support_tickets to authenticated;
+grant select, insert, update, delete on public.dev_support_tickets to service_role;

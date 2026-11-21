@@ -1149,6 +1149,33 @@ export interface DevBackupReport {
   created_at: string
 }
 
+export type DevTicketStatus = 'open' | 'in_progress' | 'resolved'
+
+export type DevTicketCategory =
+  | 'order_payment'
+  | 'printer_hardware'
+  | 'menu_settings'
+  | 'other'
+
+/** One support ticket filed by a client deployment through the
+ * submit-ticket Edge Function (Help section H1, registry migration
+ * 0002). client_id is resolved server-side from the instance token —
+ * the client never sends it. sender_* are plain text, not foreign
+ * keys: client users live in the CLIENT project's Auth, while the
+ * registry's auth.users holds only developers. */
+export interface DevSupportTicket {
+  id: string
+  client_id: string
+  title: string
+  category: DevTicketCategory
+  message: string
+  sender_name: string | null
+  sender_email: string | null
+  status: DevTicketStatus
+  created_at: string
+  updated_at: string
+}
+
 
 // --- HRM (modifications v2, item 10) --------------------------------------
 
