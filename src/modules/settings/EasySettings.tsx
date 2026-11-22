@@ -18,12 +18,6 @@ import { escapeHtml, printHtml } from '@/lib/print'
 import { initSound, playTestSound } from '@/lib/sound'
 import { isFeatureEnabledFromCache } from '@/services/heartbeat'
 import { isModuleOn } from '@/services/modules'
-import { initSound, playTestSound } from '@/lib/sound'
-import {
-  loadSoundSettings,
-  saveSoundSettings,
-  type SoundSettings,
-} from '@/services/soundSettings'
 import {
   createMainBranch,
   fetchBranches,
@@ -361,39 +355,6 @@ export default function EasySettings() {
       </form>
 
       <PrintingCard />
-
-      {/* Sound effects (2026-11-22): ONE simple row — the per-device
-          master switch plus a Test button (the new-order doorbell as
-          the sample). The per-event detail lives in the advanced
-          Settings SoundCard. */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
-          <p className="text-base font-medium">{t('easy.settings.sound')}</p>
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              className="size-5 accent-primary"
-              aria-label={t('easy.settings.sound')}
-              checked={sound.master}
-              onChange={(event) => {
-                const next = { ...sound, master: event.target.checked }
-                setSound(next)
-                saveSoundSettings(restaurant.id, next)
-              }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                initSound(restaurant.id)
-                playTestSound('newOrder')
-              }}
-            >
-              {t('easy.settings.soundTest')}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
