@@ -13,7 +13,10 @@ import { fetchOrderPayments, summarizePayments } from '@/services/pos'
 import { setTableStatus } from '@/services/tables'
 import {
   canTransitionOrderStatus,
+  TERMINAL_DELIVERY_STATUSES,
   TERMINAL_ORDER_STATUSES,
+  type DeliveryOrder,
+  type DeliveryStatus,
   type Order,
   type OrderDetail,
   type OrderItemWithModifiers,
@@ -98,6 +101,54 @@ async function releaseTableIfFree(tableId: string): Promise<void> {
   if (!data || data.length === 0) {
     await setTableStatus(tableId, 'available')
   }
+}
+
+/**
+ * Close the delivery board row of a delivery order that reached a
+ * terminal state through the orders service (completed here, or
+ * cancelled through cancelOrder): the dispatch record follows the
+ * order — DELIVERED on completion, CANCELLED on cancellation — so
+ * staff never have to walk a finished order across the board by hand.
+ * Only an existing, still-active row is touched: a row already in a
+ * terminal delivery status is never resurrected, and no row is
+ * created for an order the board never dispatched. Like the delivery
+ * service, the close writes a delivery_status_history row.
+ * Best-effort: callers log and swallow any failure.
+ */
+async function closeDeliveryBoardRow(
+  order: Order,
+  toStatus: Extract<DeliveryStatus, 'DELIVERED' | 'CANCELLED'>,
+  userId: string,
+): Promise<void> {
+  if (order.type !== 'delivery') return
+  const { data, error } = await supabase
+    .from('delivery_orders')
+    .select('*')
+    .eq('order_id', order.id)
+    .maybeSingle()
+  if (error) throw error
+  const delivery = data as DeliveryOrder | null
+  if (!delivery) return
+  if (TERMINAL_DELIVERY_STATUSES.includes(delivery.status)) return
+  const patch: Record<string, unknown> = { status: toStatus }
+  if (toStatus === 'DELIVERED') {
+    patch.delivered_at = new Date().toISOString()
+  }
+  const { error: updateError } = await supabase
+    .from('delivery_orders')
+    .update(patch)
+    .eq('order_id', order.id)
+  if (updateError) throw updateError
+  const { error: historyError } = await supabase
+    .from('delivery_status_history')
+    .insert({
+      id: crypto.randomUUID(),
+      delivery_order_id: order.id,
+      from_status: delivery.status,
+      to_status: toStatus,
+      changed_by: userId,
+    })
+  if (historyError) throw historyError
 }
 
 /**
@@ -189,7 +240,8 @@ export async function markOrderServed(
 /** SERVED → COMPLETED: the order is done and the table frees up.
  * Completing awards loyalty points (one EARN per order, idempotent).
  * Best-effort — an award failure is logged and never fails the
- * completion.
+ * completion. Completing a delivery order also closes its delivery
+ * board row as DELIVERED (best-effort, same pattern).
  *
  * Payment gate (audit fix, user rule 2026-11-20): an order cannot be
  * completed while it still has a balance — the money must be collected,
@@ -209,6 +261,14 @@ export async function completeOrder(
     await awardLoyaltyPoints(completed)
   } catch (error) {
     console.error('[Orders] loyalty award failed', error)
+  }
+  try {
+    await closeDeliveryBoardRow(completed, 'DELIVERED', userId)
+  } catch (error) {
+    console.error(
+      '[Orders] delivery board close after completion failed',
+      error,
+    )
   }
   return completed
 }
@@ -230,8 +290,9 @@ export async function completeOrder(
  * cancel_order_guarded RPC, which verifies the restaurant's manager
  * PIN server-side when one is set and performs the status change,
  * history row, restock and table release itself. The loyalty
- * reversal stays here, best-effort as before. `userId` is kept for
- * signature compatibility — the RPC records auth.uid() itself.
+ * reversal stays here, best-effort as before, and so does closing a
+ * delivery order's board row as CANCELLED. The RPC records
+ * auth.uid() itself; `userId` is used only for that history row.
  */
 export async function cancelOrder(
   order: Order,
@@ -239,7 +300,6 @@ export async function cancelOrder(
   reason: string,
   pin?: string,
 ): Promise<Order> {
-  void userId
   if (!reason.trim()) throw new Error('cancel_reason_required')
   const { error } = await supabase.rpc('cancel_order_guarded', {
     p_order_id: order.id,
@@ -251,6 +311,14 @@ export async function cancelOrder(
     await reverseLoyaltyRedemption(order.id)
   } catch (loyaltyError) {
     console.error('[Orders] loyalty reversal after cancel failed', loyaltyError)
+  }
+  try {
+    await closeDeliveryBoardRow(order, 'CANCELLED', userId)
+  } catch (deliveryError) {
+    console.error(
+      '[Orders] delivery board close after cancel failed',
+      deliveryError,
+    )
   }
   const updated = await fetchOrderById(order.id)
   return updated ?? { ...order, status: 'CANCELLED' }

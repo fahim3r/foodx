@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { completeOrder, markOrderServed } from '@/services/orders'
 import {
   canTransitionDeliveryStatus,
+  TERMINAL_ORDER_STATUSES,
   type DeliveryBoardEntry,
   type DeliveryDriver,
   type DeliveryOrder,
@@ -215,7 +216,8 @@ export async function ensureDeliveryOrder(
 /** The delivery board: this restaurant's delivery orders, newest first,
  * each with its dispatch record and driver/zone names resolved. Orders
  * placed before Phase 6 (or at the POS) may have no dispatch row yet —
- * the board creates it on first sight so nothing is invisible. */
+ * the board creates it on first sight so nothing is invisible, unless
+ * the order itself is already in a terminal status. */
 export async function fetchDeliveryBoard(
   restaurantId: string,
 ): Promise<DeliveryBoardEntry[]> {
@@ -243,9 +245,12 @@ export async function fetchDeliveryBoard(
   )
 
   for (const order of orders) {
-    if (!byOrderId.has(order.id)) {
-      byOrderId.set(order.id, await ensureDeliveryOrder(order))
-    }
+    if (byOrderId.has(order.id)) continue
+    // Never create a dispatch row for an order that is already
+    // finished — a completed/cancelled/refunded order must not
+    // (re)appear on the board with a fresh PENDING row.
+    if (TERMINAL_ORDER_STATUSES.includes(order.status)) continue
+    byOrderId.set(order.id, await ensureDeliveryOrder(order))
   }
 
   const [drivers, zones] = await Promise.all([
