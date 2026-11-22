@@ -6,18 +6,26 @@
  * restaurant_settings: `foodx.sound.<restaurantId>`.
  * The master defaults OFF (user decision, design D2/Q1): a fresh
  * device stays silent until someone turns sound on in Settings.
- * The three event toggles default ON underneath it, so switching
- * the master on enables all three sounds at once.
+ * The event toggles default ON underneath it, so switching
+ * the master on enables all the sounds at once.
+ * Loading merges the stored value field-by-field over the defaults,
+ * so a settings blob saved by an older build (e.g. one without the
+ * v1.1 `complete` key) picks up the new defaults instead of
+ * reading undefined.
  */
 export interface SoundSettings {
   /** Master switch for this device. */
   master: boolean
-  /** Two-tone doorbell when a new order appears. */
+  /** Looping two-tone doorbell while a new order waits for action. */
   newOrder: boolean
-  /** Ascending triple when an order becomes READY. */
+  /** Looping ascending triple while an order sits READY. */
   ready: boolean
   /** Soft blip when a payment is recorded. */
   payment: boolean
+  /** Success motif when an order completes (v1.1). */
+  complete: boolean
+  /** Soft descending "failed" tone when an order is cancelled (v1.1). */
+  cancelled: boolean
 }
 
 const DEFAULTS: SoundSettings = {
@@ -25,6 +33,8 @@ const DEFAULTS: SoundSettings = {
   newOrder: true,
   ready: true,
   payment: true,
+  complete: true,
+  cancelled: true,
 }
 
 export function loadSoundSettings(restaurantId: string): SoundSettings {
@@ -37,6 +47,8 @@ export function loadSoundSettings(restaurantId: string): SoundSettings {
       newOrder: parsed.newOrder !== false,
       ready: parsed.ready !== false,
       payment: parsed.payment !== false,
+      complete: parsed.complete !== false,
+      cancelled: parsed.cancelled !== false,
     }
   } catch {
     return { ...DEFAULTS }

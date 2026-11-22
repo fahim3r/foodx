@@ -11,7 +11,13 @@ import {
 } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/useAuth'
-import { initSound, playTestSound, type SoundKind } from '@/lib/sound'
+import {
+  initSound,
+  playTestSound,
+  stopAlertNow,
+  stopAllAlerts,
+  type SoundKind,
+} from '@/lib/sound'
 import {
   loadSoundSettings,
   saveSoundSettings,
@@ -23,15 +29,20 @@ const FALLBACK: SoundSettings = {
   newOrder: true,
   ready: true,
   payment: true,
+  complete: true,
+  cancelled: true,
 }
 
 /**
  * Settings → Sound effects (Sound Effects feature, 2026-11-22):
- * per-device chimes for a new order, an order becoming ready and a
- * recorded payment — built exactly like PrintingCard, whose
- * settings make the same "this terminal, not the restaurant"
- * argument. The master defaults OFF (design D2/Q1), with the three
- * event toggles ON underneath it. The Test buttons
+ * per-device chimes for a new order, an order becoming ready, a
+ * recorded payment and (v1.1) an order completing or being
+ * cancelled — built exactly like PrintingCard, whose settings make
+ * the same "this terminal, not the restaurant" argument. The master
+ * defaults OFF (design D2/Q1), with the five event toggles ON
+ * underneath it. Switching
+ * the master or a looping event off silences its alert at once.
+ * The Test buttons
  * play their sound even while the toggles are off: the tap is an
  * explicit try-out, and it doubles as the gesture that unlocks
  * audio on this device (design D3).
@@ -100,7 +111,10 @@ export default function SoundCard() {
             type="checkbox"
             className="size-4 accent-primary"
             checked={settings.master}
-            onChange={(event) => update({ master: event.target.checked })}
+            onChange={(event) => {
+              if (!event.target.checked) stopAllAlerts()
+              update({ master: event.target.checked })
+            }}
           />
         </div>
         {eventRow(
@@ -108,14 +122,20 @@ export default function SoundCard() {
           'settings.soundNewOrder',
           'newOrder',
           settings.newOrder,
-          (checked) => update({ newOrder: checked }),
+          (checked) => {
+            if (!checked) stopAlertNow('new')
+            update({ newOrder: checked })
+          },
         )}
         {eventRow(
           'sound-ready',
           'settings.soundReady',
           'ready',
           settings.ready,
-          (checked) => update({ ready: checked }),
+          (checked) => {
+            if (!checked) stopAlertNow('ready')
+            update({ ready: checked })
+          },
         )}
         {eventRow(
           'sound-payment',
@@ -123,6 +143,20 @@ export default function SoundCard() {
           'payment',
           settings.payment,
           (checked) => update({ payment: checked }),
+        )}
+        {eventRow(
+          'sound-complete',
+          'settings.soundComplete',
+          'complete',
+          settings.complete,
+          (checked) => update({ complete: checked }),
+        )}
+        {eventRow(
+          'sound-cancelled',
+          'settings.soundCancelled',
+          'cancelled',
+          settings.cancelled,
+          (checked) => update({ cancelled: checked }),
         )}
         <p className="text-sm text-muted-foreground">
           {t('settings.soundNote')}

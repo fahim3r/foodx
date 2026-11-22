@@ -95,7 +95,14 @@ export default function EasySettings() {
   const [soundSettings, setSoundSettings] = useState<SoundSettings>(() =>
     restaurant
       ? loadSoundSettings(restaurant.id)
-      : { master: false, newOrder: true, ready: true, payment: true },
+      : {
+          master: false,
+          newOrder: true,
+          ready: true,
+          payment: true,
+          complete: true,
+          cancelled: true,
+        },
   )
 
   const handleSoundToggle = (checked: boolean) => {
