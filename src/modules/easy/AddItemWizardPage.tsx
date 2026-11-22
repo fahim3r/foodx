@@ -257,7 +257,7 @@ function AddItemWizard() {
             <img
               src={imageUrl.trim()}
               alt=""
-              className="h-32 w-32 rounded-lg border object-cover"
+              className="h-32 w-32 rounded-lg border bg-primary/5 object-contain"
             />
           )}
         </>

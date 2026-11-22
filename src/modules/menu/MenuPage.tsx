@@ -41,6 +41,7 @@ import type {
 } from '@/types'
 import EasyConfirmNote from '@/components/EasyConfirmNote'
 import EasyHelpLine from '@/components/EasyHelpLine'
+import ProductImage from '@/components/ProductImage'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -902,6 +903,10 @@ export default function MenuPage() {
             <ul className="flex flex-col divide-y">
               {visibleProducts.map((product) => (
                 <li key={product.id} className="flex flex-wrap items-center gap-2 py-3">
+                  <ProductImage
+                    src={product.image_url}
+                    className="h-12 w-16 shrink-0 rounded-md"
+                  />
                   <span className="font-medium">
                     {product.name}
                     {product.name_bn ? ` (${product.name_bn})` : ''}
@@ -1128,7 +1133,7 @@ export default function MenuPage() {
                       <img
                         src={productForm.imageUrl.trim()}
                         alt=""
-                        className="h-16 w-16 rounded-md border object-cover"
+                        className="h-16 w-16 rounded-md border bg-primary/5 object-contain"
                       />
                     )}
                     <input

@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Mic } from 'lucide-react'
 import EasyHelpLine from '@/components/EasyHelpLine'
+import ProductImage from '@/components/ProductImage'
 import LiveOrdersCarousel from '@/modules/pos/LiveOrdersCarousel'
 import { isMissingTableError, isNetworkError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
@@ -2419,39 +2420,46 @@ export default function PosPage() {
                   variant="outline"
                   disabled={!product.is_available || outOfStock}
                   onClick={() => handleProductTap(product)}
-                  className={
-                    easy
-                      ? 'h-auto flex-col items-start gap-1 p-5 text-left'
-                      : 'h-auto flex-col items-start gap-1 p-4 text-left'
-                  }
+                  className="h-full flex-col items-stretch justify-start gap-0 overflow-hidden whitespace-normal p-0 text-left"
                 >
-                  <span className={easy ? 'text-lg font-semibold' : 'font-medium'}>
-                    {displayName(product.name, product.name_bn)}
-                  </span>
+                  <ProductImage src={product.image_url} />
                   <span
                     className={
                       easy
-                        ? 'text-base text-muted-foreground'
-                        : 'text-sm text-muted-foreground'
+                        ? 'flex flex-1 flex-col items-start gap-1 p-5 pt-3'
+                        : 'flex flex-1 flex-col items-start gap-1 p-4 pt-3'
                     }
                   >
-                    {formatMoney(Number(product.price), currency)}
+                    <span className={easy ? 'text-lg font-semibold' : 'font-medium'}>
+                      {displayName(product.name, product.name_bn)}
+                    </span>
+                    <span
+                      className={
+                        easy
+                          ? 'text-base text-muted-foreground'
+                          : 'text-sm text-muted-foreground'
+                      }
+                    >
+                      {formatMoney(Number(product.price), currency)}
+                    </span>
+                    <span className="min-h-4">
+                      {!product.is_available && (
+                        <span className="text-xs text-muted-foreground">
+                          {t('pos.unavailable')}
+                        </span>
+                      )}
+                      {outOfStock && (
+                        <span className="text-xs font-medium text-destructive">
+                          {t('pos.outOfStock')}
+                        </span>
+                      )}
+                      {lowStock && (
+                        <span className="text-xs font-medium text-amber-700">
+                          {t('pos.onlyLeft', { count: servable })}
+                        </span>
+                      )}
+                    </span>
                   </span>
-                  {!product.is_available && (
-                    <span className="text-xs text-muted-foreground">
-                      {t('pos.unavailable')}
-                    </span>
-                  )}
-                  {outOfStock && (
-                    <span className="text-xs font-medium text-destructive">
-                      {t('pos.outOfStock')}
-                    </span>
-                  )}
-                  {lowStock && (
-                    <span className="text-xs font-medium text-amber-700">
-                      {t('pos.onlyLeft', { count: servable })}
-                    </span>
-                  )}
                 </Button>
               )
             })}

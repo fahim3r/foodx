@@ -8,6 +8,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import ProductImage from '@/components/ProductImage'
 import {
   Card,
   CardContent,
@@ -583,14 +584,8 @@ export default function WaiterPage() {
                 onClick={() => handleProductTap(product)}
                 className="rounded-xl border bg-card p-3 text-left disabled:opacity-50"
               >
-                {product.image_url && (
-                  <img
-                    src={product.image_url}
-                    alt=""
-                    className="mb-2 h-20 w-full rounded-lg object-cover"
-                  />
-                )}
-                <p className="font-medium leading-snug">
+                <ProductImage src={product.image_url} className="mb-2 rounded-lg" />
+                <p className="line-clamp-2 font-medium leading-snug">
                   {displayName(product.name, product.name_bn)}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">

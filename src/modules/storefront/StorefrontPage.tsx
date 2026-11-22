@@ -45,6 +45,7 @@ import {
   type StorefrontInfo,
 } from '@/types'
 import { Button } from '@/components/ui/button'
+import ProductImage from '@/components/ProductImage'
 import {
   Card,
   CardContent,
@@ -1035,41 +1036,21 @@ export default function StorefrontPage({
                   const servings = availability.get(product.id)
                   const outOfStock = servings !== undefined && servings <= 0
                   return (
-                    <Card key={product.id}>
+                    <Card key={product.id} className="h-full gap-0 overflow-hidden py-0">
+                      <ProductImage src={product.image_url} />
                       <CardContent
                         className={
-                          kiosk ? 'flex gap-4 px-5 pb-5 pt-7' : 'flex gap-3 pt-6'
+                          kiosk
+                            ? 'flex flex-1 flex-col px-5 pb-5 pt-4'
+                            : 'flex flex-1 flex-col px-4 pb-4 pt-3'
                         }
                       >
-                        {product.image_url && (
-                          <img
-                            src={product.image_url}
-                            alt=""
-                            loading="lazy"
-                            className={
-                              kiosk
-                                ? 'h-24 w-24 shrink-0 rounded-md object-cover'
-                                : 'h-16 w-16 shrink-0 rounded-md object-cover'
-                            }
-                          />
-                        )}
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
                           <p className={kiosk ? 'text-xl font-semibold' : 'font-semibold'}>
                             {displayNameOf(product.name, product.name_bn)}
                           </p>
-                          {product.description && (
-                            <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
-                              {product.description}
-                            </p>
-                          )}
-                          <p
-                            className={
-                              kiosk
-                                ? 'mt-1.5 text-lg font-bold'
-                                : 'mt-1 text-sm font-semibold'
-                            }
-                          >
-                            {formatMoney(Number(product.price), currency)}
+                          <p className="mt-0.5 line-clamp-2 min-h-10 text-sm text-muted-foreground">
+                            {product.description ?? ''}
                           </p>
                           {outOfStock ? (
                             <p className="mt-1 text-xs font-medium text-destructive">
@@ -1081,15 +1062,24 @@ export default function StorefrontPage({
                             </p>
                           ) : null}
                         </div>
-                        <Button
-                          type="button"
-                          size={kiosk ? 'lg' : 'sm'}
-                          className={kiosk ? 'h-12 px-6 text-base' : undefined}
-                          disabled={outOfStock || !product.is_available}
-                          onClick={() => openChooser(product)}
-                        >
-                          {t('storefront.addToCart')}
-                        </Button>
+                        <div className="mt-auto flex items-end justify-between gap-2 pt-3">
+                          <p
+                            className={
+                              kiosk ? 'text-lg font-bold' : 'text-sm font-semibold'
+                            }
+                          >
+                            {formatMoney(Number(product.price), currency)}
+                          </p>
+                          <Button
+                            type="button"
+                            size={kiosk ? 'lg' : 'sm'}
+                            className={kiosk ? 'h-12 px-6 text-base' : undefined}
+                            disabled={outOfStock || !product.is_available}
+                            onClick={() => openChooser(product)}
+                          >
+                            {t('storefront.addToCart')}
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   )
