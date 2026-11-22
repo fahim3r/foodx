@@ -702,6 +702,43 @@ export async function fetchDailySalesSeries(
   }))
 }
 
+export interface HourlySalesPoint {
+  hour: number
+  sales: number
+}
+
+/**
+ * Bucket a day's orders into per-hour sales (Dashboard modernisation
+ * W2, design §2). Pure composition over the already-fetched today's
+ * orders — no query of its own, so the hourly bars always sum to the
+ * same total the caller's headline figure shows. Zero-filled from
+ * the first order's hour through the current hour so the chart axis
+ * has no gaps; an empty day returns [] and the card shows its empty
+ * state instead of an empty axis.
+ */
+export function hourlySalesFromOrders(
+  orders: { created_at: string; total_amount: number }[],
+  now: Date = new Date(),
+): HourlySalesPoint[] {
+  if (orders.length === 0) return []
+  const byHour = new Map<number, number>()
+  let firstHour = 24
+  for (const order of orders) {
+    const hour = new Date(order.created_at).getHours()
+    if (hour < firstHour) firstHour = hour
+    byHour.set(hour, (byHour.get(hour) ?? 0) + Number(order.total_amount))
+  }
+  let lastHour = now.getHours()
+  for (const hour of byHour.keys()) {
+    if (hour > lastHour) lastHour = hour
+  }
+  const points: HourlySalesPoint[] = []
+  for (let hour = firstHour; hour <= lastHour; hour += 1) {
+    points.push({ hour, sales: roundMoney(byHour.get(hour) ?? 0) })
+  }
+  return points
+}
+
 export interface ProductSalesRow {
   name: string
   quantity: number

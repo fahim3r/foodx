@@ -1,22 +1,24 @@
 // FoodX — Dashboard (protected), Advanced mode (Dashboard
-// modernisation W1). Layout, top to bottom: header strip (time-of-
-// day greeting, restaurant name, date, quick actions and the
-// online/offline status card), the KPI row with vs-yesterday trend
-// chips, the alerts card, the live operations strip, then the
-// 7-day chart beside the আজকের পালা (today's shift) card, and the
-// payment / top-products cards (restyled in W2). In Easy Mode the
-// panel home is EasyHomePage instead — the switch below is
-// unchanged and this page's redesign never touches it.
+// modernisation W1 + W2). Layout, top to bottom: header strip
+// (time-of-day greeting, restaurant name, date, quick actions and
+// the online/offline status card), the KPI row with vs-yesterday
+// trend chips, the alerts card, the live operations strip, the
+// hourly sales chart beside the payment-mix donut, the 7-day chart
+// beside the আজকের পালা (today's shift) card, and the top-items /
+// recent-orders lists row. In Easy Mode the panel home is
+// EasyHomePage instead — the switch below is unchanged and this
+// page's redesign never touches it.
 //
 // Refresh model (design §4, user Q1): the LIGHT group — today's
-// orders + tables, open-order counts, expenses, trend inputs and
-// the alerts sources — re-fetches every 30 s and on window focus
-// (the KDS poll idiom). The HEAVY group — the 7-day series, payment
-// breakdown and top products — loads on mount here; W2 adds its
-// 5-minute rhythm beside the light poll when it restyles those
-// widgets. Failed sources keep the honest patterns from before:
-// core widgets fall back to zero states, Phase 7 widgets hide.
-import { useEffect, useState, type ReactNode } from 'react'
+// orders + tables, open-order counts, expenses, trend inputs, the
+// alerts sources and recent orders — re-fetches every 30 s and on
+// window focus (the KDS poll idiom). The HEAVY group — the 7-day
+// series, payment breakdown and top products — loads on mount,
+// re-runs every 5 minutes, and re-runs when the light poll sees
+// today's order count change. Failed sources keep the honest
+// patterns from before: core widgets fall back to zero states,
+// Phase 7 widgets hide.
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import {
@@ -58,18 +60,23 @@ import {
 } from '@/services/business'
 import { isModuleEnabled } from '@/services/heartbeat'
 import { fetchLowStockItems } from '@/services/inventory'
-import type { InventoryItem } from '@/types'
+import type { InventoryItem, Order } from '@/types'
 import { isModuleOn } from '@/services/modules'
 import {
   fetchOpenOrderCounts,
+  fetchOrders,
   fetchTodayOrders,
   type OpenOrderCounts,
 } from '@/services/orders'
 import { fetchTables } from '@/services/tables'
 import EasyHomePage from './EasyHomePage'
+import HourlySalesCard from './HourlySalesCard'
 import OnlineStatusCard from './OnlineStatusCard'
 import OpsStrip from './OpsStrip'
+import PaymentMixCard from './PaymentMixCard'
+import RecentOrdersCard from './RecentOrdersCard'
 import ShiftCard from './ShiftCard'
+import TopItemsCard from './TopItemsCard'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -80,6 +87,7 @@ import {
 } from '@/components/ui/card'
 
 const LIGHT_POLL_MS = 30_000
+const HEAVY_POLL_MS = 300_000
 
 /** Vs-yesterday trend chip (design §3 row 2). Both inputs share
  * one definition (see the loaders), so the % is honest. When
@@ -181,6 +189,15 @@ export default function DashboardPage() {
   const [statsLoading, setStatsLoading] = useState(true)
   const [todaySales, setTodaySales] = useState(0)
   const [ordersToday, setOrdersToday] = useState(0)
+  // Today's order rows themselves (W2): the hourly chart buckets
+  // them client-side, so they are kept next to the aggregates the
+  // light loader already computed from them.
+  const [todayOrders, setTodayOrders] = useState<Order[]>([])
+  // Lists row (W2): the latest 8 orders of any day (null until the
+  // first read lands) and the table-name map their rows label
+  // dine-in orders with (built from the light loader's tables read).
+  const [recentOrders, setRecentOrders] = useState<Order[] | null>(null)
+  const [tableNames, setTableNames] = useState<Record<string, string>>({})
   const [occupiedTables, setOccupiedTables] = useState(0)
   const [totalTables, setTotalTables] = useState(0)
   const [tablesKnown, setTablesKnown] = useState(false)
@@ -205,7 +222,7 @@ export default function DashboardPage() {
   const [yesterdayTotals, setYesterdayTotals] = useState<DayTotals | null>(
     null,
   )
-  // Heavy group (W2 restyles these): 7-day series, today's payment
+  // Heavy group (W2 widgets): 7-day series, today's payment
   // breakdown and top products.
   const [salesSeries, setSalesSeries] = useState<DailySalesPoint[]>([])
   const [paymentsToday, setPaymentsToday] = useState<PaymentBreakdownRow[]>([])
@@ -228,6 +245,12 @@ export default function DashboardPage() {
       ])
         .then(([orders, tables]) => {
           if (cancelled) return
+          setTodayOrders(orders)
+          setTableNames(
+            Object.fromEntries(
+              tables.map((table) => [table.id, table.name]),
+            ),
+          )
           setTodaySales(
             orders.reduce((sum, order) => sum + Number(order.total_amount), 0),
           )
@@ -255,6 +278,16 @@ export default function DashboardPage() {
         })
         .catch(() => {
           // Orders table missing: the strip keeps its "—" buckets.
+        })
+      // Recent orders (W2 lists row): the latest 8 of any day,
+      // newest first. A failed read keeps the last list (or the
+      // not-yet-loaded state) — never a fake empty list.
+      void fetchOrders(restaurantId, { limit: 8 })
+        .then((recent) => {
+          if (!cancelled) setRecentOrders(recent)
+        })
+        .catch(() => {
+          // Orders table missing: the card keeps its last state.
         })
       // Phase 7 inputs: today's expenses + the trend pair.
       void fetchTodayExpenseTotal(restaurantId)
@@ -310,34 +343,66 @@ export default function DashboardPage() {
     }
   }, [restaurant])
 
-  // Heavy group: mount only in W1 (see the header comment).
+  // Heavy group (design §4, user Q1): loads on mount, re-runs
+  // every 5 minutes, and re-runs when the light poll sees today's
+  // order count change (the trigger effect below calls the loader
+  // through this ref). One interval, cleaned up on unmount.
+  const loadHeavyRef = useRef<() => void>(() => {})
   useEffect(() => {
     if (!restaurant) return
     let cancelled = false
-    const todayStr = toDateString(new Date())
-    const weekStart = new Date()
-    weekStart.setDate(weekStart.getDate() - 6)
-    void Promise.all([
-      fetchDailySalesSeries(
-        restaurant.id,
-        makeRange(toDateString(weekStart), todayStr),
-      ),
-      fetchPaymentBreakdown(restaurant.id, makeRange(todayStr, todayStr)),
-      fetchProductSales(restaurant.id, makeRange(todayStr, todayStr), 5),
-    ])
-      .then(([series, payments, products]) => {
-        if (cancelled) return
-        setSalesSeries(series)
-        setPaymentsToday(payments)
-        setTopProducts(products)
-      })
-      .catch(() => {
-        // Phase 7 tables not applied: leave the widgets hidden.
-      })
+    const restaurantId = restaurant.id
+
+    const loadHeavy = () => {
+      const todayStr = toDateString(new Date())
+      const weekStart = new Date()
+      weekStart.setDate(weekStart.getDate() - 6)
+      void Promise.all([
+        fetchDailySalesSeries(
+          restaurantId,
+          makeRange(toDateString(weekStart), todayStr),
+        ),
+        fetchPaymentBreakdown(restaurantId, makeRange(todayStr, todayStr)),
+        fetchProductSales(restaurantId, makeRange(todayStr, todayStr), 5),
+      ])
+        .then(([series, payments, products]) => {
+          if (cancelled) return
+          setSalesSeries(series)
+          setPaymentsToday(payments)
+          setTopProducts(products)
+        })
+        .catch(() => {
+          // Phase 7 tables not applied: leave the widgets hidden.
+        })
+    }
+
+    loadHeavyRef.current = loadHeavy
+    loadHeavy()
+    const timer = window.setInterval(loadHeavy, HEAVY_POLL_MS)
     return () => {
       cancelled = true
+      window.clearInterval(timer)
     }
   }, [restaurant])
+
+  // Q1 trigger: when the light group's today-order count actually
+  // changes (a new order landed, or one was cancelled/refunded),
+  // the heavy widgets re-run immediately instead of waiting for
+  // the 5-minute tick. The first settled light load only sets the
+  // baseline — the mount load above already covers it.
+  const heavyBaselineRef = useRef<{ id: string; count: number } | null>(null)
+  useEffect(() => {
+    if (!restaurant || statsLoading) return
+    const baseline = heavyBaselineRef.current
+    heavyBaselineRef.current = { id: restaurant.id, count: ordersToday }
+    if (
+      baseline &&
+      baseline.id === restaurant.id &&
+      baseline.count !== ordersToday
+    ) {
+      loadHeavyRef.current()
+    }
+  }, [ordersToday, statsLoading, restaurant])
 
   // Alerts derivations: low stock sorted by urgency (out of stock
   // first, then the lowest quantity relative to its threshold);
@@ -723,6 +788,25 @@ export default function DashboardPage() {
         />
       )}
 
+      {restaurant && showFinancials && (
+        <div className="grid items-start gap-4 lg:grid-cols-3">
+          <div
+            className={
+              todayExpenses !== null ? 'lg:col-span-2' : 'lg:col-span-3'
+            }
+          >
+            <HourlySalesCard
+              orders={todayOrders}
+              currency={currency}
+              loading={statsLoading}
+            />
+          </div>
+          {todayExpenses !== null && (
+            <PaymentMixCard payments={paymentsToday} currency={currency} />
+          )}
+        </div>
+      )}
+
       {restaurant && (
         <div className="grid items-start gap-4 lg:grid-cols-3">
           {chartVisible && (
@@ -735,13 +819,28 @@ export default function DashboardPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={salesSeries}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(date: string) =>
+                          new Intl.DateTimeFormat(i18n.language, {
+                            weekday: 'short',
+                          }).format(new Date(`${date}T00:00:00`))
+                        }
+                      />
                       <YAxis tick={{ fontSize: 12 }} />
                       <Tooltip
                         formatter={(value) => [
                           formatMoney(Number(value ?? 0), currency),
                           t('dashboard.todaySales'),
                         ]}
+                        labelFormatter={(date) =>
+                          new Intl.DateTimeFormat(i18n.language, {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'short',
+                          }).format(new Date(`${String(date)}T00:00:00`))
+                        }
                       />
                       <Bar dataKey="sales" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -763,70 +862,26 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {!easy && showFinancials && todayExpenses !== null && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('dashboard.paymentBreakdown')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {paymentsToday.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t('dashboard.noPaymentsYet')}
-                </p>
-              ) : (
-                <div className="divide-y">
-                  {paymentsToday.map((row) => (
-                    <div
-                      key={row.method}
-                      className="flex items-center justify-between py-2 text-sm"
-                    >
-                      <span>
-                        {t(
-                          `pos.method${row.method.charAt(0).toUpperCase()}${row.method.slice(1)}`,
-                        )}
-                        {' · '}
-                        {row.count}
-                      </span>
-                      <span className="font-medium">
-                        {formatMoney(row.amount, currency)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('dashboard.topProducts')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {topProducts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t('reports.noData')}
-                </p>
-              ) : (
-                <div className="divide-y">
-                  {topProducts.map((row) => (
-                    <div
-                      key={row.name}
-                      className="flex items-center justify-between py-2 text-sm"
-                    >
-                      <span>
-                        {row.name}
-                        {' · '}
-                        {row.quantity}
-                      </span>
-                      <span className="font-medium">
-                        {formatMoney(row.amount, currency)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      {restaurant && (
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          {showFinancials && todayExpenses !== null && (
+            <TopItemsCard products={topProducts} currency={currency} />
+          )}
+          <div
+            className={
+              showFinancials && todayExpenses !== null
+                ? undefined
+                : 'lg:col-span-2'
+            }
+          >
+            <RecentOrdersCard
+              orders={recentOrders}
+              tableNames={tableNames}
+              currency={currency}
+              loading={statsLoading}
+              navTo={navTo}
+            />
+          </div>
         </div>
       )}
 
