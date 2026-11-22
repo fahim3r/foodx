@@ -29,10 +29,12 @@ import { authErrorKey } from '@/lib/errors'
 import {
   addDevSupportNote,
   checkIsDeveloper,
+  clientHealth,
   createDevClient,
   createDevLicense,
   createDevRelease,
   currentLicenseFor,
+  deriveClientAlerts,
   effectiveLicenseStatus,
   featureStateMap,
   fetchDevClientFeatures,
@@ -46,8 +48,11 @@ import {
   fetchDevReleases,
   fetchDevSupportNotes,
   fetchDevSupportTickets,
+  filterDevClients,
   generateInstanceToken,
   latestPublishedRelease,
+  LICENSE_EXPIRING_SOON_DAYS,
+  LICENSE_EXPIRING_URGENT_DAYS,
   licenseDaysLeft,
   renewDevLicense,
   setDevClientFeature,
@@ -68,6 +73,9 @@ import {
   DEV_FEATURE_KEYS,
   LICENSE_PLANS,
   type DevClient,
+  type DevClientAlert,
+  type DevClientFilters,
+  type DevClientSort,
   type DevHeartbeat,
   type DevBackupReport,
   type DevClientStatus,
@@ -160,6 +168,17 @@ function Badge({ status, label }: { status: string; label: string }) {
       {label}
     </span>
   )
+}
+
+/** Dashboard alert order: severity first (§3-Q5); within one
+ * severity the oldest condition first — except license_expiring,
+ * where the soonest expiry (fewest days left) comes first. */
+function compareAlerts(a: DevClientAlert, b: DevClientAlert): number {
+  if (a.severity !== b.severity) return a.severity - b.severity
+  if (a.kind === 'license_expiring' && b.kind === 'license_expiring') {
+    return (a.sinceDays ?? 0) - (b.sinceDays ?? 0)
+  }
+  return (b.sinceDays ?? -1) - (a.sinceDays ?? -1)
 }
 
 interface ClientFormState {
@@ -300,6 +319,19 @@ export default function DevPanelPage() {
   const [ticketNoteAddedId, setTicketNoteAddedId] = useState<string | null>(
     null,
   )
+
+  // Clients toolbar (DevPanel search + alerts)
+  const [clientQuery, setClientQuery] = useState('')
+  const [clientStatusFilter, setClientStatusFilter] =
+    useState<DevClientFilters['status']>('ALL')
+  const [clientLicenseFilter, setClientLicenseFilter] =
+    useState<DevClientFilters['license']>('ALL')
+  const [clientHealthFilter, setClientHealthFilter] =
+    useState<DevClientFilters['health']>('ALL')
+  const [clientVersionFilter, setClientVersionFilter] =
+    useState<DevClientFilters['version']>('ALL')
+  const [clientAttentionOnly, setClientAttentionOnly] = useState(false)
+  const [clientSort, setClientSort] = useState<DevClientSort>('registered')
 
   const today = useMemo(() => todayLocal(), [])
 
@@ -453,6 +485,123 @@ export default function DevPanelPage() {
         .length,
     [clients, licenses],
   )
+
+  const visibleClients = useMemo(
+    () =>
+      filterDevClients(
+        clients,
+        licenses,
+        releases,
+        clientQuery,
+        {
+          status: clientStatusFilter,
+          license: clientLicenseFilter,
+          health: clientHealthFilter,
+          version: clientVersionFilter,
+          attentionOnly: clientAttentionOnly,
+          sort: clientSort,
+        },
+        today,
+        Date.now(),
+      ),
+    [
+      clients,
+      licenses,
+      releases,
+      clientQuery,
+      clientStatusFilter,
+      clientLicenseFilter,
+      clientHealthFilter,
+      clientVersionFilter,
+      clientAttentionOnly,
+      clientSort,
+      today,
+    ],
+  )
+
+  const clientAlerts = useMemo(() => {
+    const nowMs = Date.now()
+    const all: DevClientAlert[] = []
+    for (const c of clients) {
+      all.push(
+        ...deriveClientAlerts(c, licenses, releases, tickets, today, nowMs),
+      )
+    }
+    return all.sort(compareAlerts)
+  }, [clients, licenses, releases, tickets, today])
+
+  const openTicketCount = useMemo(
+    () => tickets.filter((tk) => tk.status === 'open').length,
+    [tickets],
+  )
+
+  const resetClientFilters = (attentionOnly: boolean) => {
+    setClientQuery('')
+    setClientStatusFilter('ALL')
+    setClientLicenseFilter('ALL')
+    setClientHealthFilter('ALL')
+    setClientVersionFilter('ALL')
+    setClientSort('registered')
+    setClientAttentionOnly(attentionOnly)
+  }
+
+  // Alert click-through (§4.3): reset the toolbar so the named
+  // client is guaranteed visible, then open its detail.
+  const openClientFromAlert = (clientId: string) => {
+    resetClientFilters(false)
+    setSelectedClientId(clientId)
+    setTab('clients')
+  }
+
+  const alertReason = (a: DevClientAlert): string => {
+    switch (a.kind) {
+      case 'license_expired':
+        return t('devpanel.alertLicenseExpired')
+      case 'backup_failed':
+        return t('devpanel.alertBackupFailed')
+      case 'never_checked_in':
+        return t('devpanel.neverCheckedIn')
+      case 'checkin_stale':
+        return t('devpanel.alertCheckinStale')
+      case 'no_license':
+        return a.detail
+          ? t('devpanel.alertLicenseNotActive', {
+              status: t(`devpanel.licenseStatus_${a.detail}`),
+            })
+          : t('devpanel.alertNoLicense')
+      case 'license_expiring':
+        return t('devpanel.alertLicenseExpiring')
+      case 'backup_outdated':
+        return a.sinceDays === null
+          ? t('devpanel.noBackupYet')
+          : t('devpanel.alertBackupOutdated')
+      case 'update_pending':
+        return a.detail
+          ? t('devpanel.alertUpdatePending', { detail: a.detail })
+          : t('devpanel.updatePendingBadge')
+      default:
+        return a.kind
+    }
+  }
+
+  const alertAge = (a: DevClientAlert): string | null => {
+    if (a.sinceDays === null) return null
+    switch (a.kind) {
+      case 'license_expiring':
+        return t('devpanel.daysLeft', { count: a.sinceDays })
+      case 'never_checked_in':
+        return t('devpanel.alertRegisteredDaysAgo', {
+          count: a.sinceDays,
+        })
+      case 'license_expired':
+      case 'backup_failed':
+      case 'checkin_stale':
+      case 'backup_outdated':
+        return t('devpanel.alertDaysAgo', { count: a.sinceDays })
+      default:
+        return null
+    }
+  }
 
   // --- Handlers --------------------------------------------------------------
   // The Developer Panel authenticates against the REGISTRY project
@@ -831,7 +980,13 @@ export default function DevPanelPage() {
     { key: 'clients', label: t('devpanel.tabClients') },
     { key: 'licenses', label: t('devpanel.tabLicenses') },
     { key: 'releases', label: t('devpanel.tabReleases') },
-    { key: 'tickets', label: t('devpanel.tabTickets') },
+    {
+      key: 'tickets',
+      label:
+        openTicketCount > 0
+          ? `${t('devpanel.tabTickets')} (${openTicketCount})`
+          : t('devpanel.tabTickets'),
+    },
   ]
 
   return (
@@ -981,16 +1136,14 @@ export default function DevPanelPage() {
                   const dayMs = 24 * 60 * 60 * 1000
                   const nowMs = Date.now()
                   const fresh = clients.filter(
-                    (c) =>
-                      c.last_seen_at &&
-                      nowMs - new Date(c.last_seen_at).getTime() < dayMs,
+                    (c) => clientHealth(c, nowMs) === 'fresh',
                   ).length
                   const stale = clients.filter(
-                    (c) =>
-                      c.last_seen_at &&
-                      nowMs - new Date(c.last_seen_at).getTime() >= dayMs,
+                    (c) => clientHealth(c, nowMs) === 'stale',
                   ).length
-                  const never = clients.filter((c) => !c.last_seen_at).length
+                  const never = clients.filter(
+                    (c) => clientHealth(c, nowMs) === 'never',
+                  ).length
                   // Backup health (Phase 8 R3): from the latest
                   // report each client carries — fresh = success
                   // within 48h, stale = older success, failed =
@@ -1052,6 +1205,96 @@ export default function DevPanelPage() {
                     </div>
                   )
                 })()}
+              </CardContent>
+            </Card>
+            <Card className="sm:col-span-2 lg:col-span-4">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {t('devpanel.attentionTitle')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {clientAlerts.length === 0 && openTicketCount === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t('devpanel.attentionHealthy', {
+                      count: clients.length,
+                    })}
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {clientAlerts.slice(0, 10).map((a) => {
+                      const c = clients.find((x) => x.id === a.clientId)
+                      if (!c) return null
+                      const age = alertAge(a)
+                      const urgent =
+                        a.kind === 'license_expiring' &&
+                        a.sinceDays !== null &&
+                        a.sinceDays <= LICENSE_EXPIRING_URGENT_DAYS
+                      return (
+                        <li key={`${a.clientId}-${a.kind}`}>
+                          <button
+                            type="button"
+                            className="flex w-full flex-wrap items-baseline gap-x-2 py-2 text-left text-sm"
+                            onClick={() => openClientFromAlert(a.clientId)}
+                          >
+                            <span className="font-mono text-xs">
+                              {c.client_code}
+                            </span>
+                            <span className="font-medium">
+                              {c.restaurant_name}
+                            </span>
+                            <span>{alertReason(a)}</span>
+                            {age && (
+                              <span
+                                className={
+                                  urgent
+                                    ? 'text-xs font-semibold text-destructive'
+                                    : 'text-xs text-muted-foreground'
+                                }
+                              >
+                                {age}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      )
+                    })}
+                    {openTicketCount > 0 && (
+                      <li>
+                        <button
+                          type="button"
+                          className="flex w-full flex-wrap items-baseline gap-x-2 py-2 text-left text-sm"
+                          onClick={() => {
+                            setTicketStatusFilter('open')
+                            setTab('tickets')
+                          }}
+                        >
+                          <span className="font-medium">
+                            {t('devpanel.attentionTickets', {
+                              count: openTicketCount,
+                            })}
+                          </span>
+                        </button>
+                      </li>
+                    )}
+                    {clientAlerts.length > 10 && (
+                      <li>
+                        <button
+                          type="button"
+                          className="py-2 text-left text-sm text-muted-foreground"
+                          onClick={() => {
+                            resetClientFilters(true)
+                            setTab('clients')
+                          }}
+                        >
+                          {t('devpanel.attentionMore', {
+                            count: clientAlerts.length - 10,
+                          })}
+                        </button>
+                      </li>
+                    )}
+                  </ul>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1231,12 +1474,159 @@ export default function DevPanelPage() {
               </Card>
             )}
 
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="w-full sm:w-64">
+                  <Input
+                    placeholder={t('devpanel.searchClientsPlaceholder')}
+                    value={clientQuery}
+                    onChange={(e) => setClientQuery(e.target.value)}
+                  />
+                </div>
+                <div className="w-40">
+                  <select
+                    className={SELECT_CLASS}
+                    value={clientStatusFilter}
+                    onChange={(e) =>
+                      setClientStatusFilter(
+                        e.target.value as DevClientFilters['status'],
+                      )
+                    }
+                  >
+                    <option value="ALL">
+                      {t('devpanel.filterStatusAll')}
+                    </option>
+                    <option value="ACTIVE">
+                      {t('devpanel.clientStatus_ACTIVE')}
+                    </option>
+                    <option value="SUSPENDED">
+                      {t('devpanel.clientStatus_SUSPENDED')}
+                    </option>
+                    <option value="INACTIVE">
+                      {t('devpanel.clientStatus_INACTIVE')}
+                    </option>
+                  </select>
+                </div>
+                <div className="w-44">
+                  <select
+                    className={SELECT_CLASS}
+                    value={clientLicenseFilter}
+                    onChange={(e) =>
+                      setClientLicenseFilter(
+                        e.target.value as DevClientFilters['license'],
+                      )
+                    }
+                  >
+                    <option value="ALL">
+                      {t('devpanel.filterLicenseAll')}
+                    </option>
+                    <option value="ACTIVE">
+                      {t('devpanel.licenseStatus_ACTIVE')}
+                    </option>
+                    <option value="EXPIRING">
+                      {t('devpanel.filterLicenseExpiring')}
+                    </option>
+                    <option value="EXPIRED">{t('devpanel.expired')}</option>
+                    <option value="LIFETIME">
+                      {t('devpanel.plan_LIFETIME')}
+                    </option>
+                    <option value="NONE">{t('devpanel.noLicense')}</option>
+                  </select>
+                </div>
+                <div className="w-44">
+                  <select
+                    className={SELECT_CLASS}
+                    value={clientHealthFilter}
+                    onChange={(e) =>
+                      setClientHealthFilter(
+                        e.target.value as DevClientFilters['health'],
+                      )
+                    }
+                  >
+                    <option value="ALL">
+                      {t('devpanel.filterHealthAll')}
+                    </option>
+                    <option value="fresh">{t('devpanel.healthFresh')}</option>
+                    <option value="stale">{t('devpanel.healthStale')}</option>
+                    <option value="never">{t('devpanel.healthNever')}</option>
+                  </select>
+                </div>
+                <div className="w-40">
+                  <select
+                    className={SELECT_CLASS}
+                    value={clientVersionFilter}
+                    onChange={(e) =>
+                      setClientVersionFilter(
+                        e.target.value as DevClientFilters['version'],
+                      )
+                    }
+                  >
+                    <option value="ALL">
+                      {t('devpanel.filterVersionAll')}
+                    </option>
+                    <option value="CURRENT">
+                      {t('devpanel.filterVersionCurrent')}
+                    </option>
+                    <option value="PENDING">
+                      {t('devpanel.updatePendingBadge')}
+                    </option>
+                  </select>
+                </div>
+                <div className="w-56">
+                  <select
+                    className={SELECT_CLASS}
+                    value={clientSort}
+                    onChange={(e) =>
+                      setClientSort(e.target.value as DevClientSort)
+                    }
+                  >
+                    <option value="registered">
+                      {t('devpanel.sortRegistered')}
+                    </option>
+                    <option value="name">{t('devpanel.sortName')}</option>
+                    <option value="stalest">
+                      {t('devpanel.sortStalest')}
+                    </option>
+                    <option value="expiry">{t('devpanel.sortExpiry')}</option>
+                  </select>
+                </div>
+                <label className="flex h-9 items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={clientAttentionOnly}
+                    onChange={(e) => setClientAttentionOnly(e.target.checked)}
+                  />
+                  {t('devpanel.attentionOnly')}
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t('devpanel.showingClients', {
+                  count: visibleClients.length,
+                  total: clients.length,
+                })}
+              </p>
+            </div>
+
             <Card>
               <CardContent className="py-2">
                 {clients.length === 0 ? (
                   <p className="py-4 text-sm text-muted-foreground">
                     {t('devpanel.noClients')}
                   </p>
+                ) : visibleClients.length === 0 ? (
+                  <div className="py-4">
+                    <p className="text-sm text-muted-foreground">
+                      {t('devpanel.noClientsMatch')}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => resetClientFilters(false)}
+                    >
+                      {t('devpanel.clearFilters')}
+                    </Button>
+                  </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1264,11 +1654,15 @@ export default function DevPanelPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {clients.map((c) => {
+                        {visibleClients.map((c) => {
                           const lic = currentLicenseFor(licenses, c.id)
                           const eff = lic
                             ? effectiveLicenseStatus(lic, today)
                             : null
+                          const days = lic
+                            ? licenseDaysLeft(lic, today)
+                            : null
+                          const health = clientHealth(c, Date.now())
                           return (
                             <tr
                               key={c.id}
@@ -1304,6 +1698,18 @@ export default function DevPanelPage() {
                                     />
                                   </span>
                                 )}
+                                {health !== 'fresh' && (
+                                  <span className="ml-2">
+                                    <Badge
+                                      status="SUSPENDED"
+                                      label={
+                                        health === 'never'
+                                          ? t('devpanel.neverCheckedIn')
+                                          : t('devpanel.badgeStale')
+                                      }
+                                    />
+                                  </span>
+                                )}
                               </td>
                               <td className="py-2 pr-3">
                                 {lic && eff ? (
@@ -1316,6 +1722,17 @@ export default function DevPanelPage() {
                                     {t('devpanel.noLicense')}
                                   </span>
                                 )}
+                                {lic &&
+                                  eff === 'ACTIVE' &&
+                                  days !== null &&
+                                  days >= 0 &&
+                                  days <= LICENSE_EXPIRING_SOON_DAYS && (
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      {t('devpanel.daysLeft', {
+                                        count: days,
+                                      })}
+                                    </span>
+                                  )}
                               </td>
                               <td className="py-2 pr-3">
                                 <Badge

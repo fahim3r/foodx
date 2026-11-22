@@ -1192,6 +1192,53 @@ export interface DevSupportTicket {
   updated_at: string
 }
 
+/** DevPanel needs-attention alert kinds (DevPanel search + alerts).
+ * Derived client-side from registry rows — never stored. The order
+ * of the union mirrors the severity order in the service. */
+export type DevAlertKind =
+  | 'license_expired'
+  | 'backup_failed'
+  | 'never_checked_in'
+  | 'checkin_stale'
+  | 'no_license'
+  | 'license_expiring'
+  | 'backup_outdated'
+  | 'update_pending'
+
+/** One derived alert naming one client (DevPanel search + alerts). */
+export interface DevClientAlert {
+  clientId: string
+  kind: DevAlertKind
+  /** §3-Q5 order; lower = more urgent. */
+  severity: number
+  /** Age of the condition in whole days, when an age applies. For
+   * license_expiring this carries the days LEFT instead (the row
+   * renders it with the days-left wording). */
+  sinceDays: number | null
+  /** Extra for the row text, e.g. "1.0.0 → 1.0.1" for update_pending
+   * or the effective status for a not-active license. */
+  detail: string | null
+}
+
+/** Check-in health buckets — the Dashboard health card's 24h lines,
+ * shared by the card, the Clients Health filter and the alerts. */
+export type DevClientHealth = 'fresh' | 'stale' | 'never'
+
+/** Backup state against the §56 update gate (last success ≤ 7 days). */
+export type DevBackupGateState = 'ok' | 'failed' | 'stale' | 'never'
+
+export type DevClientSort = 'registered' | 'name' | 'stalest' | 'expiry'
+
+/** The Clients-tab toolbar state (DevPanel search + alerts). */
+export interface DevClientFilters {
+  status: 'ALL' | DevClientStatus
+  license: 'ALL' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED' | 'LIFETIME' | 'NONE'
+  health: 'ALL' | DevClientHealth
+  version: 'ALL' | 'CURRENT' | 'PENDING'
+  attentionOnly: boolean
+  sort: DevClientSort
+}
+
 
 // --- HRM (modifications v2, item 10) --------------------------------------
 

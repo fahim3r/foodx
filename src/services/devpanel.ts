@@ -18,8 +18,13 @@
 import { registrySupabase as supabase } from '@/lib/registry'
 import {
   DEV_FEATURE_KEYS,
+  type DevAlertKind,
+  type DevBackupGateState,
   type DevClient,
+  type DevClientAlert,
   type DevClientFeature,
+  type DevClientFilters,
+  type DevClientHealth,
   type DevHeartbeat,
   type DevBackupReport,
   type DevClientStatus,
@@ -345,6 +350,323 @@ export function updatePendingClients(
     }
     return compareVersions(c.version, latest.version) < 0
   })
+}
+
+// ---------------------------------------------------------------------------
+// Needs-attention derivation (DevPanel search + alerts) — pure
+// functions over rows the panel already holds in memory after
+// loadAll(); nothing in this section fetches. License logic is
+// never re-derived here: currentLicenseFor + effectiveLicenseStatus
+// + licenseDaysLeft decide, and version membership comes from
+// updatePendingClients.
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 24 * 60 * 60 * 1000
+/** §56 update gate: request-update refuses an update unless the
+ * client's last backup report is a success no older than 7 days. */
+const BACKUP_GATE_MS = 7 * DAY_MS
+/** License expiring-soon window (§3-Q6): renewal is a conversation
+ * to start before the date. Inside it, ≤ URGENT days is the urgent
+ * tier (the instance-side warning window in heartbeat.ts). */
+export const LICENSE_EXPIRING_SOON_DAYS = 30
+export const LICENSE_EXPIRING_URGENT_DAYS = 7
+
+/** Check-in health from last_seen_at — the same 24h buckets the
+ * Dashboard health card has always shown, extracted so the card,
+ * the Clients Health filter and the alerts share ONE definition
+ * and can never disagree. Boundary: exactly 24h old is stale. */
+export function clientHealth(
+  client: DevClient,
+  nowMs: number,
+): DevClientHealth {
+  if (!client.last_seen_at) return 'never'
+  return nowMs - new Date(client.last_seen_at).getTime() >= DAY_MS
+    ? 'stale'
+    : 'fresh'
+}
+
+/** Backup state against the §56 update gate, from the latest-report
+ * summary on the client row: 'failed' when the last run failed (any
+ * age — the fresher fact); else 'ok' when the last report is a
+ * success no older than the gate; else 'stale' (a success exists but
+ * is older); else 'never' (no report at all). */
+export function backupGateState(
+  client: DevClient,
+  nowMs: number,
+): DevBackupGateState {
+  if (client.last_backup_status === 'failed') return 'failed'
+  if (!client.last_backup_at) return 'never'
+  if (client.last_backup_status !== 'success') return 'never'
+  return nowMs - new Date(client.last_backup_at).getTime() <= BACKUP_GATE_MS
+    ? 'ok'
+    : 'stale'
+}
+
+const ALERT_SEVERITY: Record<DevAlertKind, number> = {
+  license_expired: 1,
+  backup_failed: 2,
+  never_checked_in: 3,
+  checkin_stale: 4,
+  no_license: 5,
+  license_expiring: 6,
+  backup_outdated: 7,
+  update_pending: 8,
+}
+
+function wholeDaysSince(fromIso: string, nowMs: number): number {
+  const ms = nowMs - new Date(fromIso).getTime()
+  return Math.max(0, Math.floor(ms / DAY_MS))
+}
+
+/** Every needs-attention alert for one client. ACTIVE clients only
+ * (§3-Q7): a suspended or inactive client's silence, lapsed license
+ * and stopped backups are the vendor's own doing, not a problem to
+ * surface. The tickets argument is accepted for symmetry with the
+ * panel's data but deliberately unused — open tickets are a
+ * panel-level summary row, not a per-client alert (§4.1). */
+export function deriveClientAlerts(
+  client: DevClient,
+  licenses: DevLicense[],
+  releases: DevRelease[],
+  _tickets: DevSupportTicket[],
+  today: string,
+  nowMs: number,
+): DevClientAlert[] {
+  if (client.status !== 'ACTIVE') return []
+  const alerts: DevClientAlert[] = []
+  const push = (
+    kind: DevAlertKind,
+    sinceDays: number | null,
+    detail: string | null = null,
+  ) => {
+    alerts.push({
+      clientId: client.id,
+      kind,
+      severity: ALERT_SEVERITY[kind],
+      sinceDays,
+      detail,
+    })
+  }
+
+  const lic = currentLicenseFor(licenses, client.id)
+  const eff = lic ? effectiveLicenseStatus(lic, today) : null
+  const daysLeft = lic ? licenseDaysLeft(lic, today) : null
+
+  // 1 — current license expired while the client is still ACTIVE.
+  if (eff === 'EXPIRED') {
+    push(
+      'license_expired',
+      daysLeft !== null ? Math.abs(daysLeft) : null,
+      lic ? lic.license_key : null,
+    )
+  }
+  // 2 — the last backup run failed, however long ago.
+  if (client.last_backup_status === 'failed') {
+    push(
+      'backup_failed',
+      client.last_backup_at
+        ? wholeDaysSince(client.last_backup_at, nowMs)
+        : null,
+    )
+  }
+  // 3 / 4 — check-in health (never, or stale past the 24h line).
+  const health = clientHealth(client, nowMs)
+  if (health === 'never') {
+    push('never_checked_in', wholeDaysSince(client.created_at, nowMs))
+  } else if (health === 'stale' && client.last_seen_at) {
+    push('checkin_stale', wholeDaysSince(client.last_seen_at, nowMs))
+  }
+  // 5 — no usable license: none at all, or a current license that
+  // is not ACTIVE (PENDING — issued but activation never completed —
+  // or SUSPENDED on an active client, §4.4). EXPIRED is alert 1.
+  if (!lic) {
+    push('no_license', null)
+  } else if (eff !== null && eff !== 'ACTIVE' && eff !== 'EXPIRED') {
+    push('no_license', null, eff)
+  }
+  // 6 — ACTIVE license expiring inside the 30-day window
+  // (sinceDays carries the days LEFT for this kind).
+  if (
+    eff === 'ACTIVE' &&
+    daysLeft !== null &&
+    daysLeft >= 0 &&
+    daysLeft <= LICENSE_EXPIRING_SOON_DAYS
+  ) {
+    push('license_expiring', daysLeft, lic ? lic.license_key : null)
+  }
+  // 7 — the client would fail the §56 update gate today: last
+  // success older than 7 days, or no backup ever reported. When
+  // the last run FAILED, alert 2 already carries the fresher fact
+  // and the summary row cannot date the last success, so this
+  // alert fires only for the stale / never gate states.
+  const gate = backupGateState(client, nowMs)
+  if (gate === 'stale') {
+    push(
+      'backup_outdated',
+      client.last_backup_at
+        ? wholeDaysSince(client.last_backup_at, nowMs)
+        : null,
+    )
+  } else if (gate === 'never') {
+    push('backup_outdated', null)
+  }
+  // 8 — registered version behind the latest published release.
+  if (updatePendingClients([client], releases).length > 0) {
+    const latest = latestPublishedRelease(releases)
+    push(
+      'update_pending',
+      null,
+      latest && client.version
+        ? `${client.version} → ${latest.version}`
+        : null,
+    )
+  }
+  return alerts
+}
+
+/** Search + filter + sort for the Clients tab (§3-Q1/Q2/Q3) as one
+ * pure function, so the matching rules live in one place. Search
+ * is case-insensitive substring over name, code, domain, owner,
+ * email and the key of ANY license the client has held (a vendor
+ * searching from a renewal email may hold a RENEWED row's key).
+ * Filters compose with the search (AND). License filter buckets:
+ * LIFETIME = current license is a lifetime plan and in force;
+ * EXPIRING = ACTIVE with ≤ 30 days left; ACTIVE = in force and in
+ * neither of those two; NONE = no current license at all (a PENDING
+ * or SUSPENDED license matches only All). Version CURRENT = a
+ * version is registered and no update is pending. */
+export function filterDevClients(
+  clients: DevClient[],
+  licenses: DevLicense[],
+  releases: DevRelease[],
+  query: string,
+  filters: DevClientFilters,
+  today: string,
+  nowMs: number,
+): DevClient[] {
+  const q = query.trim().toLowerCase()
+  const pendingIds = new Set(
+    updatePendingClients(clients, releases).map((c) => c.id),
+  )
+  const rows = clients.filter((c) => {
+    if (filters.status !== 'ALL' && c.status !== filters.status) {
+      return false
+    }
+    if (q) {
+      const ownKeys: (string | null)[] = [
+        c.restaurant_name,
+        c.client_code,
+        c.domain,
+        c.owner_name,
+        c.contact_email,
+      ]
+      const matchesOwn = ownKeys.some(
+        (v) => v !== null && v.toLowerCase().includes(q),
+      )
+      const matchesKey = licenses.some(
+        (l) =>
+          l.client_id === c.id && l.license_key.toLowerCase().includes(q),
+      )
+      if (!matchesOwn && !matchesKey) return false
+    }
+    if (filters.license !== 'ALL') {
+      const lic = currentLicenseFor(licenses, c.id)
+      const eff = lic ? effectiveLicenseStatus(lic, today) : null
+      const daysLeft = lic ? licenseDaysLeft(lic, today) : null
+      switch (filters.license) {
+        case 'NONE':
+          if (lic !== null) return false
+          break
+        case 'EXPIRED':
+          if (eff !== 'EXPIRED') return false
+          break
+        case 'LIFETIME':
+          if (!lic || lic.plan !== 'LIFETIME' || eff !== 'ACTIVE') {
+            return false
+          }
+          break
+        case 'EXPIRING':
+          if (
+            eff !== 'ACTIVE' ||
+            daysLeft === null ||
+            daysLeft < 0 ||
+            daysLeft > LICENSE_EXPIRING_SOON_DAYS
+          ) {
+            return false
+          }
+          break
+        case 'ACTIVE':
+          if (
+            eff !== 'ACTIVE' ||
+            (lic !== null && lic.plan === 'LIFETIME') ||
+            (daysLeft !== null &&
+              daysLeft >= 0 &&
+              daysLeft <= LICENSE_EXPIRING_SOON_DAYS)
+          ) {
+            return false
+          }
+          break
+      }
+    }
+    if (
+      filters.health !== 'ALL' &&
+      clientHealth(c, nowMs) !== filters.health
+    ) {
+      return false
+    }
+    if (filters.version === 'PENDING' && !pendingIds.has(c.id)) {
+      return false
+    }
+    if (
+      filters.version === 'CURRENT' &&
+      (!c.version || pendingIds.has(c.id))
+    ) {
+      return false
+    }
+    if (
+      filters.attentionOnly &&
+      deriveClientAlerts(c, licenses, releases, [], today, nowMs)
+        .length === 0
+    ) {
+      return false
+    }
+    return true
+  })
+  switch (filters.sort) {
+    case 'name':
+      rows.sort((a, b) => a.restaurant_name.localeCompare(b.restaurant_name))
+      break
+    case 'stalest':
+      // Never checked in first, then the oldest last_seen_at.
+      rows.sort((a, b) => {
+        const ta = a.last_seen_at
+          ? new Date(a.last_seen_at).getTime()
+          : Number.NEGATIVE_INFINITY
+        const tb = b.last_seen_at
+          ? new Date(b.last_seen_at).getTime()
+          : Number.NEGATIVE_INFINITY
+        return ta - tb
+      })
+      break
+    case 'expiry':
+      // Expired first, then fewest days left; LIFETIME / no
+      // license (daysLeft null) last.
+      rows.sort((a, b) => {
+        const la = currentLicenseFor(licenses, a.id)
+        const lb = currentLicenseFor(licenses, b.id)
+        const da = la ? licenseDaysLeft(la, today) : null
+        const db = lb ? licenseDaysLeft(lb, today) : null
+        const ka = da === null ? Number.POSITIVE_INFINITY : da
+        const kb = db === null ? Number.POSITIVE_INFINITY : db
+        return ka - kb
+      })
+      break
+    default:
+      // 'registered' — fetchDevClients already orders created_at
+      // ascending; leave the filtered order untouched.
+      break
+  }
+  return rows
 }
 
 // ---------------------------------------------------------------------------
