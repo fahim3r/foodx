@@ -21,6 +21,7 @@ import {
   ChefHat,
   ClipboardList,
   LayoutDashboard,
+  Layers,
   LogOut,
   Maximize,
   Menu,
@@ -395,6 +396,27 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
     '--sidebar-primary': settings?.primary_color ?? '#ea580c',
   } as CSSProperties
 
+  // Glass theme: its backdrop gradient is painted on the root element
+  // (see the `.glass` block in index.css), which the layout-root inline
+  // variables above cannot reach — so the same branding colours are
+  // also published on <html> while the panel is mounted. The CSS
+  // fallbacks cover screens where this layout never mounts (login).
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty(
+      '--brand-primary',
+      settings?.primary_color ?? '#ea580c',
+    )
+    root.style.setProperty(
+      '--brand-secondary',
+      settings?.secondary_color ?? '#16a34a',
+    )
+    return () => {
+      root.style.removeProperty('--brand-primary')
+      root.style.removeProperty('--brand-secondary')
+    }
+  }, [settings?.primary_color, settings?.secondary_color])
+
   const handleSignOut = async () => {
     setSigningOut(true)
     try {
@@ -454,6 +476,8 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
               <Moon className="size-5" />
             ) : themeMode === 'light' ? (
               <Sun className="size-5" />
+            ) : themeMode === 'glass' ? (
+              <Layers className="size-5" />
             ) : (
               <Monitor className="size-5" />
             )}

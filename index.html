@@ -19,7 +19,9 @@
     <script>
       try {
         var m = localStorage.getItem('foodx.theme') || 'system'
-        if (
+        if (m === 'glass') {
+          document.documentElement.classList.add('dark', 'glass')
+        } else if (
           m === 'dark' ||
           (m === 'system' &&
             window.matchMedia('(prefers-color-scheme: dark)').matches)

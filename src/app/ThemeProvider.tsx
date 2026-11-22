@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react'
 
-export type ThemeMode = 'light' | 'dark' | 'system'
+export type ThemeMode = 'light' | 'dark' | 'system' | 'glass'
 export type ResolvedTheme = 'light' | 'dark'
 
 export interface ThemeContextValue {
@@ -23,7 +23,10 @@ const STORAGE_KEY = 'foodx.theme'
 function readStoredMode(): ThemeMode {
   try {
     const value = localStorage.getItem(STORAGE_KEY)
-    return value === 'light' || value === 'dark' || value === 'system'
+    return value === 'light' ||
+      value === 'dark' ||
+      value === 'system' ||
+      value === 'glass'
       ? value
       : 'system'
   } catch {
@@ -46,6 +49,14 @@ function systemPrefersDark(): boolean {
  * existed in index.css since the start; this provider is the switch
  * that finally applies it. An inline script in index.html applies
  * the stored mode before first paint so dark devices never flash.
+ *
+ * Glass (2026-11-22) is a fourth mode: its own appearance, not a
+ * system variant. It resolves to the dark token set (it is a
+ * dark-leaning look) and additionally applies a `.glass` class,
+ * which is what the glass layer in index.css keys off. Glass is
+ * chosen from Settings → Appearance; the header cycle keeps its
+ * original light → dark → system rotation and leaves glass for
+ * the labelled control, like the other labelled settings.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(readStoredMode)
@@ -60,11 +71,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const resolved: ResolvedTheme =
-    mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
+    mode === 'glass'
+      ? 'dark'
+      : mode === 'system'
+        ? systemDark
+          ? 'dark'
+          : 'light'
+        : mode
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', resolved === 'dark')
-  }, [resolved])
+    const root = document.documentElement
+    root.classList.toggle('dark', resolved === 'dark')
+    root.classList.toggle('glass', mode === 'glass')
+  }, [mode, resolved])
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next)

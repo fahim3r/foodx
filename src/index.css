@@ -138,3 +138,78 @@
 html.easy-mode {
   font-size: 112.5%;
 }
+
+/* Glass theme (2026-11-22): a fourth appearance — premium, calm
+   glassmorphism. The `.glass` class sits on <html> alongside `.dark`
+   (glass resolves to the dark token set), so this block only
+   re-paints the surface variables as translucent and paints a
+   brand-tinted backdrop on the root element itself, which propagates
+   to the canvas behind everything. The tint derives from the
+   restaurant's own branding: AppLayout publishes --brand-primary /
+   --brand-secondary on the root element; the fallbacks here are the
+   FoodX defaults (brand orange / green). Light, dark and system
+   never carry the `.glass` class, so their rules are untouched. */
+.glass {
+  --background: transparent;
+  --card: oklch(0.21 0.006 285.885 / 55%);
+  --popover: oklch(0.21 0.006 285.885 / 80%);
+  --secondary: oklch(0.274 0.006 286.033 / 55%);
+  --muted: oklch(0.274 0.006 286.033 / 55%);
+  --accent: oklch(0.274 0.006 286.033 / 55%);
+  --border: oklch(1 0 0 / 16%);
+  --input: oklch(1 0 0 / 18%);
+  --sidebar: oklch(0.19 0.006 285.885 / 55%);
+  --sidebar-accent: oklch(0.274 0.006 286.033 / 55%);
+  --sidebar-border: oklch(1 0 0 / 14%);
+  background-color: #0a0a0f;
+  background-image:
+    radial-gradient(
+      1100px 750px at 88% -10%,
+      color-mix(in oklab, var(--brand-secondary, #16a34a) 30%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      950px 700px at -12% 108%,
+      color-mix(in oklab, var(--brand-primary, #ea580c) 34%, transparent),
+      transparent 58%
+    ),
+    linear-gradient(
+      155deg,
+      color-mix(in oklab, var(--brand-primary, #ea580c) 20%, #0a0a0f),
+      color-mix(in oklab, var(--brand-secondary, #16a34a) 12%, #0a0a0f) 58%,
+      #0a0a0f
+    );
+  background-attachment: fixed;
+}
+
+/* Frosted major surfaces: cards, popovers/menus and the sidebar get
+   the blur — capped radius, major surfaces only, so small elements
+   keep plain translucent fills and low-end devices stay smooth.
+   (The topbar already carries Tailwind's own backdrop-blur.) */
+.glass .bg-card,
+.glass .bg-popover,
+.glass .bg-sidebar {
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  backdrop-filter: blur(14px) saturate(1.5);
+}
+
+.glass [data-slot='card'] {
+  box-shadow: 0 10px 34px rgb(0 0 0 / 28%);
+}
+
+/* No backdrop-filter support: surfaces fall back to the dark theme's
+   solid values (the tinted backdrop still frames the page). */
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  .glass {
+    --background: oklch(0.141 0.005 285.823);
+    --card: oklch(0.21 0.006 285.885);
+    --popover: oklch(0.21 0.006 285.885);
+    --secondary: oklch(0.274 0.006 286.033);
+    --muted: oklch(0.274 0.006 286.033);
+    --accent: oklch(0.274 0.006 286.033);
+    --sidebar: oklch(0.21 0.006 285.885);
+    --sidebar-accent: oklch(0.274 0.006 286.033);
+  }
+}
