@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Mic } from 'lucide-react'
 import EasyHelpLine from '@/components/EasyHelpLine'
+import LiveOrdersCarousel from '@/modules/pos/LiveOrdersCarousel'
 import { isMissingTableError, isNetworkError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
@@ -253,6 +254,10 @@ export default function PosPage() {
     licenseView.reason === 'suspended'
 
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null)
+  // Live-order carousel refresh signal: bumped whenever this page
+  // places or pays an order, so the strip re-reads at once instead
+  // of waiting for its 30 s poll.
+  const [carouselSignal, setCarouselSignal] = useState(0)
   const [placedLines, setPlacedLines] = useState<PricedLine[]>([])
   const [payments, setPayments] = useState<OrderPayment[]>([])
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
@@ -291,6 +296,13 @@ export default function PosPage() {
       branches.find((branch) => branch.is_main) ?? branches[0] ?? null,
     [branches],
   )
+
+  // Table id → name for the live-order carousel's card labels.
+  const tableNames = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {}
+    for (const table of tables) map[table.id] = table.name
+    return map
+  }, [tables])
 
   // Load the catalog, tables and branches for this restaurant.
   useEffect(() => {
@@ -798,6 +810,7 @@ export default function PosPage() {
 
   const resetForNewOrder = () => {
     setPlacedOrder(null)
+    setCarouselSignal((n) => n + 1)
     setAutoPrintBlocked(false)
     setQueuedOrder(null)
     setPlacedLines([])
@@ -1008,6 +1021,7 @@ export default function PosPage() {
       })
       setPlacedLines(previewLines)
       setPlacedOrder(order)
+      setCarouselSignal((n) => n + 1)
       void autoPrintPlaced(order)
       setCart([])
       setDiscount(0)
@@ -1042,10 +1056,12 @@ export default function PosPage() {
     }
   }
 
-  const handlePrintReceipt = async () => {
-    if (!placedOrder || !restaurant) return
+  // Receipt print for any order — the placed-order card's Print
+  // button and the live carousel's one-click payment share it.
+  const printReceiptForOrder = async (target: Order) => {
+    if (!restaurant) return
     try {
-      const detail = await fetchOrderDetail(placedOrder.id)
+      const detail = await fetchOrderDetail(target.id)
       const branch =
         branches.find((b) => b.id === detail.branch_id) ?? defaultBranch
       const table = tables.find((tb) => tb.id === detail.table_id)
@@ -1087,6 +1103,11 @@ export default function PosPage() {
     }
   }
 
+  const handlePrintReceipt = async () => {
+    if (!placedOrder) return
+    await printReceiptForOrder(placedOrder)
+  }
+
   const handleRecordPayment = async (event: FormEvent) => {
     event.preventDefault()
     if (!user || !placedOrder) return
@@ -1111,6 +1132,7 @@ export default function PosPage() {
       setPaymentReference('')
       setPaymentRecorded(true)
       setPaymentAttemptId(crypto.randomUUID())
+      setCarouselSignal((n) => n + 1)
     } catch (error) {
       console.error('[POS] record payment failed', error)
       const message = error instanceof Error ? error.message : ''
@@ -1151,6 +1173,7 @@ export default function PosPage() {
       setPaymentReference('')
       setPaymentRecorded(true)
       setPaymentAttemptId(crypto.randomUUID())
+      setCarouselSignal((n) => n + 1)
     } catch (error) {
       console.error('[POS] easy paid-in-full failed', error)
       setPaymentErrorKey('pos.paymentFailed')
@@ -1937,6 +1960,17 @@ export default function PosPage() {
           )}
         </div>
       </header>
+
+      {restaurant && user && (
+        <LiveOrdersCarousel
+          restaurantId={restaurant.id}
+          userId={user.id}
+          currency={currency}
+          tableNames={tableNames}
+          refreshSignal={carouselSignal}
+          onPrintReceipt={printReceiptForOrder}
+        />
+      )}
 
       {queueOpen && (
         <Card>

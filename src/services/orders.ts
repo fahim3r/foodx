@@ -450,3 +450,33 @@ export async function fetchOpenOrderCounts(
   }
   return counts
 }
+
+export interface OpenOrdersResult {
+  orders: Order[]
+  /** How many more open orders exist beyond the returned cap. */
+  extraCount: number
+}
+
+/**
+ * The POS live-order carousel's read: every open order for the
+ * restaurant (all types), newest first, capped at `limit` (20 by
+ * default). The exact count rides along so the carousel can show a
+ * "+N more" tail card without a second query. Deliberately NOT
+ * day-bound — an order left open overnight is still live work.
+ */
+export async function fetchOpenOrders(
+  restaurantId: string,
+  limit = 20,
+): Promise<OpenOrdersResult> {
+  const { data, error, count } = await supabase
+    .from('orders')
+    .select('*', { count: 'exact' })
+    .eq('restaurant_id', restaurantId)
+    .in('status', OPEN_ORDER_STATUSES)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  const orders = (data ?? []) as Order[]
+  const total = count ?? orders.length
+  return { orders, extraCount: Math.max(0, total - orders.length) }
+}
