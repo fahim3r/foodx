@@ -538,7 +538,13 @@ export interface Supplier {
   updated_at: string
 }
 
-export type PurchaseOrderStatus = 'DRAFT' | 'ORDERED' | 'RECEIVED' | 'CANCELLED'
+export type PurchaseOrderStatus =
+  | 'DRAFT'
+  | 'ORDERED'
+  | 'PARTIALLY_RECEIVED'
+  | 'RECEIVED'
+  | 'CLOSED'
+  | 'CANCELLED'
 
 export interface PurchaseOrder {
   id: string
@@ -547,6 +553,10 @@ export interface PurchaseOrder {
   status: PurchaseOrderStatus
   order_date: string
   total_amount: number
+  /** Money value of what has actually arrived (migration 0035):
+   * Σ received_quantity × unit_cost, maintained by the receive
+   * service. Equals total_amount exactly on a RECEIVED order. */
+  received_amount: number
   notes: string | null
   created_at: string
   updated_at: string
@@ -573,15 +583,21 @@ export interface PurchaseOrderWithDetails extends PurchaseOrder {
   items: PurchaseOrderItemWithItem[]
 }
 
-/** Purchase-order state machine. RECEIVED is final; CANCELLED only from
- * DRAFT or ORDERED. Enforced by the purchases service. */
+/** Purchase-order state machine. RECEIVED, CLOSED and CANCELLED are
+ * final; CANCELLED only from DRAFT or ORDERED (a PO with goods in is
+ * ended by closing the remainder, never cancelled). The receive
+ * service derives PARTIALLY_RECEIVED / RECEIVED from the lines; this
+ * table guards advancePurchaseOrderStatus. Enforced by the purchases
+ * service. */
 export const PURCHASE_ORDER_TRANSITIONS: Record<
   PurchaseOrderStatus,
   PurchaseOrderStatus[]
 > = {
   DRAFT: ['ORDERED', 'CANCELLED'],
-  ORDERED: ['RECEIVED', 'CANCELLED'],
+  ORDERED: ['PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'],
+  PARTIALLY_RECEIVED: ['RECEIVED', 'CLOSED'],
   RECEIVED: [],
+  CLOSED: [],
   CANCELLED: [],
 }
 

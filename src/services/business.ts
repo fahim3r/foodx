@@ -456,13 +456,14 @@ export async function fetchDayTotals(
 
   const { data: pos, error: poError } = await supabase
     .from('purchase_orders')
-    .select('total_amount')
+    .select('received_amount')
     .eq('restaurant_id', restaurantId)
-    .eq('status', 'RECEIVED')
+    .in('status', ['RECEIVED', 'PARTIALLY_RECEIVED', 'CLOSED'])
     .eq('order_date', date)
   if (poError) throw poError
   const purchases = (pos ?? []).reduce(
-    (sum, p) => sum + Number((p as { total_amount: number }).total_amount),
+    (sum, p) =>
+      sum + Number((p as { received_amount: number }).received_amount),
     0,
   )
 
@@ -622,14 +623,15 @@ export async function fetchProfitLoss(
 
   const { data: pos, error: poError } = await supabase
     .from('purchase_orders')
-    .select('total_amount')
+    .select('received_amount')
     .eq('restaurant_id', restaurantId)
-    .eq('status', 'RECEIVED')
+    .in('status', ['RECEIVED', 'PARTIALLY_RECEIVED', 'CLOSED'])
     .gte('order_date', range.fromDate)
     .lte('order_date', range.toDate)
   if (poError) throw poError
   const purchases = (pos ?? []).reduce(
-    (sum, p) => sum + Number((p as { total_amount: number }).total_amount),
+    (sum, p) =>
+      sum + Number((p as { received_amount: number }).received_amount),
     0,
   )
 
@@ -961,18 +963,19 @@ export interface SupplierPayableRow {
 }
 
 /**
- * What the restaurant owes suppliers on paper: RECEIVED purchase
- * totals. Supplier payment recording is not built yet, so nothing is
- * subtracted — the UI labels this honestly.
+ * What the restaurant owes suppliers on paper: the RECEIVED value
+ * of purchase orders (received_amount — the portion that actually
+ * arrived, in full or in part; migration 0035). Supplier payments
+ * are subtracted by fetchSupplierBalances, not here.
  */
 export async function fetchSupplierPayables(
   restaurantId: string,
 ): Promise<SupplierPayableRow[]> {
   const { data: pos, error: poError } = await supabase
     .from('purchase_orders')
-    .select('supplier_id, total_amount')
+    .select('supplier_id, received_amount')
     .eq('restaurant_id', restaurantId)
-    .eq('status', 'RECEIVED')
+    .in('status', ['RECEIVED', 'PARTIALLY_RECEIVED', 'CLOSED'])
   if (poError) throw poError
   const { data: suppliers, error: supError } = await supabase
     .from('suppliers')
@@ -988,10 +991,10 @@ export async function fetchSupplierPayables(
   const bySupplier = new Map<string, { total: number; count: number }>()
   for (const po of (pos ?? []) as {
     supplier_id: string
-    total_amount: number
+    received_amount: number
   }[]) {
     const entry = bySupplier.get(po.supplier_id) ?? { total: 0, count: 0 }
-    entry.total += Number(po.total_amount)
+    entry.total += Number(po.received_amount)
     entry.count += 1
     bySupplier.set(po.supplier_id, entry)
   }
@@ -1503,7 +1506,7 @@ export async function fetchPurchaseReport(
 ): Promise<PurchaseReportRow[]> {
   const { data, error } = await supabase
     .from('purchase_orders')
-    .select('supplier_id, status, total_amount')
+    .select('supplier_id, status, total_amount, received_amount')
     .eq('restaurant_id', restaurantId)
     .gte('order_date', range.fromDate)
     .lte('order_date', range.toDate)
@@ -1522,6 +1525,7 @@ export async function fetchPurchaseReport(
     supplier_id: string
     status: string
     total_amount: number
+    received_amount: number
   }[]) {
     const key = `${po.supplier_id}|${po.status}`
     const entry = byKey.get(key) ?? {
@@ -1532,7 +1536,15 @@ export async function fetchPurchaseReport(
       total: 0,
     }
     entry.orders += 1
-    entry.total += Number(po.total_amount)
+    // For the received-ish statuses the money that counts is what
+    // actually arrived (received_amount); for DRAFT / ORDERED /
+    // CANCELLED the row reports the ordered value, as before.
+    entry.total +=
+      po.status === 'RECEIVED' ||
+      po.status === 'PARTIALLY_RECEIVED' ||
+      po.status === 'CLOSED'
+        ? Number(po.received_amount)
+        : Number(po.total_amount)
     byKey.set(key, entry)
   }
   return [...byKey.values()]

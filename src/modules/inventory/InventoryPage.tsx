@@ -6,8 +6,10 @@
 // purchase receipt / sale). The item form has NO quantity field, and
 // the service excludes current_quantity from updates. Every movement
 // needs a reason where the user causes it (adjust / waste).
-// Receiving a purchase order is FULL receipt only — partial receiving
-// is not implemented and the page says so.
+// A purchase order is received in full or in parts, as deliveries
+// arrive (migration 0035): the PO detail panel is the receiving
+// desk, and after every receipt the detail, the list, the items
+// and the supplier balances are all re-fetched — never stale.
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import EasyHelpLine from '@/components/EasyHelpLine'
@@ -36,12 +38,16 @@ import { fetchBranches, type Branch } from '@/services/restaurant'
 import { fetchProducts } from '@/services/menu'
 import {
   advancePurchaseOrderStatus,
+  closePurchaseOrderRemainder,
   createPurchaseOrder,
   deletePurchaseOrder,
   fetchPurchaseOrderDetail,
+  fetchPurchaseOrderReceipts,
   fetchPurchaseOrders,
   receivePurchaseOrder,
+  receivePurchaseOrderLines,
   type PurchaseOrderLineInput,
+  type PurchaseOrderReceipt,
 } from '@/services/purchases'
 import {
   addRecipeLine,
@@ -127,7 +133,9 @@ const MOVEMENT_TYPE_KEYS: Record<StockMovementType, string> = {
 const PO_STATUS_KEYS: Record<PurchaseOrder['status'], string> = {
   DRAFT: 'inventory.statusDraft',
   ORDERED: 'inventory.statusOrdered',
+  PARTIALLY_RECEIVED: 'inventory.statusPartiallyReceived',
   RECEIVED: 'inventory.statusReceived',
+  CLOSED: 'inventory.statusClosed',
   CANCELLED: 'inventory.statusCancelled',
 }
 
@@ -256,10 +264,19 @@ export default function InventoryPage() {
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null)
   const [selectedPo, setSelectedPo] =
     useState<PurchaseOrderWithDetails | null>(null)
-  const [poConfirm, setPoConfirm] = useState<'receive' | 'cancel' | null>(
-    null,
-  )
+  const [poConfirm, setPoConfirm] = useState<
+    'receive' | 'receiveLines' | 'cancel' | 'close' | null
+  >(null)
   const [poActionDone, setPoActionDone] = useState<string | null>(null)
+  // Per-line "receive now" quantities for the open PO detail, keyed
+  // by purchase_order_items id; an untouched line falls back to its
+  // remaining quantity at render time.
+  const [poReceiveQtys, setPoReceiveQtys] = useState<
+    Record<string, string>
+  >({})
+  const [poReceipts, setPoReceipts] = useState<PurchaseOrderReceipt[]>(
+    [],
+  )
 
   // --- loading ------------------------------------------------------------------
   useEffect(() => {
@@ -829,11 +846,46 @@ export default function InventoryPage() {
     setPoConfirm(null)
     setPoActionDone(null)
     setPoError(null)
+    setPoReceiveQtys({})
     try {
       setSelectedPo(await fetchPurchaseOrderDetail(poId))
+      setPoReceipts(await fetchPurchaseOrderReceipts(poId))
     } catch (error) {
       console.error('[Inventory] load purchase order failed', error)
       setPoError('inventory.loadFailed')
+    }
+  }
+
+  // After EVERY PO change (receipt, close, status move): re-fetch
+  // the open detail, the PO list, the items, the suppliers and the
+  // balances, plus the receipt history — the numbers on screen are
+  // the database's numbers, without re-clicking anything (the
+  // detail panel used to keep showing the pre-receive snapshot;
+  // audit problem 9 / design §2.6).
+  const refreshAfterPoChange = async () => {
+    await reloadPurchaseOrders()
+    await reloadItems()
+    if (restaurantId) setSuppliers(await fetchSuppliers(restaurantId))
+    await loadSupplierPayments()
+    if (selectedPoId) {
+      setPoReceipts(await fetchPurchaseOrderReceipts(selectedPoId))
+    }
+    setPoReceiveQtys({})
+  }
+
+  const poErrorKey = (error: unknown): string => {
+    const message = error instanceof Error ? error.message : ''
+    switch (message) {
+      case 'invalid_transition':
+        return 'inventory.invalidTransition'
+      case 'over_receipt':
+        return 'inventory.overReceipt'
+      case 'invalid_quantity':
+        return 'inventory.invalidReceiveQuantity'
+      case 'empty_receipt':
+        return 'inventory.receiveEmpty'
+      default:
+        return 'inventory.saveFailed'
     }
   }
 
@@ -852,24 +904,72 @@ export default function InventoryPage() {
       }
       setPoActionDone(doneKey)
       setPoConfirm(null)
-      await reloadPurchaseOrders()
-      await reloadItems()
-      if (to === 'RECEIVED') {
-        // A receive changes what the restaurant owes its supplier:
-        // refresh the suppliers list and the balances ledger too, or
-        // both keep showing the pre-receive figures until a manual
-        // reload (audit wave 3 — the stored data was always right).
-        if (restaurantId) setSuppliers(await fetchSuppliers(restaurantId))
-        await loadSupplierPayments()
-      }
+      await refreshAfterPoChange()
     } catch (error) {
       console.error('[Inventory] purchase order action failed', error)
-      const message = error instanceof Error ? error.message : ''
-      setPoError(
-        message === 'invalid_transition'
-          ? 'inventory.invalidTransition'
-          : 'inventory.saveFailed',
+      setPoError(poErrorKey(error))
+    }
+  }
+
+  // The quantities typed into the detail's "receive now" inputs
+  // (an untouched line counts as its full remaining quantity).
+  const typedReceiveLines = () => {
+    if (!selectedPo) return []
+    return selectedPo.items.map((line) => {
+      const remaining =
+        Number(line.quantity) - Number(line.received_quantity)
+      const raw = poReceiveQtys[line.id]
+      const quantity = raw === undefined ? remaining : Number(raw)
+      return { line, remaining, quantity }
+    })
+  }
+
+  const handleReceiveLines = async () => {
+    if (!selectedPo) return
+    setPoError(null)
+    setPoActionDone(null)
+    const typed = typedReceiveLines()
+    if (typed.some(({ quantity, remaining }) => quantity > remaining)) {
+      setPoError('inventory.overReceipt')
+      return
+    }
+    const lines = typed
+      .filter(({ quantity }) => Number.isFinite(quantity) && quantity > 0)
+      .map(({ line, quantity }) => ({
+        purchaseOrderItemId: line.id,
+        quantity,
+      }))
+    if (lines.length === 0) {
+      setPoError('inventory.receiveEmpty')
+      return
+    }
+    try {
+      const updated = await receivePurchaseOrderLines(selectedPo, lines)
+      setPoActionDone(
+        updated.status === 'RECEIVED'
+          ? 'inventory.received'
+          : 'inventory.receivedPartiallyDone',
       )
+      setPoConfirm(null)
+      await refreshAfterPoChange()
+    } catch (error) {
+      console.error('[Inventory] partial receive failed', error)
+      setPoError(poErrorKey(error))
+    }
+  }
+
+  const handleCloseRemainder = async () => {
+    if (!selectedPo) return
+    setPoError(null)
+    setPoActionDone(null)
+    try {
+      await closePurchaseOrderRemainder(selectedPo)
+      setPoActionDone('inventory.closedDone')
+      setPoConfirm(null)
+      await refreshAfterPoChange()
+    } catch (error) {
+      console.error('[Inventory] close remainder failed', error)
+      setPoError(poErrorKey(error))
     }
   }
 
@@ -1950,9 +2050,6 @@ export default function InventoryPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t('inventory.addPurchaseOrder')}</CardTitle>
-              <CardDescription>
-                {t('inventory.receivePartialNotImplemented')}
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleCreatePo} className="flex flex-col gap-4">
@@ -2108,30 +2205,116 @@ export default function InventoryPage() {
                           <span className="font-medium">
                             {formatMoney(Number(order.total_amount), currency)}
                           </span>
+                          {(order.status === 'PARTIALLY_RECEIVED' ||
+                            order.status === 'CLOSED') && (
+                            <span className="text-muted-foreground">
+                              {t('inventory.receivedAmountLabel', {
+                                amount: formatMoney(
+                                  Number(order.received_amount),
+                                  currency,
+                                ),
+                              })}
+                            </span>
+                          )}
                         </span>
                       </button>
                       {selectedPoId === order.id && selectedPo && (
                         <span className="mt-2 flex flex-col gap-3 rounded-md border p-3">
+                          <span className="flex flex-col gap-2">
+                            {selectedPo.items.map((line) => {
+                              const remaining =
+                                Number(line.quantity) -
+                                Number(line.received_quantity)
+                              const receivable =
+                                (selectedPo.status === 'ORDERED' ||
+                                  selectedPo.status ===
+                                    'PARTIALLY_RECEIVED') &&
+                                remaining > 0
+                              return (
+                                <span
+                                  key={line.id}
+                                  className="flex flex-col gap-1"
+                                >
+                                  <span className="flex flex-wrap justify-between gap-2">
+                                    <span>
+                                      {line.item_name} ({line.item_unit})
+                                    </span>
+                                    <span>
+                                      {t('inventory.quantity')}:{' '}
+                                      {formatQty(Number(line.quantity))}
+                                      {' · '}
+                                      {t('inventory.receivedQuantity')}:{' '}
+                                      {formatQty(
+                                        Number(line.received_quantity),
+                                      )}
+                                      {' · '}
+                                      {t('inventory.remaining')}:{' '}
+                                      {formatQty(remaining)}
+                                      {' · '}
+                                      {formatMoney(
+                                        Number(line.unit_cost),
+                                        currency,
+                                      )}
+                                    </span>
+                                  </span>
+                                  {receivable && (
+                                    <span className="flex items-center gap-2">
+                                      <Label
+                                        htmlFor={`po-receive-${line.id}`}
+                                        className="text-xs text-muted-foreground"
+                                      >
+                                        {t('inventory.receiveNow')}
+                                      </Label>
+                                      <Input
+                                        id={`po-receive-${line.id}`}
+                                        type="number"
+                                        min={0}
+                                        step="any"
+                                        className="h-8 w-24"
+                                        value={
+                                          poReceiveQtys[line.id] ??
+                                          String(remaining)
+                                        }
+                                        onChange={(e) =>
+                                          setPoReceiveQtys((prev) => ({
+                                            ...prev,
+                                            [line.id]: e.target.value,
+                                          }))
+                                        }
+                                      />
+                                      <span className="text-xs text-muted-foreground">
+                                        {line.item_unit}
+                                      </span>
+                                    </span>
+                                  )}
+                                </span>
+                              )
+                            })}
+                          </span>
                           <span className="flex flex-col gap-1">
-                            {selectedPo.items.map((line) => (
-                              <span
-                                key={line.id}
-                                className="flex flex-wrap justify-between gap-2"
-                              >
-                                <span>
-                                  {line.item_name} ({line.item_unit})
-                                </span>
-                                <span>
-                                  {t('inventory.quantity')}:{' '}
-                                  {formatQty(Number(line.quantity))}
-                                  {' · '}
-                                  {t('inventory.receivedQuantity')}:{' '}
-                                  {formatQty(Number(line.received_quantity))}
-                                  {' · '}
-                                  {formatMoney(Number(line.unit_cost), currency)}
-                                </span>
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {t('inventory.receiptHistory')}
+                            </span>
+                            {poReceipts.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">
+                                {t('inventory.noReceipts')}
                               </span>
-                            ))}
+                            ) : (
+                              <ul className="flex flex-col gap-0.5">
+                                {poReceipts.map((receipt) => (
+                                  <li
+                                    key={receipt.id}
+                                    className="text-xs text-muted-foreground"
+                                  >
+                                    {formatDate(receipt.created_at)}
+                                    {' — '}
+                                    {receipt.item_name}{' '}
+                                    {formatQty(receipt.quantity)}{' '}
+                                    {receipt.item_unit}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </span>
                           {selectedPo.notes && (
                             <span className="text-xs text-muted-foreground">
@@ -2161,15 +2344,81 @@ export default function InventoryPage() {
                                 {t('inventory.markOrdered')}
                               </Button>
                             )}
-                            {selectedPo.status === 'ORDERED' && (
+                            {(selectedPo.status === 'ORDERED' ||
+                              selectedPo.status ===
+                                'PARTIALLY_RECEIVED') && (
                               <>
                                 <Button
                                   type="button"
                                   size="sm"
+                                  onClick={() =>
+                                    setPoConfirm('receiveLines')
+                                  }
+                                >
+                                  {t('inventory.receiveButton')}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
                                   onClick={() => setPoConfirm('receive')}
                                 >
                                   {t('inventory.receiveAll')}
                                 </Button>
+                                {poConfirm === 'receiveLines' && (
+                                  <span className="flex w-full flex-col gap-2 text-xs">
+                                    <span className="text-muted-foreground">
+                                      {t('inventory.receiveLinesConfirm', {
+                                        summary: typedReceiveLines()
+                                          .filter(
+                                            ({ quantity }) =>
+                                              Number.isFinite(quantity) &&
+                                              quantity > 0,
+                                          )
+                                          .map(
+                                            ({ line, quantity }) =>
+                                              `${formatQty(quantity)} × ${line.item_name}`,
+                                          )
+                                          .join(', '),
+                                        total: formatMoney(
+                                          typedReceiveLines()
+                                            .filter(
+                                              ({ quantity }) =>
+                                                Number.isFinite(quantity) &&
+                                                quantity > 0,
+                                            )
+                                            .reduce(
+                                              (sum, { line, quantity }) =>
+                                                sum +
+                                                quantity *
+                                                  Number(line.unit_cost),
+                                              0,
+                                            ),
+                                          currency,
+                                        ),
+                                      })}
+                                    </span>
+                                    <span className="flex gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={() =>
+                                          void handleReceiveLines()
+                                        }
+                                      >
+                                        {t('inventory.receiveButton')}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setPoConfirm(null)}
+                                      >
+                                        {t('common.cancel')}
+                                      </Button>
+                                    </span>
+                                  </span>
+                                )}
                                 {poConfirm === 'receive' && (
                                   <span className="flex w-full flex-col gap-2 text-xs">
                                     <span className="text-muted-foreground">
@@ -2187,6 +2436,46 @@ export default function InventoryPage() {
                                         }
                                       >
                                         {t('inventory.receiveAll')}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setPoConfirm(null)}
+                                      >
+                                        {t('common.cancel')}
+                                      </Button>
+                                    </span>
+                                  </span>
+                                )}
+                              </>
+                            )}
+                            {selectedPo.status ===
+                              'PARTIALLY_RECEIVED' && (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setPoConfirm('close')}
+                                >
+                                  {t('inventory.closeRemainder')}
+                                </Button>
+                                {poConfirm === 'close' && (
+                                  <span className="flex w-full flex-col gap-2 text-xs">
+                                    <span className="text-muted-foreground">
+                                      {t('inventory.closeRemainderConfirm')}
+                                    </span>
+                                    <span className="flex gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() =>
+                                          void handleCloseRemainder()
+                                        }
+                                      >
+                                        {t('inventory.closeRemainder')}
                                       </Button>
                                       <Button
                                         type="button"
