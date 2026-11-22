@@ -20,6 +20,7 @@ import {
   CalendarCheck,
   ChefHat,
   ClipboardList,
+  Droplets,
   LayoutDashboard,
   Layers,
   LogOut,
@@ -478,6 +479,8 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
               <Sun className="size-5" />
             ) : themeMode === 'glass' ? (
               <Layers className="size-5" />
+            ) : themeMode === 'glassWhite' ? (
+              <Droplets className="size-5" />
             ) : (
               <Monitor className="size-5" />
             )}

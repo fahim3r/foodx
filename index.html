@@ -21,6 +21,8 @@
         var m = localStorage.getItem('foodx.theme') || 'system'
         if (m === 'glass') {
           document.documentElement.classList.add('dark', 'glass')
+        } else if (m === 'glassWhite') {
+          document.documentElement.classList.add('glass-white')
         } else if (
           m === 'dark' ||
           (m === 'system' &&

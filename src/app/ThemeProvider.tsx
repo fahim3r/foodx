@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react'
 
-export type ThemeMode = 'light' | 'dark' | 'system' | 'glass'
+export type ThemeMode = 'light' | 'dark' | 'system' | 'glass' | 'glassWhite'
 export type ResolvedTheme = 'light' | 'dark'
 
 export interface ThemeContextValue {
@@ -26,7 +26,8 @@ function readStoredMode(): ThemeMode {
     return value === 'light' ||
       value === 'dark' ||
       value === 'system' ||
-      value === 'glass'
+      value === 'glass' ||
+      value === 'glassWhite'
       ? value
       : 'system'
   } catch {
@@ -57,6 +58,12 @@ function systemPrefersDark(): boolean {
  * chosen from Settings → Appearance; the header cycle keeps its
  * original light → dark → system rotation and leaves glass for
  * the labelled control, like the other labelled settings.
+ *
+ * White Glass (2026-11-22) is the fifth mode: Apple's "Liquid
+ * Glass" on the light token set. It resolves to light and applies
+ * a `.glass-white` class (never `.dark`); the `.glass-white` layer
+ * in index.css re-paints the light surfaces as bright frosted
+ * whites over the same ambient photograph dark glass uses.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(readStoredMode)
@@ -73,16 +80,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const resolved: ResolvedTheme =
     mode === 'glass'
       ? 'dark'
-      : mode === 'system'
-        ? systemDark
-          ? 'dark'
-          : 'light'
-        : mode
+      : mode === 'glassWhite'
+        ? 'light'
+        : mode === 'system'
+          ? systemDark
+            ? 'dark'
+            : 'light'
+          : mode
 
   useEffect(() => {
     const root = document.documentElement
     root.classList.toggle('dark', resolved === 'dark')
     root.classList.toggle('glass', mode === 'glass')
+    root.classList.toggle('glass-white', mode === 'glassWhite')
   }, [mode, resolved])
 
   const setMode = useCallback((next: ThemeMode) => {
