@@ -44,15 +44,17 @@ function GlassSwatch() {
   )
 }
 
-/** Miniature of the white liquid glass look: a bright warm scene
- *  under a glossy translucent-white layer with a lit top edge. */
+/** Miniature of the white liquid glass look: a clean near-white
+ *  scene with soft pastel brand glows under a glossy
+ *  translucent-white layer with a lit top edge. */
 function WhiteGlassSwatch() {
   return (
     <span
       aria-hidden="true"
       className="relative size-4 shrink-0 overflow-hidden rounded-[4px] border border-foreground/20 shadow-sm"
     >
-      <span className="absolute inset-0 bg-gradient-to-br from-amber-100 via-orange-200 to-emerald-200" />
+      <span className="absolute inset-0 bg-[#f6f6f4]" />
+      <span className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(234,88,12,0.38),transparent_65%),radial-gradient(circle_at_90%_90%,rgba(22,163,74,0.32),transparent_65%)]" />
       <span className="absolute inset-0 bg-white/55 backdrop-blur-[1.5px]" />
       <span className="absolute inset-x-0 top-0 h-px bg-white/90" />
     </span>
