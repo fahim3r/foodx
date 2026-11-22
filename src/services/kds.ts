@@ -107,11 +107,17 @@ export async function advanceKitchenStatus(
  * Subscribe to live order changes for the KDS. Returns an unsubscribe
  * function. The channel listens to orders and order_items; the caller
  * re-fetches on every event (and also polls, so a missed event is not
- * fatal).
+ * fatal). `channelName` exists for the sound-effects watcher: a
+ * second subscriber on an already-subscribed channel throws, so it
+ * listens on its own channel ('sound-order-watcher') instead of
+ * colliding with the KDS page's fixed 'kds-orders'.
  */
-export function subscribeKitchenOrders(onChange: () => void): () => void {
+export function subscribeKitchenOrders(
+  onChange: () => void,
+  channelName = 'kds-orders',
+): () => void {
   const channel = supabase
-    .channel('kds-orders')
+    .channel(channelName)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'orders' },

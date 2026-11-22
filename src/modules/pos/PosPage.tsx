@@ -55,6 +55,7 @@ import {
 import { printHtml } from '@/lib/print'
 import { buildKitchenTicketHtml, buildReceiptHtml } from '@/lib/receipt'
 import { loadPrintSettings } from '@/services/printSettings'
+import { noteSelfPlacedOrder, playPaymentBlip } from '@/lib/sound'
 import { isModuleOn } from '@/services/modules'
 import { useEasyMode } from '@/hooks/useEasyMode'
 import type {
@@ -986,6 +987,10 @@ export default function PosPage() {
         payments: [],
       }
       enqueueOrder(entry)
+      // Sound effects (D7): this tab placed the order (queued under
+      // its client UUID), so the watcher skips its arrival chime on
+      // this device; its READY transition can still chime here.
+      noteSelfPlacedOrder(entry.id)
       // Auto-print (item 11): the customer still gets a paper token
       // at the counter — the snapshot receipt (OFF- reference)
       // prints at queue time; nothing prints again at sync.
@@ -1022,6 +1027,8 @@ export default function PosPage() {
       })
       setPlacedLines(previewLines)
       setPlacedOrder(order)
+      // Sound effects (D7): self-placed — no arrival doorbell here.
+      noteSelfPlacedOrder(order.id)
       setCarouselSignal((n) => n + 1)
       void autoPrintPlaced(order)
       setCart([])
@@ -1132,6 +1139,7 @@ export default function PosPage() {
       setPaymentAmount(String(summary.balance > 0 ? summary.balance : 0))
       setPaymentReference('')
       setPaymentRecorded(true)
+      playPaymentBlip()
       setPaymentAttemptId(crypto.randomUUID())
       setCarouselSignal((n) => n + 1)
     } catch (error) {
@@ -1173,6 +1181,7 @@ export default function PosPage() {
       setPaymentAmount('0')
       setPaymentReference('')
       setPaymentRecorded(true)
+      playPaymentBlip()
       setPaymentAttemptId(crypto.randomUUID())
       setCarouselSignal((n) => n + 1)
     } catch (error) {

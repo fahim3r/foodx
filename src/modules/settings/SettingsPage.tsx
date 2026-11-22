@@ -24,6 +24,7 @@ import LicenseCard from './LicenseCard'
 import ManagerPinCard from './ManagerPinCard'
 import AppearanceCard from './AppearanceCard'
 import PrintingCard from './PrintingCard'
+import SoundCard from './SoundCard'
 import ModulesCard from './ModulesCard'
 import OrderFlowCard from './OrderFlowCard'
 import EasyModeCard from './EasyModeCard'
@@ -671,6 +672,7 @@ export default function SettingsPage() {
       <ManagerPinCard />
       <AppearanceCard />
       <PrintingCard />
+      <SoundCard />
       <ModulesCard />
       <OrderFlowCard />
       <EasyModeCard />

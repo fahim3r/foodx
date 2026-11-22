@@ -47,6 +47,8 @@ import { useEasyMode } from '@/hooks/useEasyMode'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useLicenseState } from '@/hooks/useLicenseState'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
+import { useOrderSoundWatcher } from '@/hooks/useOrderSoundWatcher'
+import { initSound } from '@/lib/sound'
 import {
   isModuleEnabled,
   runHeartbeat,
@@ -373,6 +375,14 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
   const fullscreenSupported =
     typeof document !== 'undefined' && document.fullscreenEnabled
   useOfflineSync(restaurant?.id ?? null, user?.id ?? null)
+  // Sound effects (2026-11-22): init wires the first-gesture audio
+  // unlock for this restaurant; the watcher chimes on new orders and
+  // orders becoming READY, on every panel page. Both are inert
+  // while the per-device master toggle is off (the default).
+  useEffect(() => {
+    initSound(restaurant?.id ?? null)
+  }, [restaurant?.id])
+  useOrderSoundWatcher(restaurant?.id ?? null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)

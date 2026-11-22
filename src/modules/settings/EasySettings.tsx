@@ -15,8 +15,15 @@ import EasyHelpLine from '@/components/EasyHelpLine'
 import { useAuth } from '@/hooks/useAuth'
 import { roundMoney } from '@/lib/money'
 import { escapeHtml, printHtml } from '@/lib/print'
+import { initSound, playTestSound } from '@/lib/sound'
 import { isFeatureEnabledFromCache } from '@/services/heartbeat'
 import { isModuleOn } from '@/services/modules'
+import { initSound, playTestSound } from '@/lib/sound'
+import {
+  loadSoundSettings,
+  saveSoundSettings,
+  type SoundSettings,
+} from '@/services/soundSettings'
 import {
   createMainBranch,
   fetchBranches,
@@ -25,6 +32,11 @@ import {
   updateSettingsPartial,
   type Branch,
 } from '@/services/restaurant'
+import {
+  loadSoundSettings,
+  saveSoundSettings,
+  type SoundSettings,
+} from '@/services/soundSettings'
 import EasyModeCard from './EasyModeCard'
 import HelpSection from './HelpSection'
 import ManagerPinCard from './ManagerPinCard'
@@ -83,6 +95,27 @@ export default function EasySettings() {
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  // Sound effects (2026-11-22): Easy gets the one simple row — the
+  // per-device master switch + a test button; the per-event detail
+  // lives in the advanced SoundCard. Defaults OFF, like everywhere.
+  const [soundSettings, setSoundSettings] = useState<SoundSettings>(() =>
+    restaurant
+      ? loadSoundSettings(restaurant.id)
+      : { master: false, newOrder: true, ready: true, payment: true },
+  )
+
+  const handleSoundToggle = (checked: boolean) => {
+    if (!restaurant) return
+    const next = { ...soundSettings, master: checked }
+    setSoundSettings(next)
+    saveSoundSettings(restaurant.id, next)
+  }
+
+  const handleSoundTest = () => {
+    if (!restaurant) return
+    initSound(restaurant.id)
+    playTestSound('newOrder')
+  }
 
   // The main branch carries the restaurant's phone + address.
   useEffect(() => {
@@ -329,6 +362,39 @@ export default function EasySettings() {
 
       <PrintingCard />
 
+      {/* Sound effects (2026-11-22): ONE simple row — the per-device
+          master switch plus a Test button (the new-order doorbell as
+          the sample). The per-event detail lives in the advanced
+          Settings SoundCard. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <p className="text-base font-medium">{t('easy.settings.sound')}</p>
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              className="size-5 accent-primary"
+              aria-label={t('easy.settings.sound')}
+              checked={sound.master}
+              onChange={(event) => {
+                const next = { ...sound, master: event.target.checked }
+                setSound(next)
+                saveSoundSettings(restaurant.id, next)
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                initSound(restaurant.id)
+                playTestSound('newOrder')
+              }}
+            >
+              {t('easy.settings.soundTest')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
           <p className="text-base font-medium">
@@ -337,6 +403,24 @@ export default function EasySettings() {
           <Button type="button" variant="outline" onClick={handleTestPrint}>
             {t('easy.settings.testPrint')}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <p className="text-base font-medium">{t('easy.settings.sound')}</p>
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="outline" onClick={handleSoundTest}>
+              {t('easy.settings.soundTest')}
+            </Button>
+            <input
+              type="checkbox"
+              className="size-5 accent-primary"
+              aria-label={t('easy.settings.sound')}
+              checked={soundSettings.master}
+              onChange={(event) => handleSoundToggle(event.target.checked)}
+            />
+          </div>
         </CardContent>
       </Card>
 

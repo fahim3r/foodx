@@ -28,6 +28,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { formatMoney } from '@/lib/money'
+import { playPaymentBlip } from '@/lib/sound'
 import { elapsedChipClass, elapsedMinutes, useNow } from '@/lib/time'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import {
@@ -331,6 +332,7 @@ export default function LiveOrdersCarousel({
         { method: 'cash', amount: summary.balance },
         userId,
       )
+      playPaymentBlip()
       await onPrintReceipt(order)
       await load()
       setNotice({
@@ -377,6 +379,7 @@ export default function LiveOrdersCarousel({
         },
         userId,
       )
+      playPaymentBlip()
       setPanelOrderId(null)
       await load()
       setNotice({

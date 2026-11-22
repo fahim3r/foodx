@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePermissions } from '@/hooks/usePermissions'
 import { isMissingTableError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
+import { playPaymentBlip } from '@/lib/sound'
 import { elapsedMinutes, useNow } from '@/lib/time'
 import {
   cancelOrder,
@@ -506,6 +507,7 @@ export default function OrderDetailPage() {
       )
       setPayReference('')
       setPayRecorded(true)
+      playPaymentBlip()
       setPayAttemptId(crypto.randomUUID())
       await reload()
     } catch (error) {
