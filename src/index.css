@@ -148,7 +148,15 @@ html.easy-mode {
    restaurant's own branding: AppLayout publishes --brand-primary /
    --brand-secondary on the root element; the fallbacks here are the
    FoodX defaults (brand orange / green). Light, dark and system
-   never carry the `.glass` class, so their rules are untouched. */
+   never carry the `.glass` class, so their rules are untouched.
+   Ambient photo layer (2026-11-22): the backdrop's base is a bundled
+   photograph — "DZ6 0566" cafe interior by PattayaPatrol (Flickr),
+   via Wikimedia Commons, CC BY-SA 4.0
+   (https://creativecommons.org/licenses/by-sa/4.0) — cropped to its
+   left portion, darkened, shipped locally as /glass-ambient.webp.
+   The brand-tint gradients paint OVER it (plus a dark scrim), and if
+   the image is missing the original gradient stack still paints the
+   full backdrop on its own. */
 .glass {
   --background: transparent;
   --card: oklch(0.21 0.006 285.885 / 55%);
@@ -173,12 +181,27 @@ html.easy-mode {
       color-mix(in oklab, var(--brand-primary, #ea580c) 34%, transparent),
       transparent 58%
     ),
+    linear-gradient(rgb(10 10 15 / 62%), rgb(10 10 15 / 62%)),
+    url('/glass-ambient.webp'),
     linear-gradient(
       155deg,
       color-mix(in oklab, var(--brand-primary, #ea580c) 20%, #0a0a0f),
       color-mix(in oklab, var(--brand-secondary, #16a34a) 12%, #0a0a0f) 58%,
       #0a0a0f
     );
+  background-size:
+    auto,
+    auto,
+    auto,
+    cover,
+    auto;
+  background-position:
+    0 0,
+    0 0,
+    0 0,
+    50% 50%,
+    0 0;
+  background-repeat: no-repeat;
   background-attachment: fixed;
 }
 
