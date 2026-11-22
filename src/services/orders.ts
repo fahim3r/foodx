@@ -20,6 +20,7 @@ import {
   type OrderPayment,
   type OrderStatus,
   type OrderStatusHistory,
+  type OrderType,
 } from '@/types'
 
 export async function fetchOrders(
@@ -395,4 +396,57 @@ export async function mergeOrders(
     p_pin: pin?.trim() || null,
   })
   if (error) throw new Error(mergeErrorCode(error))
+}
+
+/** Open-order counts for the dashboard's live operations strip
+ * (Dashboard modernisation W1). Deliberately NOT day-bound: an order
+ * placed yesterday that is still open counts — the strip answers
+ * "what is happening right now", not "what happened today". One
+ * status-only query, grouped client-side; `delivery` counts the
+ * open orders whose type is delivery (the strip's "out for
+ * delivery" bucket, shown only when the delivery module is on). */
+export interface OpenOrderCounts {
+  newOrders: number
+  inKitchen: number
+  ready: number
+  served: number
+  delivery: number
+}
+
+const OPEN_ORDER_STATUSES: OrderStatus[] = [
+  'CONFIRMED',
+  'SENT_TO_KITCHEN',
+  'PREPARING',
+  'READY',
+  'SERVED',
+]
+
+export async function fetchOpenOrderCounts(
+  restaurantId: string,
+): Promise<OpenOrderCounts> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('status, type')
+    .eq('restaurant_id', restaurantId)
+    .in('status', OPEN_ORDER_STATUSES)
+  if (error) throw error
+  const counts: OpenOrderCounts = {
+    newOrders: 0,
+    inKitchen: 0,
+    ready: 0,
+    served: 0,
+    delivery: 0,
+  }
+  for (const row of (data ?? []) as {
+    status: OrderStatus
+    type: OrderType
+  }[]) {
+    if (row.status === 'CONFIRMED') counts.newOrders += 1
+    else if (row.status === 'SENT_TO_KITCHEN' || row.status === 'PREPARING')
+      counts.inKitchen += 1
+    else if (row.status === 'READY') counts.ready += 1
+    else if (row.status === 'SERVED') counts.served += 1
+    if (row.type === 'delivery') counts.delivery += 1
+  }
+  return counts
 }
