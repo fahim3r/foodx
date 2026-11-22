@@ -105,10 +105,10 @@ async function releaseTableIfFree(tableId: string): Promise<void> {
 
 /**
  * Close the delivery board row of a delivery order that reached a
- * terminal state through the orders service (completed here, or
- * cancelled through cancelOrder): the dispatch record follows the
- * order — DELIVERED on completion, CANCELLED on cancellation — so
- * staff never have to walk a finished order across the board by hand.
+ * terminal state through the orders service (completed, or cancelled
+ * through cancelOrder): the dispatch record follows the order —
+ * DELIVERED on completion, CANCELLED on cancellation — so staff
+ * never have to walk a finished order across the board by hand.
  * Only an existing, still-active row is touched: a row already in a
  * terminal delivery status is never resurrected, and no row is
  * created for an order the board never dispatched. Like the delivery
@@ -116,18 +116,24 @@ async function releaseTableIfFree(tableId: string): Promise<void> {
  * like the manual board walk, a terminal close frees the assigned
  * driver (back to AVAILABLE), so nobody stays ON_DELIVERY with no
  * active delivery.
+ *
+ * The order is re-read by id here rather than taken from the caller:
+ * callers hold many shapes of the order (list rows, detail composites,
+ * locally advanced copies), and the close must not silently no-op
+ * because the object it was handed happened to lack a field.
  * Best-effort: callers log and swallow any failure.
  */
 async function closeDeliveryBoardRow(
-  order: Order,
+  orderId: string,
   toStatus: Extract<DeliveryStatus, 'DELIVERED' | 'CANCELLED'>,
   userId: string,
 ): Promise<void> {
-  if (order.type !== 'delivery') return
+  const order = await fetchOrderById(orderId)
+  if (!order || order.type !== 'delivery') return
   const { data, error } = await supabase
     .from('delivery_orders')
     .select('*')
-    .eq('order_id', order.id)
+    .eq('order_id', orderId)
     .maybeSingle()
   if (error) throw error
   const delivery = data as DeliveryOrder | null
@@ -140,13 +146,13 @@ async function closeDeliveryBoardRow(
   const { error: updateError } = await supabase
     .from('delivery_orders')
     .update(patch)
-    .eq('order_id', order.id)
+    .eq('order_id', orderId)
   if (updateError) throw updateError
   const { error: historyError } = await supabase
     .from('delivery_status_history')
     .insert({
       id: crypto.randomUUID(),
-      delivery_order_id: order.id,
+      delivery_order_id: orderId,
       from_status: delivery.status,
       to_status: toStatus,
       changed_by: userId,
@@ -168,7 +174,12 @@ async function closeDeliveryBoardRow(
  * Move an order along the state machine. Throws
  * Error('invalid_status_transition') for a move the machine forbids.
  * Every successful move writes a history row and, on terminal statuses,
- * frees the table when nothing else uses it.
+ * frees the table when nothing else uses it. A move to COMPLETED (or
+ * CANCELLED) also closes the order's delivery board row — this is the
+ * one chokepoint every status change passes through, so the close
+ * cannot be skipped by a caller that transitions an order without
+ * going through completeOrder / cancelOrder. Best-effort: a board
+ * failure is logged and never fails the transition.
  */
 export async function advanceOrderStatus(
   order: Order,
@@ -200,6 +211,20 @@ export async function advanceOrderStatus(
   if (historyError) throw historyError
   if (order.table_id && TERMINAL_ORDER_STATUSES.includes(toStatus)) {
     await releaseTableIfFree(order.table_id)
+  }
+  if (toStatus === 'COMPLETED' || toStatus === 'CANCELLED') {
+    try {
+      await closeDeliveryBoardRow(
+        order.id,
+        toStatus === 'COMPLETED' ? 'DELIVERED' : 'CANCELLED',
+        userId,
+      )
+    } catch (deliveryError) {
+      console.error(
+        '[Orders] delivery board close after status change failed',
+        deliveryError,
+      )
+    }
   }
   return updated
 }
@@ -253,8 +278,8 @@ export async function markOrderServed(
 /** SERVED → COMPLETED: the order is done and the table frees up.
  * Completing awards loyalty points (one EARN per order, idempotent).
  * Best-effort — an award failure is logged and never fails the
- * completion. Completing a delivery order also closes its delivery
- * board row as DELIVERED (best-effort, same pattern).
+ * completion. (Closing a completed delivery order's board row lives
+ * in advanceOrderStatus, the transition chokepoint.)
  *
  * Payment gate (audit fix, user rule 2026-11-20): an order cannot be
  * completed while it still has a balance — the money must be collected,
@@ -274,14 +299,6 @@ export async function completeOrder(
     await awardLoyaltyPoints(completed)
   } catch (error) {
     console.error('[Orders] loyalty award failed', error)
-  }
-  try {
-    await closeDeliveryBoardRow(completed, 'DELIVERED', userId)
-  } catch (error) {
-    console.error(
-      '[Orders] delivery board close after completion failed',
-      error,
-    )
   }
   return completed
 }
@@ -326,7 +343,7 @@ export async function cancelOrder(
     console.error('[Orders] loyalty reversal after cancel failed', loyaltyError)
   }
   try {
-    await closeDeliveryBoardRow(order, 'CANCELLED', userId)
+    await closeDeliveryBoardRow(order.id, 'CANCELLED', userId)
   } catch (deliveryError) {
     console.error(
       '[Orders] delivery board close after cancel failed',
