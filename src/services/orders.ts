@@ -112,7 +112,10 @@ async function releaseTableIfFree(tableId: string): Promise<void> {
  * Only an existing, still-active row is touched: a row already in a
  * terminal delivery status is never resurrected, and no row is
  * created for an order the board never dispatched. Like the delivery
- * service, the close writes a delivery_status_history row.
+ * service, the close writes a delivery_status_history row — and, also
+ * like the manual board walk, a terminal close frees the assigned
+ * driver (back to AVAILABLE), so nobody stays ON_DELIVERY with no
+ * active delivery.
  * Best-effort: callers log and swallow any failure.
  */
 async function closeDeliveryBoardRow(
@@ -149,6 +152,16 @@ async function closeDeliveryBoardRow(
       changed_by: userId,
     })
   if (historyError) throw historyError
+  // Mirror the manual board walk (delivery service): a terminal close
+  // frees the assigned driver, so they return to AVAILABLE instead of
+  // staying ON_DELIVERY with no active delivery.
+  if (delivery.driver_id) {
+    const { error: driverError } = await supabase
+      .from('delivery_drivers')
+      .update({ status: 'AVAILABLE' })
+      .eq('id', delivery.driver_id)
+    if (driverError) throw driverError
+  }
 }
 
 /**
