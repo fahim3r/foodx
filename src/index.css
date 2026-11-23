@@ -17,7 +17,14 @@
   --color-brand-950: #431407;
 }
 
+/* color-scheme tells the browser which scheme to paint native
+   widget popups (select lists, date/time pickers) with; without
+   it, Dark mode got LIGHT popups whose options inherit the dark
+   theme's near-white text — invisible (user report, 2026-11-23).
+   `.dark` below also covers Dark Glass (it carries `.dark`
+   alongside `.glass`); White Glass pins light in its own rule. */
 :root {
+  color-scheme: light;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -53,6 +60,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.21 0.006 285.885);
@@ -130,6 +138,15 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Safety net for native <option> popups: readable even where a
+     browser styles options but ignores color-scheme. In the glass
+     themes --background is transparent, so the option then falls
+     back to the popup's own themed surface while the themed
+     foreground colour still applies. */
+  option {
+    background-color: var(--background);
+    color: var(--foreground);
   }
 }
 
@@ -338,6 +355,7 @@ html.easy-mode {
    surfaces (primary buttons, status badges) stay solid: the
    glass is for neutral section boxes only. */
 .glass-white {
+  color-scheme: light;
   --background: transparent;
   --card: oklch(1 0 0 / 38%);
   --popover: oklch(1 0 0 / 65%);
