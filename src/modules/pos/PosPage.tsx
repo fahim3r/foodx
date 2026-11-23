@@ -247,6 +247,19 @@ export default function PosPage() {
   const [chooserModifierIds, setChooserModifierIds] = useState<string[]>([])
   const [chooserQty, setChooserQty] = useState(1)
 
+  // Add feedback: which cart line / product the last add landed on,
+  // plus a sequence number. The animation classes in index.css come
+  // in -a/-b pairs picked by the sequence parity, so a rapid repeat
+  // add restarts the keyframes instead of re-applying the same
+  // class (which would not replay). `merged` marks an add that
+  // incremented an existing line - its quantity number bounces.
+  const [addFx, setAddFx] = useState<{
+    lineId: string
+    productId: string
+    merged: boolean
+    seq: number
+  } | null>(null)
+
   const [placing, setPlacing] = useState(false)
   const [placeErrorKey, setPlaceErrorKey] = useState<string | null>(null)
   const { easy } = useEasyMode()
@@ -722,6 +735,13 @@ export default function PosPage() {
       note: '',
     }
     const key = cartKey(line)
+    const existing = cart.find((entry) => cartKey(entry) === key)
+    setAddFx((prev) => ({
+      lineId: existing ? existing.id : line.id,
+      productId: product.id,
+      merged: !!existing,
+      seq: (prev?.seq ?? 0) + 1,
+    }))
     setCart((prev) => {
       const index = prev.findIndex((existing) => cartKey(existing) === key)
       if (index === -1) return [...prev, line]
@@ -762,6 +782,17 @@ export default function PosPage() {
   }
 
   const updateCartQty = (id: string, delta: number) => {
+    if (delta > 0) {
+      const bumped = cart.find((entry) => entry.id === id)
+      if (bumped) {
+        setAddFx((prev) => ({
+          lineId: id,
+          productId: bumped.productId,
+          merged: true,
+          seq: (prev?.seq ?? 0) + 1,
+        }))
+      }
+    }
     setCart((prev) =>
       prev.map((line) =>
         line.id === id
@@ -1923,7 +1954,11 @@ export default function PosPage() {
 
   // --- building state --------------------------------------------------------
   return (
-    <div className="flex flex-col gap-6">
+    <div
+      className={`flex flex-col gap-6 ${
+        previewLines.length > 0 ? 'pb-24 lg:pb-0' : ''
+      }`}
+    >
       <header>
         <h2 className="text-2xl font-bold tracking-tight">{t('pos.title')}</h2>
         <p className="text-muted-foreground">{t('pos.subtitle')}</p>
@@ -2430,7 +2465,11 @@ export default function PosPage() {
                   variant="outline"
                   disabled={!product.is_available || outOfStock}
                   onClick={() => handleProductTap(product)}
-                  className="h-full flex-col items-stretch justify-start gap-0 overflow-hidden whitespace-normal p-0 text-left"
+                  className={`h-full flex-col items-stretch justify-start gap-0 overflow-hidden whitespace-normal p-0 text-left${
+                    addFx && addFx.productId === product.id
+                      ? ` pos-tile-pop-${addFx.seq % 2 === 0 ? 'a' : 'b'}`
+                      : ''
+                  }`}
                 >
                   <ProductImage src={product.image_url} />
                   <span
@@ -2476,323 +2515,366 @@ export default function PosPage() {
           </div>
         </div>
 
-        <Card className="h-fit lg:sticky lg:top-4">
+        <Card className="lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100dvh_-_5.5rem)]">
           <CardHeader>
             <CardTitle>{t('pos.cart')}</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {previewLines.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t('pos.emptyCart')}
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-3">
-                {previewLines.map((line) => {
-                  const key =
-                    line.cartLineId ??
-                    `${line.productId}|${line.variantId ?? ''}|${line.modifierIds.join(',')}`
-                  return (
-                    <li key={key} className="flex flex-col gap-1 text-sm">
-                      <span className="flex items-center justify-between gap-2">
-                        <span>
-                          {line.productName}
-                          {line.variantName ? ` (${line.variantName})` : ''}
-                          {line.modifierNames.length > 0
-                            ? ` + ${line.modifierNames.map((m) => m.name).join(', ')}`
-                            : ''}
-                        </span>
-                        <span className="font-medium">
-                          {formatMoney(line.lineTotal, currency)}
-                        </span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => updateCartQty(key, -1)}
-                        >
-                          −
-                        </Button>
-                        <span className="min-w-6 text-center">
-                          {line.quantity}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => updateCartQty(key, 1)}
-                        >
-                          +
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => removeCartLine(key)}
-                        >
-                          {t('common.delete')}
-                        </Button>
-                      </span>
-                      <Input
-                        value={line.note ?? ''}
-                        onChange={(e) => updateCartNote(key, e.target.value)}
-                        placeholder={t('pos.itemNotePlaceholder')}
-                        maxLength={200}
-                        className="h-8 text-xs"
-                      />
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-            {!easy && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="discount">{t('pos.discountAmount')}</Label>
-                <Input
-                  id="discount"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={discount}
-                  onChange={(e) =>
-                    setDiscount(Math.max(0, Number(e.target.value) || 0))
-                  }
-                />
-              </div>
-            )}
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="notes">{t('pos.notes')}</Label>
-              <Input
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={t('pos.notesPlaceholder')}
-              />
-            </div>
-            {!online && (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                {t('offline.extrasDisabled')}
-              </p>
-            )}
-            {online && !easy && (
-              <>
-            <div className="flex flex-col gap-2 border-t pt-3">
-              <Label>{t('pos.customer')}</Label>
-              {selectedCustomer ? (
-                <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">
-                      {selectedCustomer.name}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {selectedCustomer.phone
-                        ? `${selectedCustomer.phone} · `
-                        : ''}
-                      {t('pos.pointsBalance', {
-                        points: customerBalance ?? 0,
-                      })}
-                    </span>
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleClearCustomer}
-                  >
-                    {t('pos.clearCustomer')}
-                  </Button>
-                </div>
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+              {previewLines.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('pos.emptyCart')}
+                </p>
               ) : (
-                <>
-                  <div className="flex gap-2">
-                    <Input
-                      type="search"
-                      value={customerSearch}
-                      onChange={(e) => setCustomerSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          void handleCustomerSearch()
-                        }
-                      }}
-                      placeholder={t('pos.customerSearchPlaceholder')}
-                      aria-label={t('pos.customerSearchPlaceholder')}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void handleCustomerSearch()}
-                    >
-                      {t('common.search')}
-                    </Button>
-                  </div>
-                  {customerOptions.length > 0 && (
-                    <ul className="flex flex-col gap-1">
-                      {customerOptions.map((customer) => (
-                        <li key={customer.id}>
+                <ul className="flex flex-col gap-3">
+                  {previewLines.map((line) => {
+                    const key =
+                      line.cartLineId ??
+                      `${line.productId}|${line.variantId ?? ''}|${line.modifierIds.join(',')}`
+                    return (
+                      <li
+                        key={key}
+                        className={`flex flex-col gap-1 text-sm${
+                          addFx && addFx.lineId === key
+                            ? ` pos-line-flash-${
+                                addFx.seq % 2 === 0 ? 'a' : 'b'
+                              }`
+                            : ''
+                        }`}
+                      >
+                        <span className="flex items-center justify-between gap-2">
+                          <span>
+                            {line.productName}
+                            {line.variantName ? ` (${line.variantName})` : ''}
+                            {line.modifierNames.length > 0
+                              ? ` + ${line.modifierNames.map((m) => m.name).join(', ')}`
+                              : ''}
+                          </span>
+                          <span className="font-medium">
+                            {formatMoney(line.lineTotal, currency)}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateCartQty(key, -1)}
+                          >
+                            −
+                          </Button>
+                          <span
+                            className={`min-w-6 text-center${
+                              addFx && addFx.lineId === key && addFx.merged
+                                ? ` pos-qty-bounce-${
+                                    addFx.seq % 2 === 0 ? 'a' : 'b'
+                                  }`
+                                : ''
+                            }`}
+                          >
+                            {line.quantity}
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateCartQty(key, 1)}
+                          >
+                            +
+                          </Button>
                           <Button
                             type="button"
                             size="sm"
                             variant="ghost"
-                            className="h-auto w-full justify-start whitespace-normal text-left"
-                            onClick={() => void handleAttachCustomer(customer)}
+                            onClick={() => removeCartLine(key)}
                           >
-                            {customer.name}
-                            {customer.phone ? ` (${customer.phone})` : ''}
+                            {t('common.delete')}
                           </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                        </span>
+                        <Input
+                          value={line.note ?? ''}
+                          onChange={(e) => updateCartNote(key, e.target.value)}
+                          placeholder={t('pos.itemNotePlaceholder')}
+                          maxLength={200}
+                          className="h-8 text-xs"
+                        />
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {!easy && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="discount">{t('pos.discountAmount')}</Label>
+                  <Input
+                    id="discount"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={discount}
+                    onChange={(e) =>
+                      setDiscount(Math.max(0, Number(e.target.value) || 0))
+                    }
+                  />
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="notes">{t('pos.notes')}</Label>
+                <Input
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={t('pos.notesPlaceholder')}
+                />
+              </div>
+              {!online && (
+                <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {t('offline.extrasDisabled')}
+                </p>
+              )}
+              {online && !easy && (
+                <>
+              <div className="flex flex-col gap-2 border-t pt-3">
+                <Label>{t('pos.customer')}</Label>
+                {selectedCustomer ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        {selectedCustomer.name}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {selectedCustomer.phone
+                          ? `${selectedCustomer.phone} · `
+                          : ''}
+                        {t('pos.pointsBalance', {
+                          points: customerBalance ?? 0,
+                        })}
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleClearCustomer}
+                    >
+                      {t('pos.clearCustomer')}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <Input
+                        type="search"
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            void handleCustomerSearch()
+                          }
+                        }}
+                        placeholder={t('pos.customerSearchPlaceholder')}
+                        aria-label={t('pos.customerSearchPlaceholder')}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void handleCustomerSearch()}
+                      >
+                        {t('common.search')}
+                      </Button>
+                    </div>
+                    {customerOptions.length > 0 && (
+                      <ul className="flex flex-col gap-1">
+                        {customerOptions.map((customer) => (
+                          <li key={customer.id}>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-auto w-full justify-start whitespace-normal text-left"
+                              onClick={() => void handleAttachCustomer(customer)}
+                            >
+                              {customer.name}
+                              {customer.phone ? ` (${customer.phone})` : ''}
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="couponCode">{t('pos.couponCode')}</Label>
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                    <span className="font-medium">{appliedCoupon.code}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleClearCoupon}
+                    >
+                      {t('pos.clearCoupon')}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      id="couponCode"
+                      value={couponCode}
+                      onChange={(e) =>
+                        setCouponCode(e.target.value.toUpperCase())
+                      }
+                      placeholder={t('pos.couponCodePlaceholder')}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={couponApplying || !couponCode.trim()}
+                      onClick={() => void handleApplyCoupon()}
+                    >
+                      {t('pos.applyCoupon')}
+                    </Button>
+                  </div>
+                )}
+                {couponErrorKey && (
+                  <p
+                    role="alert"
+                    className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                  >
+                    {t(couponErrorKey)}
+                  </p>
+                )}
+              </div>
+              {selectedCustomer && loyaltyModuleOn && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="redeemPoints">
+                    {t('pos.redeemPoints')}
+                  </Label>
+                  <Input
+                    id="redeemPoints"
+                    type="text"
+                    inputMode="numeric"
+                    value={redeemPoints}
+                    onChange={(e) => setRedeemPoints(e.target.value)}
+                    placeholder={t('pos.redeemPointsPlaceholder', {
+                      max: maxRedeemablePoints,
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('pos.pointsAvailable', {
+                      balance: customerBalance ?? 0,
+                      max: maxRedeemablePoints,
+                      value: formatMoney(loyaltyRates.pointValue, currency),
+                    })}
+                  </p>
+                </div>
+              )}
                 </>
               )}
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="couponCode">{t('pos.couponCode')}</Label>
-              {appliedCoupon ? (
-                <div className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-                  <span className="font-medium">{appliedCoupon.code}</span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleClearCoupon}
-                  >
-                    {t('pos.clearCoupon')}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Input
-                    id="couponCode"
-                    value={couponCode}
-                    onChange={(e) =>
-                      setCouponCode(e.target.value.toUpperCase())
-                    }
-                    placeholder={t('pos.couponCodePlaceholder')}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={couponApplying || !couponCode.trim()}
-                    onClick={() => void handleApplyCoupon()}
-                  >
-                    {t('pos.applyCoupon')}
-                  </Button>
-                </div>
-              )}
-              {couponErrorKey && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1 border-t pt-3 text-sm">
+                <p className="flex justify-between">
+                  <span>{t('pos.subtotal')}</span>
+                  <span>{formatMoney(totals.subtotal, currency)}</span>
+                </p>
+                <p className="flex justify-between">
+                  <span>{t('pos.discount')}</span>
+                  <span>{formatMoney(totals.discountAmount, currency)}</span>
+                </p>
+                {totals.couponDiscount > 0 && (
+                  <p className="flex justify-between">
+                    <span>
+                      {t('pos.couponDiscount')}
+                      {appliedCoupon ? ` (${appliedCoupon.code})` : ''}
+                    </span>
+                    <span>{formatMoney(totals.couponDiscount, currency)}</span>
+                  </p>
+                )}
+                {totals.loyaltyDiscount > 0 && (
+                  <p className="flex justify-between">
+                    <span>
+                      {t('pos.loyaltyDiscount')} ({redeemPointsEffective}{' '}
+                      {t('pos.points')})
+                    </span>
+                    <span>{formatMoney(totals.loyaltyDiscount, currency)}</span>
+                  </p>
+                )}
+                <p className="flex justify-between">
+                  <span>{t('pos.tax', { rate: taxRate })}</span>
+                  <span>{formatMoney(totals.taxAmount, currency)}</span>
+                </p>
+                <p className="flex justify-between">
+                  <span>{t('pos.serviceCharge', { rate: serviceChargeRate })}</span>
+                  <span>{formatMoney(totals.serviceChargeAmount, currency)}</span>
+                </p>
+                {deliveryFee > 0 && (
+                  <p className="flex justify-between">
+                    <span>{t('pos.deliveryFee')}</span>
+                    <span>{formatMoney(deliveryFee, currency)}</span>
+                  </p>
+                )}
+                <p className="flex justify-between font-semibold">
+                  <span>{t('pos.total')}</span>
+                  <span>{formatMoney(totals.totalAmount, currency)}</span>
+                </p>
+              </div>
+              {placeErrorKey && (
                 <p
                   role="alert"
                   className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
                 >
-                  {t(couponErrorKey)}
+                  {t(placeErrorKey)}
                 </p>
               )}
-            </div>
-            {selectedCustomer && loyaltyModuleOn && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="redeemPoints">
-                  {t('pos.redeemPoints')}
-                </Label>
-                <Input
-                  id="redeemPoints"
-                  type="text"
-                  inputMode="numeric"
-                  value={redeemPoints}
-                  onChange={(e) => setRedeemPoints(e.target.value)}
-                  placeholder={t('pos.redeemPointsPlaceholder', {
-                    max: maxRedeemablePoints,
-                  })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t('pos.pointsAvailable', {
-                    balance: customerBalance ?? 0,
-                    max: maxRedeemablePoints,
-                    value: formatMoney(loyaltyRates.pointValue, currency),
-                  })}
-                </p>
-              </div>
-            )}
-              </>
-            )}
-            <div className="flex flex-col gap-1 border-t pt-3 text-sm">
-              <p className="flex justify-between">
-                <span>{t('pos.subtotal')}</span>
-                <span>{formatMoney(totals.subtotal, currency)}</span>
-              </p>
-              <p className="flex justify-between">
-                <span>{t('pos.discount')}</span>
-                <span>{formatMoney(totals.discountAmount, currency)}</span>
-              </p>
-              {totals.couponDiscount > 0 && (
-                <p className="flex justify-between">
-                  <span>
-                    {t('pos.couponDiscount')}
-                    {appliedCoupon ? ` (${appliedCoupon.code})` : ''}
-                  </span>
-                  <span>{formatMoney(totals.couponDiscount, currency)}</span>
+              {licenseSuspended && (
+                <p
+                  role="alert"
+                  className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  {t('pos.licenseSuspended')}
                 </p>
               )}
-              {totals.loyaltyDiscount > 0 && (
-                <p className="flex justify-between">
-                  <span>
-                    {t('pos.loyaltyDiscount')} ({redeemPointsEffective}{' '}
-                    {t('pos.points')})
-                  </span>
-                  <span>{formatMoney(totals.loyaltyDiscount, currency)}</span>
-                </p>
-              )}
-              <p className="flex justify-between">
-                <span>{t('pos.tax', { rate: taxRate })}</span>
-                <span>{formatMoney(totals.taxAmount, currency)}</span>
-              </p>
-              <p className="flex justify-between">
-                <span>{t('pos.serviceCharge', { rate: serviceChargeRate })}</span>
-                <span>{formatMoney(totals.serviceChargeAmount, currency)}</span>
-              </p>
-              {deliveryFee > 0 && (
-                <p className="flex justify-between">
-                  <span>{t('pos.deliveryFee')}</span>
-                  <span>{formatMoney(deliveryFee, currency)}</span>
-                </p>
-              )}
-              <p className="flex justify-between font-semibold">
-                <span>{t('pos.total')}</span>
-                <span>{formatMoney(totals.totalAmount, currency)}</span>
-              </p>
-            </div>
-            {placeErrorKey && (
-              <p
-                role="alert"
-                className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              <Button
+                type="button"
+                onClick={() => void handlePlaceOrder()}
+                disabled={placing || licenseSuspended}
               >
-                {t(placeErrorKey)}
-              </p>
-            )}
-            {licenseSuspended && (
-              <p
-                role="alert"
-                className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
-              >
-                {t('pos.licenseSuspended')}
-              </p>
-            )}
-            <Button
-              type="button"
-              onClick={() => void handlePlaceOrder()}
-              disabled={placing || licenseSuspended}
-            >
-              {placing
-                ? t('pos.placingOrder')
-                : online
-                  ? t('pos.placeOrder')
-                  : t('offline.placeOffline')}
-            </Button>
+                {placing
+                  ? t('pos.placingOrder')
+                  : online
+                    ? t('pos.placeOrder')
+                    : t('offline.placeOffline')}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {previewLines.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+          <span className="text-sm">
+            {t('pos.total')}:{' '}
+            <span className="font-semibold">
+              {formatMoney(totals.totalAmount, currency)}
+            </span>
+          </span>
+          <Button
+            type="button"
+            onClick={() => void handlePlaceOrder()}
+            disabled={placing || licenseSuspended}
+          >
+            {placing
+              ? t('pos.placingOrder')
+              : online
+                ? t('pos.placeOrder')
+                : t('offline.placeOffline')}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

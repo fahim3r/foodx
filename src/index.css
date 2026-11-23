@@ -174,6 +174,75 @@
   display: none;
 }
 
+/* POS add feedback (2026-11-23): a tapped product tile pops with a
+   primary-colour ring flash, the added cart row flashes softly, and
+   an incremented quantity bounces - so the cashier can SEE the add
+   happened (user report: "add holo bujha jacche na, animation nai").
+   The -a/-b class pairs carry identical keyframes: PosPage
+   alternates them on every add so a rapid repeat tap restarts the
+   animation instead of re-applying the same class (which would not
+   replay it). */
+@keyframes pos-tile-pop {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 55%, transparent);
+  }
+  35% {
+    transform: scale(0.96);
+  }
+  65% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.pos-tile-pop-a,
+.pos-tile-pop-b {
+  animation: pos-tile-pop 0.5s ease-out;
+}
+@keyframes pos-line-flash {
+  0% {
+    background-color: color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.pos-line-flash-a,
+.pos-line-flash-b {
+  border-radius: 0.5rem;
+  animation: pos-line-flash 1s ease-out;
+}
+@keyframes pos-qty-bounce {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pos-qty-bounce-a,
+.pos-qty-bounce-b {
+  display: inline-block;
+  animation: pos-qty-bounce 0.45s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pos-tile-pop-a,
+  .pos-tile-pop-b,
+  .pos-line-flash-a,
+  .pos-line-flash-b,
+  .pos-qty-bounce-a,
+  .pos-qty-bounce-b {
+    animation: none;
+  }
+}
+
 /* Easy Mode (modifications v2, item 9): Tailwind is rem-based, so
    raising the root font size grows every text and tap target ~1/8. */
 html.easy-mode {
