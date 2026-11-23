@@ -294,7 +294,7 @@ function SidebarContent({
           </span>
         ) : null}
       </a>
-      <nav className="flex flex-col gap-1 px-3 py-2" aria-label={t('layout.nav')}>
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2" aria-label={t('layout.nav')}>
         {!permissionsReady ? (
           // Permissions still loading: neutral placeholders instead
           // of the nav list. can() deliberately fails OPEN while
