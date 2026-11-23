@@ -269,6 +269,10 @@ export interface Order {
   updated_at: string
 }
 
+/** Per-item kitchen progress (migration 0036). A station bucket's
+ * state on the KDS is the aggregate of its items' states. */
+export type KitchenItemStatus = 'PENDING' | 'PREPARING' | 'READY'
+
 export interface OrderItem {
   id: string
   order_id: string
@@ -281,6 +285,8 @@ export interface OrderItem {
   total_price: number
   /** Per-item kitchen note (migration 0021); null when none. */
   note: string | null
+  /** Per-item kitchen progress (migration 0036). */
+  kitchen_status: KitchenItemStatus
   created_at: string
   updated_at: string
 }
@@ -605,6 +611,10 @@ export const PURCHASE_ORDER_TRANSITIONS: Record<
 export interface KitchenOrder {
   order: Order
   items: OrderItemWithModifiers[]
+  /** This station bucket's own progress (migration 0036): the
+   * aggregate of its items' effective kitchen states. The order
+   * becomes Ready only when every bucket is READY. */
+  stationStatus: KitchenItemStatus
 }
 
 // ---------------------------------------------------------------------------

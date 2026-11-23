@@ -1,17 +1,23 @@
 // FoodX — Kitchen Display (KDS) page (protected).
 // Shows live kitchen orders grouped by kitchen station, oldest first.
-// Live updates come from a Supabase Realtime subscription (best-effort);
-// a 30s poll is the safety net, plus a manual Refresh button. READY
-// orders show no action here — the Orders page marks them served.
+// Each station card carries its OWN progress (migration 0036): a
+// station advances independently, and the order turns Ready only
+// when every station is Ready. Advancing is gated on the
+// kitchen.manage permission (audit finding #13) — everyone else sees
+// the live board view-only. Live updates come from a Supabase
+// Realtime subscription (best-effort); a 30s poll is the safety net,
+// plus a manual Refresh button. READY orders show no action here —
+// the Orders page marks them served.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import EasyHelpLine from '@/components/EasyHelpLine'
 import { useAuth } from '@/hooks/useAuth'
+import { usePermissions } from '@/hooks/usePermissions'
 import { isMissingTableError } from '@/lib/errors'
 import { elapsedMinutes } from '@/lib/time'
 import {
-  advanceKitchenStatus,
+  advanceKitchenStation,
   fetchKitchenOrders,
   subscribeKitchenOrders,
 } from '@/services/kds'
@@ -32,13 +38,18 @@ const POLL_MS = 30_000
 export default function KdsPage() {
   const { t } = useTranslation()
   const { user, restaurant, loading: authLoading, dbPending } = useAuth()
+  const { can, ready: permissionsReady } = usePermissions()
+  // Finding #13: advancing kitchen work is the kitchen staff's right.
+  // Until permissions have loaded (and for anyone without
+  // kitchen.manage) the board is view-only — no buttons render.
+  const canManageKitchen = permissionsReady && can('kitchen.manage')
   const [groups, setGroups] = useState<KitchenStationGroup[]>([])
   const [tableNames, setTableNames] = useState<Map<string, string>>(new Map())
   const [now, setNow] = useState(() => Date.now())
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<'missing' | 'failed' | null>(null)
   const [updateError, setUpdateError] = useState(false)
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
+  const [updatingKey, setUpdatingKey] = useState<string | null>(null)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -91,21 +102,19 @@ export default function KdsPage() {
     }
   }, [restaurant, refetch])
 
-  const handleAdvance = async (
-    order: Order,
-    toStatus: 'PREPARING' | 'READY',
-  ) => {
+  const handleAdvance = async (order: Order, stationId: string | null) => {
     if (!user) return
+    const key = `${order.id}:${stationId ?? 'unassigned'}`
     setUpdateError(false)
-    setUpdatingOrderId(order.id)
+    setUpdatingKey(key)
     try {
-      await advanceKitchenStatus(order, toStatus, user.id)
+      await advanceKitchenStation(order, stationId, user.id)
       await refetch()
     } catch (error) {
       console.error('[KDS] update failed', error)
       setUpdateError(true)
     } finally {
-      setUpdatingOrderId(null)
+      setUpdatingKey(null)
     }
   }
 
@@ -209,7 +218,8 @@ export default function KdsPage() {
               {group.stationName ?? t('kds.unassigned')}
             </h3>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {group.orders.map(({ order, items }) => {
+              {group.orders.map(({ order, items, stationStatus }) => {
+                const cardKey = `${order.id}:${group.stationId ?? 'unassigned'}`
                 const typeLabel =
                   order.type === 'dine_in'
                     ? t('kds.dineIn')
@@ -224,7 +234,7 @@ export default function KdsPage() {
                 const meta = [typeLabel]
                 if (tableName) meta.push(t('kds.table', { name: tableName }))
                 meta.push(
-                  t('kds.waiting', {
+                  t('kds.elapsed', {
                     minutes: elapsedMinutes(order.created_at, now),
                   }),
                 )
@@ -243,6 +253,15 @@ export default function KdsPage() {
                         )}
                       </CardTitle>
                       <CardDescription>{meta.join(' · ')}</CardDescription>
+                      <span className="mt-1 inline-flex w-fit rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                        {t(
+                          stationStatus === 'READY'
+                            ? 'orders.statusReady'
+                            : stationStatus === 'PREPARING'
+                              ? 'orders.statusPreparing'
+                              : 'orders.statusSentToKitchen',
+                        )}
+                      </span>
                     </CardHeader>
                     <CardContent>
                       <ul className="flex flex-col gap-2">
@@ -271,23 +290,25 @@ export default function KdsPage() {
                         ))}
                       </ul>
                     </CardContent>
-                    {order.status === 'SENT_TO_KITCHEN' && (
+                    {canManageKitchen && stationStatus === 'PENDING' && (
                       <CardFooter>
                         <Button
                           onClick={() =>
-                            void handleAdvance(order, 'PREPARING')
+                            void handleAdvance(order, group.stationId)
                           }
-                          disabled={updatingOrderId === order.id}
+                          disabled={updatingKey === cardKey}
                         >
                           {t('kds.startPreparing')}
                         </Button>
                       </CardFooter>
                     )}
-                    {order.status === 'PREPARING' && (
+                    {canManageKitchen && stationStatus === 'PREPARING' && (
                       <CardFooter>
                         <Button
-                          onClick={() => void handleAdvance(order, 'READY')}
-                          disabled={updatingOrderId === order.id}
+                          onClick={() =>
+                            void handleAdvance(order, group.stationId)
+                          }
+                          disabled={updatingKey === cardKey}
                         >
                           {t('kds.markReady')}
                         </Button>
