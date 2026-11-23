@@ -278,55 +278,45 @@ html.easy-mode {
   }
 }
 
-/* White Liquid Glass (2026-11-22): a fifth appearance — Apple's
-   "Liquid Glass" character on the light token set. The `.glass-white`
-   class sits on <html> WITHOUT `.dark`, so this block re-paints the
-   surface variables as bright translucent whites over a clean light
-   glow-mesh: soft pastel glows of the two brand colours (each mixed
-   strongly toward white) drift over the near-white 155° brand base,
-   so neighbouring cards sit over gently different tints and their
-   frost reads as liquid glass; cards get the specular top-edge
-   highlight. Light, dark, system and dark glass never carry the
+/* White Liquid Glass (2026-11-22; v3 "Pure Liquid Glass"
+   2026-11-23): a fifth appearance — Apple's "Liquid Glass"
+   character on the light token set. The `.glass-white` class sits
+   on <html> WITHOUT `.dark`, so this block re-paints the surface
+   variables as translucent whites over a clean, near-white scene.
+   Light, dark, system and dark glass never carry the
    `.glass-white` class, so their rules are untouched.
-   Every-section pass (2026-11-23): the user asked for the header's
-   glass on EVERY section. The header reads glassy because it is a
-   translucent fill + backdrop-blur over the mesh (its bg is the
-   transparent --background at 95%, i.e. nearly pure frost). Cards
-   already had blur, but three things kept sections reading flat:
-   (1) the mesh mid-page was almost uniform near-white, so the frost
-   had nothing to bite on — the glows are deepened a few points and
-   a soft central glow is added; (2) --border was white at 65%, an
-   invisible edge on a near-white scene — it is now a soft neutral
-   contour (the bright hairline lives on as the cards' specular
-   top edge); (3) structural fills beyond cards — bg-muted,
-   bg-secondary, bg-accent and opacity variants like bg-muted/50 —
-   carried translucent fills but no backdrop-filter at all, so
-   they are now frosted too. Border-only inner boxes (POS cart
-   rows) sit on frosted cards and gain definition from the new
-   border token; they deliberately get no fill of their own.
-   Real-glass pass (2026-11-23, v2): live acceptance showed v1's
-   cards still read as flat pale slabs — a 50%-white fill over a
-   ~95%-white scene composites to ~97% white, i.e. near-opaque,
-   and the mesh behind any single card was locally uniform. So
-   the fills drop (--card 50% -> 30%, sidebar 42%, popover 62%,
-   strips 38%), the mesh gains card-scale variation (two mid-page
-   glows, corners up ~10 points, washes loosened), the frost
-   deepens (blur 20px, saturate 1.8) and the edge firms up
-   (--border 14%, stronger shadow, a faint bottom inset for the
-   liquid feel). Foreground tokens are untouched: text stays the
-   same dark, crisp values. */
+   History: v1 frosted only cards/popovers/sidebar and sections
+   still read flat; the every-section pass frosted the structural
+   fills too; v2 dropped the fills (--card to 30%) and deepened
+   the mesh, but live the user found v2's colour too strong and
+   hard on the eyes, and the glass still did not read. V3 follows
+   the user's approved preview mock instead. The scene goes back
+   to CLEAN — v1-soft pastel glows (the brand colours mixed
+   strongly toward white) over the near-white 155° brand base,
+   v2's two mid-page glows removed — and the glass lives in the
+   surfaces themselves: every section box gets the preview's
+   exact recipe (a 150° white gradient fill, 55% -> 22%, over a
+   blur(18px) saturate(1.6) frost, a bright white border, the
+   specular top-edge highlight, a soft shadow). The flat tokens
+   stay translucent bases close to the recipe (--card 38%,
+   --popover 65% so menus stay easy to read, --sidebar 42%,
+   strips 35%), so a surface painted straight from a token still
+   lands near the glass. Foreground tokens are untouched — text
+   keeps the light theme's dark, crisp values — and coloured
+   surfaces (primary buttons, status badges) stay solid: the
+   glass is for neutral section boxes only. */
 .glass-white {
   --background: transparent;
-  --card: oklch(1 0 0 / 30%);
-  --popover: oklch(1 0 0 / 62%);
-  --secondary: oklch(0.967 0.001 286.375 / 38%);
-  --muted: oklch(0.967 0.001 286.375 / 38%);
-  --accent: oklch(0.967 0.001 286.375 / 38%);
+  --card: oklch(1 0 0 / 38%);
+  --popover: oklch(1 0 0 / 65%);
+  --secondary: oklch(0.967 0.001 286.375 / 35%);
+  --muted: oklch(0.967 0.001 286.375 / 35%);
+  --accent: oklch(0.967 0.001 286.375 / 35%);
   --border: oklch(0.145 0 0 / 14%);
   --input: oklch(0.145 0 0 / 14%);
   --sidebar: oklch(1 0 0 / 42%);
-  --sidebar-accent: oklch(0.967 0.001 286.375 / 38%);
-  --sidebar-border: oklch(0.145 0 0 / 11%);
+  --sidebar-accent: oklch(0.967 0.001 286.375 / 35%);
+  --sidebar-border: oklch(1 0 0 / 55%);
   background-color: #f6f6f4;
   background-image:
     radial-gradient(
@@ -339,46 +329,15 @@ html.easy-mode {
           var(--brand-primary, #ea580c) 55%,
           var(--brand-secondary, #16a34a)
         ),
-        #ffffff 88%
+        #ffffff 92%
       )
-    ),
-    radial-gradient(
-      1000px 700px at 50% 38%,
-      color-mix(
-        in oklab,
-        color-mix(
-          in oklab,
-          var(--brand-primary, #ea580c) 52%,
-          var(--brand-secondary, #16a34a)
-        ),
-        #ffffff 74%
-      ),
-      transparent 62%
-    ),
-    radial-gradient(
-      900px 620px at 28% 55%,
-      color-mix(
-        in oklab,
-        color-mix(in oklab, var(--brand-primary, #ea580c) 38%, #ffffff),
-        transparent 46%
-      ),
-      transparent 62%
-    ),
-    radial-gradient(
-      850px 600px at 74% 30%,
-      color-mix(
-        in oklab,
-        color-mix(in oklab, var(--brand-secondary, #16a34a) 34%, #ffffff),
-        transparent 46%
-      ),
-      transparent 60%
     ),
     radial-gradient(
       1200px 800px at -8% -10%,
       color-mix(
         in oklab,
-        color-mix(in oklab, var(--brand-primary, #ea580c) 40%, #ffffff),
-        transparent 40%
+        color-mix(in oklab, var(--brand-primary, #ea580c) 24%, #ffffff),
+        transparent 55%
       ),
       transparent 62%
     ),
@@ -386,8 +345,8 @@ html.easy-mode {
       1100px 750px at 88% -10%,
       color-mix(
         in oklab,
-        color-mix(in oklab, var(--brand-secondary, #16a34a) 40%, #ffffff),
-        transparent 40%
+        color-mix(in oklab, var(--brand-secondary, #16a34a) 24%, #ffffff),
+        transparent 55%
       ),
       transparent 62%
     ),
@@ -395,8 +354,8 @@ html.easy-mode {
       950px 700px at -12% 108%,
       color-mix(
         in oklab,
-        color-mix(in oklab, var(--brand-primary, #ea580c) 44%, #ffffff),
-        transparent 36%
+        color-mix(in oklab, var(--brand-primary, #ea580c) 28%, #ffffff),
+        transparent 50%
       ),
       transparent 58%
     ),
@@ -404,8 +363,8 @@ html.easy-mode {
       900px 650px at 108% 58%,
       color-mix(
         in oklab,
-        color-mix(in oklab, var(--brand-secondary, #16a34a) 34%, #ffffff),
-        transparent 50%
+        color-mix(in oklab, var(--brand-secondary, #16a34a) 20%, #ffffff),
+        transparent 65%
       ),
       transparent 60%
     ),
@@ -420,22 +379,19 @@ html.easy-mode {
             var(--brand-primary, #ea580c) 55%,
             var(--brand-secondary, #16a34a)
           ),
-          #ffffff 62%
+          #ffffff 75%
         ),
-        transparent 52%
+        transparent 65%
       ),
       transparent 62%
     ),
     linear-gradient(
       155deg,
-      color-mix(in oklab, var(--brand-primary, #ea580c) 16%, #ffffff),
-      color-mix(in oklab, var(--brand-secondary, #16a34a) 12%, #ffffff) 58%,
+      color-mix(in oklab, var(--brand-primary, #ea580c) 10%, #ffffff),
+      color-mix(in oklab, var(--brand-secondary, #16a34a) 7%, #ffffff) 58%,
       #f6f6f4
     );
   background-size:
-    auto,
-    auto,
-    auto,
     auto,
     auto,
     auto,
@@ -450,40 +406,79 @@ html.easy-mode {
     0 0,
     0 0,
     0 0,
-    0 0,
-    0 0,
-    0 0,
     0 0;
   background-repeat: no-repeat;
   background-attachment: fixed;
 }
 
-/* Frosted surfaces, with the Liquid Glass brightness lift. Cards,
-   popovers/menus and the sidebar were frosted from the start; the
-   every-section pass adds the structural token fills — muted,
-   secondary and accent strips (table headers, section bars, the
-   layout's offline/queue bar in its bg-muted/50 variant) — so no
-   section container is left as a flat translucent slab. Only the
-   plain utility classes are matched: hover:/focus: variants compile
-   to different class names and stay unfrosted, as do small chips. */
+/* Pure Liquid Glass surfaces — the approved preview's recipe on
+   every section box: a 150° white gradient fill (55% -> 22%)
+   layered over the translucent token base, blur(18px)
+   saturate(1.6) frost, a bright white border, the specular
+   top-edge highlight and a soft shadow. Cards, popovers/menus,
+   the sidebar and the app header get the full recipe — the
+   header is the bg-background/95 topbar in AppLayout, that
+   class token's only user. */
 .glass-white .bg-card,
 .glass-white .bg-popover,
 .glass-white .bg-sidebar,
+.glass-white [data-slot='card'],
+.glass-white [class~='bg-background/95'] {
+  background-image: linear-gradient(
+    150deg,
+    rgb(255 255 255 / 55%),
+    rgb(255 255 255 / 22%)
+  );
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  backdrop-filter: blur(18px) saturate(1.6);
+  border-color: rgb(255 255 255 / 70%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 95%),
+    inset 0 -1px 0 rgb(255 255 255 / 35%),
+    0 12px 30px rgb(31 38 60 / 10%);
+}
+
+/* Structural strips — table-header rows, section bars and the
+   layout's offline/queue bar (bg-muted/50): the same gradient,
+   frost and bright border, but no drop shadow — they sit inside
+   glass cards or on the mesh, and a shadow under a table header
+   would only muddy the rows below it. Only the plain utility
+   classes are matched: hover:/focus: variants compile to
+   different class names and stay unfrosted, as do small chips. */
 .glass-white .bg-muted,
 .glass-white .bg-secondary,
 .glass-white .bg-accent,
 .glass-white [class~='bg-muted/50'] {
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
-  backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+  background-image: linear-gradient(
+    150deg,
+    rgb(255 255 255 / 55%),
+    rgb(255 255 255 / 22%)
+  );
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  backdrop-filter: blur(18px) saturate(1.6);
+  border-color: rgb(255 255 255 / 70%);
 }
 
-/* Specular edge: a bright hairline of light along each card's top
-   edge, floating over a soft light shadow. */
-.glass-white [data-slot='card'] {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 75%),
-    inset 0 -1px 0 rgb(255 255 255 / 35%),
-    0 14px 36px rgb(30 27 25 / 14%);
+/* Small neutral elements — POS product tiles and the other
+   outline buttons (Button variant="outline" is the bg-background
+   button) get the liquid fill, bright edge and top highlight
+   without a backdrop-filter of their own: they sit on frosted
+   surfaces, and a blur per small control is a known low-end
+   device trap (the same reasoning the dark glass block uses).
+   Form inputs keep a mostly-opaque white fill on top of the
+   --input border, so typed text stays easy to read. */
+.glass-white [data-slot='button'].bg-background {
+  background-image: linear-gradient(
+    150deg,
+    rgb(255 255 255 / 55%),
+    rgb(255 255 255 / 22%)
+  );
+  border-color: rgb(255 255 255 / 70%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 95%);
+}
+
+.glass-white [data-slot='input'] {
+  background-color: rgb(255 255 255 / 65%);
 }
 
 /* No backdrop-filter support: surfaces fall back to the light theme's
