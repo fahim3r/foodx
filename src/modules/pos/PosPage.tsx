@@ -1279,6 +1279,7 @@ export default function PosPage() {
         unit_price: line.unitPrice,
         total_price: line.lineTotal,
         note: line.note?.trim() || null,
+        kitchen_status: 'PENDING',
         created_at: entry.queuedAt,
         updated_at: entry.queuedAt,
         modifiers: line.modifierNames.map((m, j) => ({
