@@ -294,7 +294,7 @@ function SidebarContent({
           </span>
         ) : null}
       </a>
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2" aria-label={t('layout.nav')}>
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2 sidebar-nav-scroll" aria-label={t('layout.nav')}>
         {!permissionsReady ? (
           // Permissions still loading: neutral placeholders instead
           // of the nav list. can() deliberately fails OPEN while
@@ -373,11 +373,7 @@ function SidebarContent({
               </span>
             </NavLink>
           )}
-          </>
-        )}
-      </nav>
-      <div className="mt-auto">
-        <div className={cn('px-5 py-4', collapsed && 'md:hidden')}>
+        <div className={cn('mt-2 px-5 py-4', collapsed && 'md:hidden')}>
           <img
             src={logoWordmark}
             alt="FoodX"
@@ -389,11 +385,15 @@ function SidebarContent({
             {t('app.tagline')}
           </p>
         </div>
+          </>
+        )}
+      </nav>
+      <div className="mt-auto">
         {onToggleCollapsed && (
           // Desktop-only collapse toggle (user request, 2026-11-23):
           // the mobile drawer always renders expanded, so the
           // button never shows below md.
-          <div className="hidden px-3 pb-3 md:block">
+          <div className={cn('hidden px-3 pb-3 md:flex', collapsed ? 'md:justify-center' : 'md:justify-end')}>
             <button
               type="button"
               onClick={onToggleCollapsed}
@@ -408,7 +408,7 @@ function SidebarContent({
                   : t('layout.collapseSidebar')
               }
               className={cn(
-                'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
+                'flex items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
                 collapsed && 'justify-center px-2',
               )}
             >
@@ -417,7 +417,6 @@ function SidebarContent({
               ) : (
                 <PanelLeftClose className="size-4 shrink-0" />
               )}
-              {!collapsed && <span>{t('layout.collapseSidebar')}</span>}
             </button>
           </div>
         )}

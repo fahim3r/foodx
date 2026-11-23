@@ -133,6 +133,30 @@
   }
 }
 
+/* Sidebar nav scrollbar (2026-11-23): the menu scrolls on shorter
+   screens; keep its bar a thin themed line — the sidebar foreground
+   at low alpha, so it follows light / dark / glass themes — instead
+   of the thick OS scrollbar. */
+.sidebar-nav-scroll {
+  scrollbar-width: thin;
+  scrollbar-color:
+    color-mix(in oklab, var(--sidebar-foreground) 28%, transparent)
+    transparent;
+}
+.sidebar-nav-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--sidebar-foreground) 28%, transparent);
+  border-radius: 9999px;
+}
+.sidebar-nav-scroll::-webkit-scrollbar-button {
+  display: none;
+}
+
 /* Easy Mode (modifications v2, item 9): Tailwind is rem-based, so
    raising the root font size grows every text and tap target ~1/8. */
 html.easy-mode {
