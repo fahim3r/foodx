@@ -174,38 +174,43 @@
   display: none;
 }
 
-/* POS add feedback (2026-11-23): a tapped product tile pops with a
-   primary-colour ring flash, the added cart row flashes softly, and
-   an incremented quantity bounces - so the cashier can SEE the add
-   happened (user report: "add holo bujha jacche na, animation nai").
-   The -a/-b class pairs carry identical keyframes: PosPage
-   alternates them on every add so a rapid repeat tap restarts the
-   animation instead of re-applying the same class (which would not
-   replay it). */
+/* POS add feedback (2026-11-23, strengthened the same day): a
+   tapped product tile pops with a stronger primary ring + tint
+   flash and a "+N" chip at its top-right corner, the added cart
+   row flashes harder, an incremented quantity bounces, and the
+   Total amount pulses - so the cashier can SEE the add happened
+   (user report: "add holo bujha jacche na, animation nai"; the
+   first pass was too subtle to notice on a real device). The
+   -a/-b class pairs carry identical keyframes: PosPage alternates
+   them on every add so a rapid repeat tap restarts the animation
+   instead of re-applying the same class (which would not replay
+   it). The chip is keyed by the add sequence in PosPage, so it
+   restarts on repeat taps too, and it also fires when the add
+   came through the chooser popup. */
 @keyframes pos-tile-pop {
   0% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 55%, transparent);
+    background-color: color-mix(in oklab, var(--primary) 32%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 75%, transparent);
   }
   35% {
-    transform: scale(0.96);
-  }
-  65% {
-    transform: scale(1.02);
-    box-shadow: 0 0 0 6px transparent;
+    transform: scale(1.06);
+    background-color: color-mix(in oklab, var(--primary) 20%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 45%, transparent);
   }
   100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 transparent;
+    background-color: transparent;
+    box-shadow: 0 0 0 12px transparent;
   }
 }
 .pos-tile-pop-a,
 .pos-tile-pop-b {
-  animation: pos-tile-pop 0.5s ease-out;
+  animation: pos-tile-pop 0.7s ease-out;
 }
 @keyframes pos-line-flash {
   0% {
-    background-color: color-mix(in oklab, var(--primary) 18%, transparent);
+    background-color: color-mix(in oklab, var(--primary) 38%, transparent);
   }
   100% {
     background-color: transparent;
@@ -214,7 +219,7 @@
 .pos-line-flash-a,
 .pos-line-flash-b {
   border-radius: 0.5rem;
-  animation: pos-line-flash 1s ease-out;
+  animation: pos-line-flash 1.2s ease-out;
 }
 @keyframes pos-qty-bounce {
   0% {
@@ -232,14 +237,65 @@
   display: inline-block;
   animation: pos-qty-bounce 0.45s ease-out;
 }
+@keyframes pos-chip-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) translateY(4px);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.15) translateY(0);
+  }
+  45% {
+    transform: scale(1) translateY(0);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1) translateY(-4px);
+  }
+}
+.pos-chip-pop-a,
+.pos-chip-pop-b {
+  animation: pos-chip-pop 1.1s ease-out forwards;
+}
+@keyframes pos-total-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.2);
+    color: var(--primary);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pos-total-pulse-a,
+.pos-total-pulse-b {
+  display: inline-block;
+  animation: pos-total-pulse 0.5s ease-out;
+}
 @media (prefers-reduced-motion: reduce) {
   .pos-tile-pop-a,
   .pos-tile-pop-b,
   .pos-line-flash-a,
   .pos-line-flash-b,
   .pos-qty-bounce-a,
-  .pos-qty-bounce-b {
+  .pos-qty-bounce-b,
+  .pos-chip-pop-a,
+  .pos-chip-pop-b,
+  .pos-total-pulse-a,
+  .pos-total-pulse-b {
     animation: none;
+  }
+  /* The chip's resting state is visible (its keyframes end at
+     opacity 0), so hide it outright when motion is reduced. */
+  .pos-chip-pop-a,
+  .pos-chip-pop-b {
+    display: none;
   }
 }
 
