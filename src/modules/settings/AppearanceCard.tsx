@@ -19,7 +19,11 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
 import { updateSettingsPartial } from '@/services/restaurant'
-import { UploadError, uploadGlassBackdrop } from '@/services/uploads'
+import {
+  UploadError,
+  deleteGlassBackdropByUrl,
+  uploadGlassBackdrop,
+} from '@/services/uploads'
 import type { ThemeMode } from '@/app/ThemeProvider'
 
 const OPTIONS: {
@@ -81,7 +85,10 @@ function WhiteGlassSwatch() {
  * Upload goes to the product-images bucket under the restaurant's
  * backdrop/ folder; a pasted link is stored as-is. The thumbnail
  * wears the same drained filter + wash as the live backdrop, so
- * what is previewed here is what the panel will show.
+ * what is previewed here is what the panel will show. Replacing
+ * or resetting the photo also deletes the previous upload's file
+ * from the bucket (best-effort — see deleteGlassBackdropByUrl),
+ * so the bucket does not fill with orphaned backdrops.
  */
 function GlassBackgroundControls() {
   const { t } = useTranslation()
@@ -100,6 +107,7 @@ function GlassBackgroundControls() {
   const previewSrc = customUrl ?? DEFAULT_GLASS_BACKDROP
 
   const save = async (url: string | null) => {
+    const previousUrl = customUrl
     setSaving(true)
     setErrorKey(null)
     setSaved(false)
@@ -109,6 +117,11 @@ function GlassBackgroundControls() {
       })
       await refreshWorkspace()
       setSaved(true)
+      // The save landed: remove the replaced/reset photo's file
+      // from storage (best-effort; external links are untouched).
+      if (previousUrl && previousUrl !== url) {
+        void deleteGlassBackdropByUrl(previousUrl)
+      }
     } catch {
       setErrorKey('settings.glassBackgroundSaveFailed')
     } finally {
@@ -118,17 +131,31 @@ function GlassBackgroundControls() {
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return
+    const previousUrl = customUrl
     setUploading(true)
     setErrorKey(null)
     setSaved(false)
+    let uploadedUrl: string | null = null
+    let settingsSaved = false
     try {
-      const url = await uploadGlassBackdrop(restaurant.id, file)
+      uploadedUrl = await uploadGlassBackdrop(restaurant.id, file)
       await updateSettingsPartial(restaurant.id, {
-        glass_backdrop_url: url,
+        glass_backdrop_url: uploadedUrl,
       })
+      settingsSaved = true
       await refreshWorkspace()
       setSaved(true)
+      // The save landed: remove the replaced photo's file from
+      // storage (best-effort; external links are untouched).
+      if (previousUrl && previousUrl !== uploadedUrl) {
+        void deleteGlassBackdropByUrl(previousUrl)
+      }
     } catch (error) {
+      // The upload landed but the settings save did not: delete
+      // the new file again so it is not orphaned from birth.
+      if (uploadedUrl && !settingsSaved) {
+        void deleteGlassBackdropByUrl(uploadedUrl)
+      }
       if (error instanceof UploadError) {
         setErrorKey(
           error.code === 'upload_bad_type'

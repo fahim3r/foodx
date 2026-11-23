@@ -65,6 +65,7 @@ export async function uploadProductImage(
   const { data } = supabase.storage.from('product-images').getPublicUrl(path)
   return data.publicUrl
 }
+
 /**
  * White Glass backdrop upload (v4, migration 0037): the same
  * bucket and downscale as product images, under the restaurant's
@@ -88,4 +89,43 @@ export async function uploadGlassBackdrop(
   }
   const { data } = supabase.storage.from('product-images').getPublicUrl(path)
   return data.publicUrl
+}
+
+/**
+ * Best-effort cleanup for a replaced/reset glass backdrop:
+ * clearing `glass_backdrop_url` alone would leave the uploaded
+ * file in the bucket forever. Only URLs that are THIS bucket's
+ * own public URLs under a `backdrop/` folder are touched — a
+ * pasted external link is never deleted (it is not ours to
+ * delete). All failures are swallowed: cleanup must never block
+ * or fail the settings save that triggered it. Deletes are
+ * scoped by the bucket's existing policy (0028,
+ * `product_images_delete_own`: authenticated, own restaurant
+ * folder only).
+ */
+const PRODUCT_IMAGES_PUBLIC_MARKER =
+  '/storage/v1/object/public/product-images/'
+
+export async function deleteGlassBackdropByUrl(
+  url: string | null | undefined,
+): Promise<void> {
+  if (!url) return
+  try {
+    const markerAt = url.indexOf(PRODUCT_IMAGES_PUBLIC_MARKER)
+    if (markerAt === -1) return
+    const path = decodeURIComponent(
+      url
+        .slice(markerAt + PRODUCT_IMAGES_PUBLIC_MARKER.length)
+        .split(/[?#]/)[0],
+    )
+    if (!path.includes('/backdrop/')) return
+    const { error } = await supabase.storage
+      .from('product-images')
+      .remove([path])
+    if (error) {
+      console.error('[uploads] glass backdrop cleanup failed', error)
+    }
+  } catch (error) {
+    console.error('[uploads] glass backdrop cleanup failed', error)
+  }
 }
