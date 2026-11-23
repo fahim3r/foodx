@@ -65,3 +65,27 @@ export async function uploadProductImage(
   const { data } = supabase.storage.from('product-images').getPublicUrl(path)
   return data.publicUrl
 }
+/**
+ * White Glass backdrop upload (v4, migration 0037): the same
+ * bucket and downscale as product images, under the restaurant's
+ * own `backdrop/` folder; `restaurant_settings.glass_backdrop_url`
+ * stores the returned public URL. A backdrop is blurred and
+ * drained toward white by the theme, so the shared 1200px edge
+ * cap costs nothing visually.
+ */
+export async function uploadGlassBackdrop(
+  restaurantId: string,
+  file: File,
+): Promise<string> {
+  const { blob, ext } = await downscale(file)
+  const path = `${restaurantId}/backdrop/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(path, blob, { contentType: blob.type || undefined, upsert: false })
+  if (error) {
+    console.error('[uploads] glass backdrop upload failed', error)
+    throw new UploadError('upload_failed')
+  }
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path)
+  return data.publicUrl
+}

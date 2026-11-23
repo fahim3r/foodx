@@ -189,6 +189,7 @@ export async function updateSettingsPartial(
       | 'currency'
       | 'tax_rate'
       | 'branding_name'
+      | 'glass_backdrop_url'
       | 'onboarding_completed'
       | 'delivery_enabled'
       | 'delivery_fee'

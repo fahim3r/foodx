@@ -35,6 +35,10 @@ export interface RestaurantSettings {
   branding_name: string | null
   logo_url: string | null
   favicon_url: string | null
+  /** White Glass v4 (migration 0037): custom backdrop photo URL
+   * for the White Glass theme; null = the built-in drained café
+   * photo (see components/GlassBackdrop). */
+  glass_backdrop_url: string | null
   primary_color: string
   secondary_color: string
   currency: string

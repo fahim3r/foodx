@@ -278,28 +278,36 @@ html.easy-mode {
   }
 }
 
-/* White Liquid Glass (2026-11-22; v3 "Pure Liquid Glass"
+/* White Liquid Glass (2026-11-22; v4 photo backdrop
    2026-11-23): a fifth appearance — Apple's "Liquid Glass"
-   character on the light token set. The `.glass-white` class sits
-   on <html> WITHOUT `.dark`, so this block re-paints the surface
-   variables as translucent whites over a clean, near-white scene.
-   Light, dark, system and dark glass never carry the
-   `.glass-white` class, so their rules are untouched.
-   History: v1 frosted only cards/popovers/sidebar and sections
-   still read flat; the every-section pass frosted the structural
-   fills too; v2 dropped the fills (--card to 30%) and deepened
-   the mesh, but live the user found v2's colour too strong and
-   hard on the eyes, and the glass still did not read. V3 follows
-   the user's approved preview mock instead. The scene goes back
-   to CLEAN — v1-soft pastel glows (the brand colours mixed
-   strongly toward white) over the near-white 155° brand base,
-   v2's two mid-page glows removed — and the glass lives in the
-   surfaces themselves: every section box gets the preview's
-   exact recipe (a 150° white gradient fill, 55% -> 22%, over a
-   blur(18px) saturate(1.6) frost, a bright white border, the
-   specular top-edge highlight, a soft shadow). The flat tokens
-   stay translucent bases close to the recipe (--card 38%,
-   --popover 65% so menus stay easy to read, --sidebar 42%,
+   character on the light token set. The `.glass-white` class
+   sits on <html> WITHOUT `.dark`, so this block re-paints the
+   surface variables as translucent whites. Light, dark, system
+   and dark glass never carry the `.glass-white` class, so their
+   rules are untouched.
+   History: v1 frosted only the major surfaces and sections read
+   flat; v2 deepened the glow-mesh and the user found its colour
+   too strong and hard on the eyes; v3 followed an approved
+   preview (gradient sheen on every surface over a clean
+   near-white glow scene) and the user STILL could not see the
+   glass on his own screen — a near-uniform pale scene gives
+   frost nothing to show. V4 takes the lesson of the reference
+   UIs the user supplied: real glass needs a real scene behind
+   it. The scene is now a PHOTOGRAPH — a fixed layer rendered by
+   the GlassBackdrop component in AppLayout (this block keeps
+   only a neutral fallback colour for screens where that layer
+   never mounts, e.g. login) — drained toward white (grayscale +
+   brightness, so no warm "coffee" tint survives) under a white
+   wash. A restaurant can replace the photo from Settings →
+   Appearance (restaurant_settings.glass_backdrop_url, migration
+   0037); the same drained filter applies to any image, so a
+   custom photo stays in the theme's white / neutral family.
+   The glass itself lives in the surfaces, in the approved
+   preview's recipe: a 155° white gradient fill (42% -> 12%), a
+   LIGHT blur(9px) saturate(1.2) frost, a bright white border,
+   the specular top-edge highlight, a soft shadow. The flat
+   tokens stay translucent bases close to the recipe (--card
+   38%, --popover 65% so menus stay easy to read, --sidebar 42%,
    strips 35%), so a surface painted straight from a token still
    lands near the glass. Foreground tokens are untouched — text
    keeps the light theme's dark, crisp values — and coloured
@@ -317,125 +325,36 @@ html.easy-mode {
   --sidebar: oklch(1 0 0 / 42%);
   --sidebar-accent: oklch(0.967 0.001 286.375 / 35%);
   --sidebar-border: oklch(1 0 0 / 55%);
-  background-color: #f6f6f4;
-  background-image:
-    radial-gradient(
-      125% 92% at 50% 42%,
-      transparent 64%,
-      color-mix(
-        in oklab,
-        color-mix(
-          in oklab,
-          var(--brand-primary, #ea580c) 55%,
-          var(--brand-secondary, #16a34a)
-        ),
-        #ffffff 92%
-      )
-    ),
-    radial-gradient(
-      1200px 800px at -8% -10%,
-      color-mix(
-        in oklab,
-        color-mix(in oklab, var(--brand-primary, #ea580c) 24%, #ffffff),
-        transparent 55%
-      ),
-      transparent 62%
-    ),
-    radial-gradient(
-      1100px 750px at 88% -10%,
-      color-mix(
-        in oklab,
-        color-mix(in oklab, var(--brand-secondary, #16a34a) 24%, #ffffff),
-        transparent 55%
-      ),
-      transparent 62%
-    ),
-    radial-gradient(
-      950px 700px at -12% 108%,
-      color-mix(
-        in oklab,
-        color-mix(in oklab, var(--brand-primary, #ea580c) 28%, #ffffff),
-        transparent 50%
-      ),
-      transparent 58%
-    ),
-    radial-gradient(
-      900px 650px at 108% 58%,
-      color-mix(
-        in oklab,
-        color-mix(in oklab, var(--brand-secondary, #16a34a) 20%, #ffffff),
-        transparent 65%
-      ),
-      transparent 60%
-    ),
-    radial-gradient(
-      1050px 720px at 52% 112%,
-      color-mix(
-        in oklab,
-        color-mix(
-          in oklab,
-          color-mix(
-            in oklab,
-            var(--brand-primary, #ea580c) 55%,
-            var(--brand-secondary, #16a34a)
-          ),
-          #ffffff 75%
-        ),
-        transparent 65%
-      ),
-      transparent 62%
-    ),
-    linear-gradient(
-      155deg,
-      color-mix(in oklab, var(--brand-primary, #ea580c) 10%, #ffffff),
-      color-mix(in oklab, var(--brand-secondary, #16a34a) 7%, #ffffff) 58%,
-      #f6f6f4
-    );
-  background-size:
-    auto,
-    auto,
-    auto,
-    auto,
-    auto,
-    auto,
-    auto;
-  background-position:
-    0 0,
-    0 0,
-    0 0,
-    0 0,
-    0 0,
-    0 0,
-    0 0;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
+  background-color: #eef0f2;
 }
 
-/* Pure Liquid Glass surfaces — the approved preview's recipe on
-   every section box: a 150° white gradient fill (55% -> 22%)
-   layered over the translucent token base, blur(18px)
-   saturate(1.6) frost, a bright white border, the specular
-   top-edge highlight and a soft shadow. Cards, popovers/menus,
-   the sidebar and the app header get the full recipe — the
-   header is the bg-background/95 topbar in AppLayout, that
-   class token's only user. */
+/* Liquid Glass surfaces (v4) — the approved preview's recipe on
+   every section box: a 155° white gradient fill (42% -> 12%)
+   layered over the translucent token base, a LIGHT blur(9px)
+   saturate(1.2) frost — light enough that the photograph behind
+   stays visible through the card, which is what makes the glass
+   read at all — a bright white border, the specular top-edge
+   highlight and a soft shadow. Cards, popovers/menus, the
+   sidebar and the app header get the full recipe — the header
+   is the bg-background/95 topbar in AppLayout, that class
+   token's only user. */
 .glass-white .bg-card,
 .glass-white .bg-popover,
 .glass-white .bg-sidebar,
 .glass-white [data-slot='card'],
 .glass-white [class~='bg-background/95'] {
   background-image: linear-gradient(
-    150deg,
-    rgb(255 255 255 / 55%),
-    rgb(255 255 255 / 22%)
+    155deg,
+    rgb(255 255 255 / 42%),
+    rgb(255 255 255 / 12%)
   );
-  -webkit-backdrop-filter: blur(18px) saturate(1.6);
-  backdrop-filter: blur(18px) saturate(1.6);
-  border-color: rgb(255 255 255 / 70%);
+  -webkit-backdrop-filter: blur(9px) saturate(1.2);
+  backdrop-filter: blur(9px) saturate(1.2);
+  border-color: rgb(255 255 255 / 85%);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 95%),
     inset 0 -1px 0 rgb(255 255 255 / 35%),
-    0 12px 30px rgb(31 38 60 / 10%);
+    0 14px 32px rgb(31 38 60 / 16%);
 }
 
 /* Structural strips — table-header rows, section bars and the
@@ -450,13 +369,13 @@ html.easy-mode {
 .glass-white .bg-accent,
 .glass-white [class~='bg-muted/50'] {
   background-image: linear-gradient(
-    150deg,
-    rgb(255 255 255 / 55%),
-    rgb(255 255 255 / 22%)
+    155deg,
+    rgb(255 255 255 / 42%),
+    rgb(255 255 255 / 12%)
   );
-  -webkit-backdrop-filter: blur(18px) saturate(1.6);
-  backdrop-filter: blur(18px) saturate(1.6);
-  border-color: rgb(255 255 255 / 70%);
+  -webkit-backdrop-filter: blur(9px) saturate(1.2);
+  backdrop-filter: blur(9px) saturate(1.2);
+  border-color: rgb(255 255 255 / 85%);
 }
 
 /* Small neutral elements — POS product tiles and the other
@@ -469,11 +388,11 @@ html.easy-mode {
    --input border, so typed text stays easy to read. */
 .glass-white [data-slot='button'].bg-background {
   background-image: linear-gradient(
-    150deg,
-    rgb(255 255 255 / 55%),
-    rgb(255 255 255 / 22%)
+    155deg,
+    rgb(255 255 255 / 42%),
+    rgb(255 255 255 / 12%)
   );
-  border-color: rgb(255 255 255 / 70%);
+  border-color: rgb(255 255 255 / 85%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 95%);
 }
 
@@ -482,7 +401,7 @@ html.easy-mode {
 }
 
 /* No backdrop-filter support: surfaces fall back to the light theme's
-   solid values (the glow backdrop still frames the page). */
+   solid values (the neutral backdrop still frames the page). */
 @supports not (
   (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
 ) {

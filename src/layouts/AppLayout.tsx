@@ -64,6 +64,7 @@ import type { DevFeatureKey } from '@/types'
 import logoWordmark from '@/assets/brand/logo-wordmark.webp'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import GlassBackdrop from '@/components/GlassBackdrop'
 
 const NAV_ITEMS = [
   { to: '/', key: 'nav.dashboard', icon: LayoutDashboard, end: true },
@@ -566,6 +567,14 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
 
   return (
     <div style={brandingStyle} className="min-h-svh bg-background">
+      {/* White Glass v4: the drained photograph the glass surfaces
+          float over (GlassBackdrop). Mounted only while the White
+          Glass theme is selected; every other theme keeps its own
+          CSS scene. The photo is the restaurant's custom backdrop
+          (settings.glass_backdrop_url) or the built-in one. */}
+      {themeMode === 'glassWhite' && (
+        <GlassBackdrop url={settings?.glass_backdrop_url} />
+      )}
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <button
