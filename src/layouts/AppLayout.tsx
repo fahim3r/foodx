@@ -17,6 +17,8 @@ import {
   BellRing,
   Monitor,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   CalendarCheck,
   ChefHat,
   ClipboardList,
@@ -46,6 +48,7 @@ import { EasyModeProvider } from '@/app/EasyModeProvider'
 import { useEasyMode } from '@/hooks/useEasyMode'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useLicenseState } from '@/hooks/useLicenseState'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
 import { useOrderSoundWatcher } from '@/hooks/useOrderSoundWatcher'
 import { initSound } from '@/lib/sound'
@@ -156,6 +159,38 @@ function LanguageSwitcher() {
 }
 
 /**
+ * Header online/offline badge: the Dashboard's status card moved
+ * into the topbar (user request, 2026-11-23), so connectivity is
+ * visible on every panel page. Same source as the old card —
+ * useOnlineStatus() (navigator.onLine + the online/offline
+ * events). On narrow screens the label hides and only the dot
+ * remains, so the header never crowds.
+ */
+function OnlineBadge() {
+  const { t } = useTranslation()
+  const online = useOnlineStatus()
+  const label = online
+    ? t('dashboard.statusOnline')
+    : t('dashboard.statusOffline')
+  return (
+    <span
+      role="status"
+      title={label}
+      className="flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium"
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          'size-2 shrink-0 rounded-full',
+          online ? 'bg-emerald-500' : 'bg-red-500',
+        )}
+      />
+      <span className="hidden sm:inline">{label}</span>
+    </span>
+  )
+}
+
+/**
  * Easy Mode v2 (wave E1; design §5): the easy sidebar subset, as a
  * route → easy-label map. Routes absent from this map are hidden
  * in easy mode (they live behind "আরও অপশন" → Settings); the
@@ -180,7 +215,15 @@ const EASY_NAV_LABELS: Record<string, string> = {
   '/settings': 'easy.nav.settings',
 }
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  onNavigate,
+  collapsed = false,
+  onToggleCollapsed,
+}: {
+  onNavigate?: () => void
+  collapsed?: boolean
+  onToggleCollapsed?: () => void
+}) {
   const licenseView = useLicenseState()
   const { easy } = useEasyMode()
   const { can, isAdminLevel, ready: permissionsReady } = usePermissions()
@@ -220,13 +263,19 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <a
         href="/panel"
         onClick={onNavigate}
-        className="flex items-center gap-2.5 px-5 py-4"
+        className={cn(
+          'flex items-center gap-2.5 px-5 py-4',
+          collapsed && 'md:justify-center md:px-2',
+        )}
       >
         {settings?.logo_url ? (
           <img
             src={settings.logo_url}
             alt={sidebarName || displayName}
-            className="h-9 w-auto max-w-44 shrink-0 rounded-md object-contain"
+            className={cn(
+              'h-9 w-auto max-w-44 shrink-0 rounded-md object-contain',
+              collapsed && 'md:max-w-9',
+            )}
           />
         ) : (
           <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-base font-bold text-primary-foreground">
@@ -234,7 +283,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </span>
         )}
         {sidebarName ? (
-          <span className="truncate text-lg font-bold tracking-tight">
+          <span
+            className={cn(
+              'truncate text-lg font-bold tracking-tight',
+              collapsed && 'md:hidden',
+            )}
+          >
             {sidebarName}
           </span>
         ) : null}
@@ -276,9 +330,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             to={navTo(to)}
             end={end}
             onClick={onNavigate}
+            title={easy ? t(EASY_NAV_LABELS[to] ?? key) : t(key)}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                collapsed && 'md:justify-center md:px-2',
                 isActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
@@ -286,7 +342,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             }
           >
             <Icon className="size-4 shrink-0" />
-            {easy ? t(EASY_NAV_LABELS[to] ?? key) : t(key)}
+            <span className={collapsed ? 'md:hidden' : undefined}>
+              {easy ? t(EASY_NAV_LABELS[to] ?? key) : t(key)}
+            </span>
           </NavLink>
           ))}
           {easy && isAdminLevel && (
@@ -297,9 +355,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <NavLink
               to={navTo('/settings')}
               onClick={onNavigate}
+              title={t('easy.nav.more')}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  collapsed && 'md:justify-center md:px-2',
                   isActive
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
@@ -307,21 +367,59 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               }
             >
               <MoreHorizontal className="size-4 shrink-0" />
-              {t('easy.nav.more')}
+              <span className={collapsed ? 'md:hidden' : undefined}>
+                {t('easy.nav.more')}
+              </span>
             </NavLink>
           )}
           </>
         )}
       </nav>
-      <div className="mt-auto px-5 py-4">
-        <img
-          src={logoWordmark}
-          alt="FoodX"
-          width={480}
-          height={119}
-          className="h-7 w-auto"
-        />
-        <p className="mt-1.5 text-xs text-muted-foreground">{t('app.tagline')}</p>
+      <div className="mt-auto">
+        <div className={cn('px-5 py-4', collapsed && 'md:hidden')}>
+          <img
+            src={logoWordmark}
+            alt="FoodX"
+            width={480}
+            height={119}
+            className="h-7 w-auto"
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {t('app.tagline')}
+          </p>
+        </div>
+        {onToggleCollapsed && (
+          // Desktop-only collapse toggle (user request, 2026-11-23):
+          // the mobile drawer always renders expanded, so the
+          // button never shows below md.
+          <div className="hidden px-3 pb-3 md:block">
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label={
+                collapsed
+                  ? t('layout.expandSidebar')
+                  : t('layout.collapseSidebar')
+              }
+              title={
+                collapsed
+                  ? t('layout.expandSidebar')
+                  : t('layout.collapseSidebar')
+              }
+              className={cn(
+                'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
+                collapsed && 'justify-center px-2',
+              )}
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="size-4 shrink-0" />
+              ) : (
+                <PanelLeftClose className="size-4 shrink-0" />
+              )}
+              {!collapsed && <span>{t('layout.collapseSidebar')}</span>}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -384,6 +482,31 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
   }, [restaurant?.id])
   useOrderSoundWatcher(restaurant?.id ?? null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // Sidebar collapse (desktop only, user request 2026-11-23): the
+  // sidebar narrows to an icon rail and the content widens; the
+  // choice persists per device. The mobile drawer ignores it and
+  // always renders expanded.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem('foodx.sidebar_collapsed') === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      try {
+        window.localStorage.setItem(
+          'foodx.sidebar_collapsed',
+          next ? '1' : '0',
+        )
+      } catch {
+        // Storage unavailable — the toggle still works this session.
+      }
+      return next
+    })
+  }
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
@@ -454,14 +577,24 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 border-r bg-sidebar text-sidebar-foreground transition-transform md:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 border-r bg-sidebar text-sidebar-foreground transition-all duration-200 md:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+          sidebarCollapsed && 'md:w-16',
         )}
       >
-        <SidebarContent onNavigate={() => setSidebarOpen(false)} />
+        <SidebarContent
+          onNavigate={() => setSidebarOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={toggleSidebarCollapsed}
+        />
       </aside>
 
-      <div className="flex min-h-svh flex-col md:pl-64">
+      <div
+        className={cn(
+          'flex min-h-svh flex-col transition-[padding] duration-200 md:pl-64',
+          sidebarCollapsed && 'md:pl-16',
+        )}
+      >
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur">
           <Button
             variant="ghost"
@@ -475,6 +608,7 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold">
             {displayName}
           </h1>
+          <OnlineBadge />
           <LanguageSwitcher />
           <Button
             variant="ghost"

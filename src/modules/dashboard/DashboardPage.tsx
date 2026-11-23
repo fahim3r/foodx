@@ -1,7 +1,8 @@
 // FoodX — Dashboard (protected), Advanced mode (Dashboard
 // modernisation W1 + W2). Layout, top to bottom: header strip
-// (time-of-day greeting, restaurant name, date, quick actions and
-// the online/offline status card), the KPI row with vs-yesterday
+// (time-of-day greeting, restaurant name, date, quick actions —
+// the online/offline status moved to a header badge in AppLayout,
+// 2026-11-23), the KPI row with vs-yesterday
 // trend chips, the alerts card, the live operations strip, the
 // hourly sales chart beside the payment-mix donut, the 7-day chart
 // beside the আজকের পালা (today's shift) card, and the top-items /
@@ -71,7 +72,6 @@ import {
 import { fetchTables } from '@/services/tables'
 import EasyHomePage from './EasyHomePage'
 import HourlySalesCard from './HourlySalesCard'
-import OnlineStatusCard from './OnlineStatusCard'
 import OpsStrip from './OpsStrip'
 import PaymentMixCard from './PaymentMixCard'
 import RecentOrdersCard from './RecentOrdersCard'
@@ -612,10 +612,6 @@ export default function DashboardPage() {
                 {t('dashboard.quickAddExpense')}
               </Link>
             </Button>
-            <OnlineStatusCard
-              restaurantId={restaurant.id}
-              posHref={navTo('/pos')}
-            />
           </div>
         )}
       </header>
