@@ -3,10 +3,13 @@
 // (time-of-day greeting, restaurant name, date, quick actions —
 // the online/offline status moved to a header badge in AppLayout,
 // 2026-11-23), the KPI row with vs-yesterday
-// trend chips, the alerts card, the live operations strip, the
-// hourly sales chart beside the payment-mix donut, the 7-day chart
-// beside the আজকের পালা (today's shift) card, and the top-items /
-// recent-orders lists row. In Easy Mode the panel home is
+// trend chips, the live operations strip, the hourly sales chart
+// beside the payment-mix donut, the 7-day chart full width, the
+// top-items list beside the আজকের পালা (today's shift) card, and
+// the recent-orders list beside the alerts card (rearranged
+// 2026-11-23 at the user's request — the alerts card used to sit
+// full width under the KPI row, and the 7-day chart shared a row
+// with the shift card). In Easy Mode the panel home is
 // EasyHomePage instead — the switch below is unchanged and this
 // page's redesign never touches it.
 //
@@ -660,119 +663,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {showAlerts && restaurant && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{t('dashboard.alertsTitle')}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-6 lg:grid-cols-2">
-            {lowStockItems !== null && (
-              <div>
-                <p className="flex items-center gap-2 text-sm font-medium">
-                  <Package className="size-4 text-amber-700" />
-                  {t('dashboard.lowStockTitle')}
-                </p>
-                {lowStockSorted.length === 0 ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {t('dashboard.lowStockNone')}
-                  </p>
-                ) : (
-                  <>
-                    <div className="mt-2 divide-y">
-                      {lowStockSorted.slice(0, 5).map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between gap-2 py-1.5 text-sm"
-                        >
-                          <span>{item.name}</span>
-                          {Number(item.current_quantity) <= 0 ? (
-                            <span className="font-medium text-red-700">
-                              {t('dashboard.alertsOutOfStock')}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              {t('dashboard.alertsStockLeft', {
-                                qty: Number(item.current_quantity),
-                                unit: item.unit,
-                                threshold: Number(item.low_stock_threshold),
-                              })}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {lowStockSorted.length > 5 && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {t('dashboard.alertsMore', {
-                          count: lowStockSorted.length - 5,
-                        })}
-                      </p>
-                    )}
-                  </>
-                )}
-                <Link
-                  to={navTo('/inventory')}
-                  className="mt-2 inline-block text-sm font-medium text-primary"
-                >
-                  {t('dashboard.viewInventory')} →
-                </Link>
-              </div>
-            )}
-            {duesRows !== null && showFinancials && (
-              <div>
-                <p className="flex items-center gap-2 text-sm font-medium">
-                  <Wallet className="size-4 text-amber-700" />
-                  {t('dashboard.alertsDuesTitle')}
-                </p>
-                {duesOwed.length === 0 ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {t('dashboard.alertsDuesNone')}
-                  </p>
-                ) : (
-                  <>
-                    <div className="mt-2 divide-y">
-                      {duesOwed.slice(0, 5).map((row) => (
-                        <div
-                          key={row.supplierId}
-                          className="flex items-center justify-between gap-2 py-1.5 text-sm"
-                        >
-                          <span>{row.name}</span>
-                          <span className="font-medium">
-                            {formatMoney(row.due, currency)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    {duesOwed.length > 5 && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {t('dashboard.alertsMore', {
-                          count: duesOwed.length - 5,
-                        })}
-                      </p>
-                    )}
-                    <p className="mt-2 text-sm">
-                      <span className="text-muted-foreground">
-                        {t('dashboard.alertsDuesTotal')}
-                        {': '}
-                      </span>
-                      <span className="font-semibold">
-                        {formatMoney(duesTotal, currency)}
-                      </span>
-                    </p>
-                  </>
-                )}
-                <Link
-                  to={navTo('/inventory')}
-                  className="mt-2 inline-block text-sm font-medium text-primary"
-                >
-                  {t('dashboard.viewInventory')} →
-                </Link>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {restaurant && (
         <OpsStrip
           counts={opsCounts}
@@ -803,49 +693,61 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {restaurant && chartVisible && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('dashboard.salesLast7Days')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={salesSeries}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(date: string) =>
+                      new Intl.DateTimeFormat(i18n.language, {
+                        weekday: 'short',
+                      }).format(new Date(`${date}T00:00:00`))
+                    }
+                  />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value) => [
+                      formatMoney(Number(value ?? 0), currency),
+                      t('dashboard.todaySales'),
+                    ]}
+                    labelFormatter={(date) =>
+                      new Intl.DateTimeFormat(i18n.language, {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'short',
+                      }).format(new Date(`${String(date)}T00:00:00`))
+                    }
+                  />
+                  <Bar dataKey="sales" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {restaurant && (
         <div className="grid items-start gap-4 lg:grid-cols-3">
-          {chartVisible && (
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>{t('dashboard.salesLast7Days')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={salesSeries}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 12 }}
-                        tickFormatter={(date: string) =>
-                          new Intl.DateTimeFormat(i18n.language, {
-                            weekday: 'short',
-                          }).format(new Date(`${date}T00:00:00`))
-                        }
-                      />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip
-                        formatter={(value) => [
-                          formatMoney(Number(value ?? 0), currency),
-                          t('dashboard.todaySales'),
-                        ]}
-                        labelFormatter={(date) =>
-                          new Intl.DateTimeFormat(i18n.language, {
-                            weekday: 'long',
-                            day: 'numeric',
-                            month: 'short',
-                          }).format(new Date(`${String(date)}T00:00:00`))
-                        }
-                      />
-                      <Bar dataKey="sales" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+          {showFinancials && todayExpenses !== null && (
+            <div className="lg:col-span-2">
+              <TopItemsCard products={topProducts} currency={currency} />
+            </div>
           )}
-          <div className={chartVisible ? undefined : 'lg:col-span-3'}>
+          <div
+            className={
+              showFinancials && todayExpenses !== null
+                ? undefined
+                : 'lg:col-span-3'
+            }
+          >
             <ShiftCard
               restaurantId={restaurant.id}
               userId={user?.id ?? null}
@@ -859,16 +761,9 @@ export default function DashboardPage() {
       )}
 
       {restaurant && (
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          {showFinancials && todayExpenses !== null && (
-            <TopItemsCard products={topProducts} currency={currency} />
-          )}
+        <div className="grid items-start gap-4 lg:grid-cols-3">
           <div
-            className={
-              showFinancials && todayExpenses !== null
-                ? undefined
-                : 'lg:col-span-2'
-            }
+            className={showAlerts ? 'lg:col-span-2' : 'lg:col-span-3'}
           >
             <RecentOrdersCard
               orders={recentOrders}
@@ -878,6 +773,118 @@ export default function DashboardPage() {
               navTo={navTo}
             />
           </div>
+          {showAlerts && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{t('dashboard.alertsTitle')}</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-6">
+                {lowStockItems !== null && (
+                  <div>
+                    <p className="flex items-center gap-2 text-sm font-medium">
+                      <Package className="size-4 text-amber-700" />
+                      {t('dashboard.lowStockTitle')}
+                    </p>
+                    {lowStockSorted.length === 0 ? (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {t('dashboard.lowStockNone')}
+                      </p>
+                    ) : (
+                      <>
+                        <div className="mt-2 divide-y">
+                          {lowStockSorted.slice(0, 5).map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between gap-2 py-1.5 text-sm"
+                            >
+                              <span>{item.name}</span>
+                              {Number(item.current_quantity) <= 0 ? (
+                                <span className="font-medium text-red-700">
+                                  {t('dashboard.alertsOutOfStock')}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {t('dashboard.alertsStockLeft', {
+                                    qty: Number(item.current_quantity),
+                                    unit: item.unit,
+                                    threshold: Number(item.low_stock_threshold),
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {lowStockSorted.length > 5 && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {t('dashboard.alertsMore', {
+                              count: lowStockSorted.length - 5,
+                            })}
+                          </p>
+                        )}
+                      </>
+                    )}
+                    <Link
+                      to={navTo('/inventory')}
+                      className="mt-2 inline-block text-sm font-medium text-primary"
+                    >
+                      {t('dashboard.viewInventory')} →
+                    </Link>
+                  </div>
+                )}
+                {duesRows !== null && showFinancials && (
+                  <div>
+                    <p className="flex items-center gap-2 text-sm font-medium">
+                      <Wallet className="size-4 text-amber-700" />
+                      {t('dashboard.alertsDuesTitle')}
+                    </p>
+                    {duesOwed.length === 0 ? (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {t('dashboard.alertsDuesNone')}
+                      </p>
+                    ) : (
+                      <>
+                        <div className="mt-2 divide-y">
+                          {duesOwed.slice(0, 5).map((row) => (
+                            <div
+                              key={row.supplierId}
+                              className="flex items-center justify-between gap-2 py-1.5 text-sm"
+                            >
+                              <span>{row.name}</span>
+                              <span className="font-medium">
+                                {formatMoney(row.due, currency)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        {duesOwed.length > 5 && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {t('dashboard.alertsMore', {
+                              count: duesOwed.length - 5,
+                            })}
+                          </p>
+                        )}
+                        <p className="mt-2 text-sm">
+                          <span className="text-muted-foreground">
+                            {t('dashboard.alertsDuesTotal')}
+                            {': '}
+                          </span>
+                          <span className="font-semibold">
+                            {formatMoney(duesTotal, currency)}
+                          </span>
+                        </p>
+                      </>
+                    )}
+                    <Link
+                      to={navTo('/inventory')}
+                      className="mt-2 inline-block text-sm font-medium text-primary"
+                    >
+                      {t('dashboard.viewInventory')} →
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
