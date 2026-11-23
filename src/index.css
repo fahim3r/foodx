@@ -287,19 +287,35 @@ html.easy-mode {
    so neighbouring cards sit over gently different tints and their
    frost reads as liquid glass; cards get the specular top-edge
    highlight. Light, dark, system and dark glass never carry the
-   `.glass-white` class, so their rules are untouched. */
+   `.glass-white` class, so their rules are untouched.
+   Every-section pass (2026-11-23): the user asked for the header's
+   glass on EVERY section. The header reads glassy because it is a
+   translucent fill + backdrop-blur over the mesh (its bg is the
+   transparent --background at 95%, i.e. nearly pure frost). Cards
+   already had blur, but three things kept sections reading flat:
+   (1) the mesh mid-page was almost uniform near-white, so the frost
+   had nothing to bite on — the glows are deepened a few points and
+   a soft central glow is added; (2) --border was white at 65%, an
+   invisible edge on a near-white scene — it is now a soft neutral
+   contour (the bright hairline lives on as the cards' specular
+   top edge); (3) structural fills beyond cards — bg-muted,
+   bg-secondary, bg-accent and opacity variants like bg-muted/50 —
+   carried translucent fills but no backdrop-filter at all, so
+   they are now frosted too. Border-only inner boxes (POS cart
+   rows) sit on frosted cards and gain definition from the new
+   border token; they deliberately get no fill of their own. */
 .glass-white {
   --background: transparent;
-  --card: oklch(1 0 0 / 55%);
+  --card: oklch(1 0 0 / 50%);
   --popover: oklch(1 0 0 / 80%);
   --secondary: oklch(0.967 0.001 286.375 / 55%);
   --muted: oklch(0.967 0.001 286.375 / 55%);
   --accent: oklch(0.967 0.001 286.375 / 55%);
-  --border: oklch(1 0 0 / 65%);
+  --border: oklch(0.145 0 0 / 10%);
   --input: oklch(0.145 0 0 / 14%);
-  --sidebar: oklch(1 0 0 / 55%);
+  --sidebar: oklch(1 0 0 / 50%);
   --sidebar-accent: oklch(0.967 0.001 286.375 / 55%);
-  --sidebar-border: oklch(1 0 0 / 55%);
+  --sidebar-border: oklch(0.145 0 0 / 8%);
   background-color: #f6f6f4;
   background-image:
     radial-gradient(
@@ -316,11 +332,24 @@ html.easy-mode {
       )
     ),
     radial-gradient(
+      1000px 700px at 50% 38%,
+      color-mix(
+        in oklab,
+        color-mix(
+          in oklab,
+          var(--brand-primary, #ea580c) 45%,
+          var(--brand-secondary, #16a34a)
+        ),
+        #ffffff 82%
+      ),
+      transparent 58%
+    ),
+    radial-gradient(
       1200px 800px at -8% -10%,
       color-mix(
         in oklab,
-        color-mix(in oklab, var(--brand-primary, #ea580c) 24%, #ffffff),
-        transparent 55%
+        color-mix(in oklab, var(--brand-primary, #ea580c) 30%, #ffffff),
+        transparent 48%
       ),
       transparent 62%
     ),
@@ -328,8 +357,8 @@ html.easy-mode {
       1100px 750px at 88% -10%,
       color-mix(
         in oklab,
-        color-mix(in oklab, var(--brand-secondary, #16a34a) 24%, #ffffff),
-        transparent 55%
+        color-mix(in oklab, var(--brand-secondary, #16a34a) 30%, #ffffff),
+        transparent 48%
       ),
       transparent 62%
     ),
@@ -337,8 +366,8 @@ html.easy-mode {
       950px 700px at -12% 108%,
       color-mix(
         in oklab,
-        color-mix(in oklab, var(--brand-primary, #ea580c) 28%, #ffffff),
-        transparent 50%
+        color-mix(in oklab, var(--brand-primary, #ea580c) 34%, #ffffff),
+        transparent 44%
       ),
       transparent 58%
     ),
@@ -346,8 +375,8 @@ html.easy-mode {
       900px 650px at 108% 58%,
       color-mix(
         in oklab,
-        color-mix(in oklab, var(--brand-secondary, #16a34a) 20%, #ffffff),
-        transparent 65%
+        color-mix(in oklab, var(--brand-secondary, #16a34a) 26%, #ffffff),
+        transparent 58%
       ),
       transparent 60%
     ),
@@ -362,19 +391,20 @@ html.easy-mode {
             var(--brand-primary, #ea580c) 55%,
             var(--brand-secondary, #16a34a)
           ),
-          #ffffff 75%
+          #ffffff 70%
         ),
-        transparent 65%
+        transparent 58%
       ),
       transparent 62%
     ),
     linear-gradient(
       155deg,
-      color-mix(in oklab, var(--brand-primary, #ea580c) 10%, #ffffff),
-      color-mix(in oklab, var(--brand-secondary, #16a34a) 7%, #ffffff) 58%,
+      color-mix(in oklab, var(--brand-primary, #ea580c) 13%, #ffffff),
+      color-mix(in oklab, var(--brand-secondary, #16a34a) 9%, #ffffff) 58%,
       #f6f6f4
     );
   background-size:
+    auto,
     auto,
     auto,
     auto,
@@ -389,26 +419,37 @@ html.easy-mode {
     0 0,
     0 0,
     0 0,
+    0 0,
     0 0;
   background-repeat: no-repeat;
   background-attachment: fixed;
 }
 
-/* Frosted major surfaces, with the Liquid Glass brightness lift —
-   same major surfaces as dark glass, capped radius. */
+/* Frosted surfaces, with the Liquid Glass brightness lift. Cards,
+   popovers/menus and the sidebar were frosted from the start; the
+   every-section pass adds the structural token fills — muted,
+   secondary and accent strips (table headers, section bars, the
+   layout's offline/queue bar in its bg-muted/50 variant) — so no
+   section container is left as a flat translucent slab. Only the
+   plain utility classes are matched: hover:/focus: variants compile
+   to different class names and stay unfrosted, as do small chips. */
 .glass-white .bg-card,
 .glass-white .bg-popover,
-.glass-white .bg-sidebar {
-  -webkit-backdrop-filter: blur(14px) saturate(1.6) brightness(1.06);
-  backdrop-filter: blur(14px) saturate(1.6) brightness(1.06);
+.glass-white .bg-sidebar,
+.glass-white .bg-muted,
+.glass-white .bg-secondary,
+.glass-white .bg-accent,
+.glass-white [class~='bg-muted/50'] {
+  -webkit-backdrop-filter: blur(16px) saturate(1.7) brightness(1.05);
+  backdrop-filter: blur(16px) saturate(1.7) brightness(1.05);
 }
 
 /* Specular edge: a bright hairline of light along each card's top
    edge, floating over a soft light shadow. */
 .glass-white [data-slot='card'] {
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 65%),
-    0 12px 32px rgb(30 27 25 / 10%);
+    inset 0 1px 0 rgb(255 255 255 / 75%),
+    0 12px 32px rgb(30 27 25 / 11%);
 }
 
 /* No backdrop-filter support: surfaces fall back to the light theme's
@@ -423,7 +464,9 @@ html.easy-mode {
     --secondary: oklch(0.967 0.001 286.375);
     --muted: oklch(0.967 0.001 286.375);
     --accent: oklch(0.967 0.001 286.375);
+    --border: oklch(0.92 0.004 286.32);
     --sidebar: oklch(0.985 0 0);
     --sidebar-accent: oklch(0.967 0.001 286.375);
+    --sidebar-border: oklch(0.92 0.004 286.32);
   }
 }
