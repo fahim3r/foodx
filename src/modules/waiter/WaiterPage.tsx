@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import ProductImage from '@/components/ProductImage'
+import WaiterCallsStrip from '@/components/WaiterCallsStrip'
 import {
   Card,
   CardContent,
@@ -424,6 +425,9 @@ export default function WaiterPage() {
             count: counts.waiting + counts.failed,
           })}
         </p>
+      )}
+      {restaurantId && user && (
+        <WaiterCallsStrip restaurantId={restaurantId} userId={user.id} />
       )}
 
       <div className="grid grid-cols-3 gap-2">

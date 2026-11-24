@@ -12,6 +12,7 @@ import { Mic, X } from 'lucide-react'
 import EasyHelpLine from '@/components/EasyHelpLine'
 import ProductImage from '@/components/ProductImage'
 import LiveOrdersCarousel from '@/modules/pos/LiveOrdersCarousel'
+import WaiterCallsStrip from '@/components/WaiterCallsStrip'
 import { isMissingTableError, isNetworkError } from '@/lib/errors'
 import { formatMoney } from '@/lib/money'
 import { useAuth } from '@/hooks/useAuth'
@@ -2035,6 +2036,10 @@ export default function PosPage() {
           refreshSignal={carouselSignal}
           onPrintReceipt={printReceiptForOrder}
         />
+      )}
+
+      {restaurant && user && (
+        <WaiterCallsStrip restaurantId={restaurant.id} userId={user.id} />
       )}
 
       {queueOpen && (

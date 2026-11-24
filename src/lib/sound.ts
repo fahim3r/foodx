@@ -12,6 +12,8 @@
  *     sustained finish (one-shot, v1.1)
  *   - order cancelled: soft descending "failed" tone, G4 → E♭4
  *     (one-shot, v1.1) — a gentle uh-oh, never a buzzer
+ *   - waiter call: two bright service-bell dings, E6 → E6 — LOOPED
+ *     by the alert manager while a table's call waits (0038)
  * Browsers refuse audio before a user gesture, so one shared
  * AudioContext is created lazily and resumed on the first
  * pointerdown/keydown in the panel (installed by initSound, called
@@ -30,9 +32,11 @@ export type SoundKind =
   | 'payment'
   | 'complete'
   | 'cancelled'
+  | 'waiterCall'
 
-/** The two LOOPING alerts (v1.1). Payment and complete stay one-shot. */
-export type AlertKind = 'new' | 'ready'
+/** The LOOPING alerts (v1.1; 'waiter' added with Call Waiter, 0038).
+ * Payment and complete stay one-shot. */
+export type AlertKind = 'new' | 'ready' | 'waiter'
 
 let context: AudioContext | null = null
 let masterGain: GainNode | null = null
@@ -137,6 +141,12 @@ function play(kind: SoundKind): void {
       // next to the ascending motifs, but soft sine, never harsh.
       tone(ctx, masterGain, 392.0, 0, 0.22) // G4
       tone(ctx, masterGain, 311.13, 0.16, 0.36) // E♭4, falling finish
+    } else if (kind === 'waiterCall') {
+      // Service bell (0038): two bright dings at E6 — higher and
+      // crisper than every order motif, so staff hear "a table
+      // wants a person", not "the kitchen did something".
+      tone(ctx, masterGain, 1318.51, 0, 0.18) // E6
+      tone(ctx, masterGain, 1318.51, 0.22, 0.34) // E6, second ding
     } else {
       tone(ctx, masterGain, 990, 0, 0.12)
     }
@@ -182,6 +192,12 @@ export function playCancelledSound(): void {
   playIfEnabled('cancelled')
 }
 
+/** Waiter-call service bell, one-shot (the waiter-call watcher
+ * normally drives the looping 'waiter' alert below). */
+export function playWaiterCallChime(): void {
+  playIfEnabled('waiterCall')
+}
+
 /**
  * Settings Test buttons: an explicit tap in Settings, so the sound
  * plays even while that event (or the master) is still off — the
@@ -217,6 +233,7 @@ const ALERT_MAX_MS = 5 * 60_000
 const ALERT_INTERVAL_MS: Record<AlertKind, number> = {
   new: 2_200,
   ready: 2_400,
+  waiter: 3_000,
 }
 
 interface AlertLoop {
@@ -228,7 +245,9 @@ interface AlertLoop {
 const alertLoops = new Map<AlertKind, AlertLoop>()
 
 function alertSoundKind(kind: AlertKind): SoundKind {
-  return kind === 'new' ? 'newOrder' : 'ready'
+  if (kind === 'new') return 'newOrder'
+  if (kind === 'waiter') return 'waiterCall'
+  return 'ready'
 }
 
 export function startAlert(kind: AlertKind): void {
@@ -278,6 +297,7 @@ export function stopAlertNow(kind: AlertKind): void {
 export function stopAllAlerts(): void {
   stopAlertNow('new')
   stopAlertNow('ready')
+  stopAlertNow('waiter')
 }
 
 export function isAlertActive(kind: AlertKind): boolean {

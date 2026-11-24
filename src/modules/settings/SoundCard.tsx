@@ -31,6 +31,7 @@ const FALLBACK: SoundSettings = {
   payment: true,
   complete: true,
   cancelled: true,
+  waiterCall: true,
 }
 
 /**
@@ -39,8 +40,8 @@ const FALLBACK: SoundSettings = {
  * recorded payment and (v1.1) an order completing or being
  * cancelled — built exactly like PrintingCard, whose settings make
  * the same "this terminal, not the restaurant" argument. The master
- * defaults OFF (design D2/Q1), with the five event toggles ON
- * underneath it. Switching
+ * defaults OFF (design D2/Q1), with the event toggles ON
+ * underneath it (five order events + the waiter-call bell, 0038). Switching
  * the master or a looping event off silences its alert at once.
  * The Test buttons
  * play their sound even while the toggles are off: the tap is an
@@ -157,6 +158,16 @@ export default function SoundCard() {
           'cancelled',
           settings.cancelled,
           (checked) => update({ cancelled: checked }),
+        )}
+        {eventRow(
+          'sound-waiter-call',
+          'settings.soundWaiterCall',
+          'waiterCall',
+          settings.waiterCall,
+          (checked) => {
+            if (!checked) stopAlertNow('waiter')
+            update({ waiterCall: checked })
+          },
         )}
         <p className="text-sm text-muted-foreground">
           {t('settings.soundNote')}

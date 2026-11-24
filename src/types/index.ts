@@ -225,6 +225,21 @@ export interface DiningTable {
   nfc_value: string | null
 }
 
+export type WaiterCallStatus = 'PENDING' | 'DONE'
+
+/** One "Call waiter" tap from a table (migration 0038). Rows are
+ * created only by the request_waiter_call() RPC and never deleted;
+ * attending flips status to DONE and stamps attended_by/at. */
+export interface WaiterCall {
+  id: string
+  restaurant_id: string
+  table_id: string
+  status: WaiterCallStatus
+  created_at: string
+  attended_by: string | null
+  attended_at: string | null
+}
+
 export interface Order {
   id: string
   restaurant_id: string

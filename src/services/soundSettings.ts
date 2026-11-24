@@ -26,6 +26,8 @@ export interface SoundSettings {
   complete: boolean
   /** Soft descending "failed" tone when an order is cancelled (v1.1). */
   cancelled: boolean
+  /** Looping service bell while a table's waiter call waits (0038). */
+  waiterCall: boolean
 }
 
 const DEFAULTS: SoundSettings = {
@@ -35,6 +37,7 @@ const DEFAULTS: SoundSettings = {
   payment: true,
   complete: true,
   cancelled: true,
+  waiterCall: true,
 }
 
 export function loadSoundSettings(restaurantId: string): SoundSettings {
@@ -49,6 +52,7 @@ export function loadSoundSettings(restaurantId: string): SoundSettings {
       payment: parsed.payment !== false,
       complete: parsed.complete !== false,
       cancelled: parsed.cancelled !== false,
+      waiterCall: parsed.waiterCall !== false,
     }
   } catch {
     return { ...DEFAULTS }

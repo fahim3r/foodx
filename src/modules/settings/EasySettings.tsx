@@ -102,6 +102,7 @@ export default function EasySettings() {
           payment: true,
           complete: true,
           cancelled: true,
+          waiterCall: true,
         },
   )
 

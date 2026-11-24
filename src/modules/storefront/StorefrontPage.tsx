@@ -19,6 +19,7 @@ import {
   type FormEvent,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Bell } from 'lucide-react'
 import { formatMoney, roundMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import {
@@ -30,6 +31,11 @@ import {
   placeOnlineOrder,
 } from '@/services/storefront'
 import { computeOrderTotals, type PricedLine } from '@/services/pos'
+import {
+  requestWaiterCall,
+  resolveTableIdByCode,
+  waiterCallPending,
+} from '@/services/waiterCalls'
 import {
   isFeatureEnabledFromCache,
   isSuspendedFromCache,
@@ -190,6 +196,39 @@ function writeLastOrder(slug: string, value: LastOrderMemory): void {
   }
 }
 
+/** Call-waiter "notified" memory (migration 0038): this device has
+ * an open call at this table, so a reload keeps the button in its
+ * notified state instead of offering a duplicate tap. The server
+ * stays the truth — the page polls waiter_call_pending and clears
+ * this the moment staff attend. */
+function waiterCallKey(restaurantId: string, tableCode: string): string {
+  return `foodx.waiterCall.${restaurantId}.${tableCode}`
+}
+
+function readWaiterNotified(restaurantId: string, tableCode: string): boolean {
+  try {
+    return window.localStorage.getItem(waiterCallKey(restaurantId, tableCode)) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeWaiterNotified(
+  restaurantId: string,
+  tableCode: string,
+  notified: boolean,
+): void {
+  try {
+    if (notified) {
+      window.localStorage.setItem(waiterCallKey(restaurantId, tableCode), '1')
+    } else {
+      window.localStorage.removeItem(waiterCallKey(restaurantId, tableCode))
+    }
+  } catch {
+    // Storage unavailable — the button state just won't survive a reload.
+  }
+}
+
 export default function StorefrontPage({
   slug,
   tableCode,
@@ -230,6 +269,15 @@ export default function StorefrontPage({
   const [placing, setPlacing] = useState(false)
   const [placeErrorKey, setPlaceErrorKey] = useState<string | null>(null)
   const [placed, setPlaced] = useState<PlacedOrder | null>(null)
+
+  // Call waiter (migration 0038): only in a table context (the
+  // ?table= QR flow). The storefront knows the table by its QR code
+  // alone, so the id is resolved once through resolve_table_by_code;
+  // the button renders only after a table actually resolved.
+  const [waiterTableId, setWaiterTableId] = useState<string | null>(null)
+  const [waiterNotified, setWaiterNotified] = useState(false)
+  const [waiterCalling, setWaiterCalling] = useState(false)
+  const [waiterCallFailed, setWaiterCallFailed] = useState(false)
 
   // Order tracking (audit wave 2): after leaving the confirmation a
   // customer re-checks a status with order number + phone — the same
@@ -516,6 +564,70 @@ export default function StorefrontPage({
     return () => window.clearTimeout(timer)
   }, [kiosk, placed, resetKiosk])
 
+  // Call waiter: resolve the QR table code to its table id once the
+  // restaurant is known, then sync the button with the server (a
+  // call may already be pending from another phone at this table).
+  useEffect(() => {
+    if (!info || !tableCode) return
+    const restaurantId = info.restaurant_id
+    const code = tableCode
+    let cancelled = false
+    void (async () => {
+      try {
+        const tableId = await resolveTableIdByCode(restaurantId, code)
+        if (cancelled || !tableId) return
+        setWaiterTableId(tableId)
+        const remembered = readWaiterNotified(restaurantId, code)
+        const pending = await waiterCallPending(restaurantId, tableId)
+          .catch(() => remembered)
+        if (cancelled) return
+        setWaiterNotified(pending)
+        writeWaiterNotified(restaurantId, code, pending)
+      } catch {
+        // No resolution, no button — the menu itself is unaffected.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [info, tableCode])
+
+  // While this table's call is open, poll until staff attend it;
+  // then the button quietly becomes available again.
+  useEffect(() => {
+    if (!info || !tableCode || !waiterTableId || !waiterNotified) return
+    const restaurantId = info.restaurant_id
+    const code = tableCode
+    const timer = window.setInterval(() => {
+      void waiterCallPending(restaurantId, waiterTableId)
+        .then((pending) => {
+          if (!pending) {
+            setWaiterNotified(false)
+            writeWaiterNotified(restaurantId, code, false)
+          }
+        })
+        .catch(() => undefined)
+    }, 15000)
+    return () => window.clearInterval(timer)
+  }, [info, tableCode, waiterTableId, waiterNotified])
+
+  const handleCallWaiter = async () => {
+    if (!info || !tableCode || !waiterTableId || waiterNotified || waiterCalling) {
+      return
+    }
+    setWaiterCalling(true)
+    setWaiterCallFailed(false)
+    try {
+      await requestWaiterCall(info.restaurant_id, waiterTableId)
+      setWaiterNotified(true)
+      writeWaiterNotified(info.restaurant_id, tableCode, true)
+    } catch {
+      setWaiterCallFailed(true)
+    } finally {
+      setWaiterCalling(false)
+    }
+  }
+
   const runTrackingLookup = useCallback(
     async (orderNumberText: string, phone: string) => {
       const orderNumber = Number.parseInt(orderNumberText, 10)
@@ -657,6 +769,33 @@ export default function StorefrontPage({
     }
   }
 
+  // Call waiter button (0038): shared by the menu view (under the
+  // dine-in banner) and the dine-in order confirmation. Null until
+  // the table resolved — a takeaway/delivery visit never sees it.
+  const callWaiterButton =
+    tableCode && waiterTableId ? (
+      <div className="flex w-full flex-col gap-1">
+        <Button
+          type="button"
+          size="lg"
+          variant={waiterNotified ? 'secondary' : 'default'}
+          disabled={waiterNotified || waiterCalling}
+          onClick={() => void handleCallWaiter()}
+          className="w-full"
+        >
+          <Bell />
+          {waiterNotified
+            ? t('storefront.waiterNotified')
+            : t('storefront.callWaiter')}
+        </Button>
+        {waiterCallFailed && (
+          <p className="text-sm text-destructive">
+            {t('storefront.callWaiterFailed')}
+          </p>
+        )}
+      </div>
+    ) : null
+
   const brandingStyle = {
     '--primary': info?.primary_color ?? '#ea580c',
     '--ring': info?.primary_color ?? '#ea580c',
@@ -770,6 +909,7 @@ export default function StorefrontPage({
             <p className="text-xs text-muted-foreground">
               {t('storefront.statusChecking')}
             </p>
+            {placed.type === 'dine_in' && callWaiterButton}
             <div className="flex flex-wrap items-center justify-center gap-2">
               <Button
                 type="button"
@@ -983,6 +1123,7 @@ export default function StorefrontPage({
             {t('storefront.dineInAtTable', { table: tableDisplayName ?? tableCode })}
           </p>
         )}
+        {callWaiterButton && <div className="mb-4">{callWaiterButton}</div>}
 
         <div className="grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
           <section className="flex flex-col gap-4">

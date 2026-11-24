@@ -51,6 +51,7 @@ import { useLicenseState } from '@/hooks/useLicenseState'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
 import { useOrderSoundWatcher } from '@/hooks/useOrderSoundWatcher'
+import { useWaiterCallSoundWatcher } from '@/hooks/useWaiterCallSoundWatcher'
 import { initSound } from '@/lib/sound'
 import {
   isModuleEnabled,
@@ -481,6 +482,9 @@ function AppLayoutShell({ children }: { children: ReactNode }) {
     initSound(restaurant?.id ?? null)
   }, [restaurant?.id])
   useOrderSoundWatcher(restaurant?.id ?? null)
+  // Call Waiter (0038): the service-bell watcher — same per-device
+  // settings, same baseline discipline, its own realtime channel.
+  useWaiterCallSoundWatcher(restaurant?.id ?? null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   // Sidebar collapse (desktop only, user request 2026-11-23): the
   // sidebar narrows to an icon rail and the content widens; the
