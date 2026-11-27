@@ -22,6 +22,7 @@ import {
   subscribeWaiterCalls,
 } from '@/services/waiterCalls'
 import type { DiningTable } from '@/types'
+import LiveTablesFloor3D from './LiveTablesFloor3D'
 
 const POLL_MS = 15_000
 
@@ -34,15 +35,66 @@ function formatDuration(minutes: number): string {
   return rest > 0 ? `${hours}h ${rest}m` : `${hours}h`
 }
 
+/** The one-line state summary shown under a table (grid view) and in
+ * the floating chip that tracks it in the 3D view. */
+function TableStateLine({
+  state,
+  open,
+  showFinancials,
+  currency,
+  now,
+}: {
+  state: FloorState
+  open: OpenTableOrderSummary | undefined
+  showFinancials: boolean
+  currency: string
+  now: number
+}) {
+  const { t } = useTranslation()
+  if (state === 'occupied') {
+    return open ? (
+      <span className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
+        <Clock className="size-3.5" />
+        {formatDuration(elapsedMinutes(open.since, now))}
+        {showFinancials && ` · ${formatMoney(open.total, currency)}`}
+        {open.count > 1 && ` (${open.count})`}
+      </span>
+    ) : (
+      <span className="text-orange-600 dark:text-orange-400">
+        {t('dashboard.liveTablesOccupied')}
+      </span>
+    )
+  }
+  if (state === 'cleaning') {
+    return (
+      <span className="flex items-center gap-1 text-sky-600 dark:text-sky-400">
+        <Sparkles className="size-3.5" />
+        {t('dashboard.liveTablesCleaning')}
+      </span>
+    )
+  }
+  if (state === 'reserved') {
+    return (
+      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+        <Bookmark className="size-3.5" />
+        {t('dashboard.liveTablesReserved')}
+      </span>
+    )
+  }
+  return (
+    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+      <Check className="size-3.5" />
+      {t('dashboard.liveTablesFree')}
+    </span>
+  )
+}
+
 const SPARKLE_PATH =
   'M0,-9 L2.2,-2.2 L9,0 L2.2,2.2 L0,9 L-2.2,2.2 L-9,0 L-2.2,-2.2 Z'
 
 /**
- * One table as a small isometric 3D scene: a wooden round table on a
- * floor tile with stools. Occupied tables seat two guests with plates
- * and a drink; a table being cleaned carries a spray bottle, a cloth
- * and sparkles; a reserved table carries a little table sign; a free
- * table stands bare inside a soft green ring.
+ * Flat isometric scene for one table — the fallback view used when
+ * the real 3D floor (three.js) cannot load or WebGL is unavailable.
  */
 function TableScene({ state }: { state: FloorState }) {
   const occupied = state === 'occupied'
@@ -204,15 +256,16 @@ const CELL_STATE_CLASSES: Record<FloorState, string> = {
 
 /**
  * Live Tables — the restaurant floor at a glance on the Dashboard.
- * Every table renders as a small 3D scene whose look follows its real
- * state: guests seated while an order is open (with the elapsed time
- * and running total), a cleaning scene while the table is being
- * cleaned, a sign when reserved, bare when free. A pending "Call
- * waiter" (migration 0038) rings a bouncing bell over the table.
- * Data refreshes on mount, on realtime events (orders + waiter
- * calls) and on a 15 s poll fallback — the same live idiom as the
- * waiter-call strip. Clicking an occupied table opens its earliest
- * open order; any other table opens the Tables page.
+ * The floor renders as a real animated 3D scene (three.js, loaded
+ * from a CDN — see LiveTablesFloor3D): guests seated at occupied
+ * tables with the elapsed time and running total, a cleaning scene
+ * while a table is being cleaned, a sign when reserved, a ringing
+ * golden bell over any table with a pending "Call waiter" (migration
+ * 0038). When 3D cannot load, the card falls back to a flat grid of
+ * the same scenes. Data refreshes on mount, on realtime events
+ * (orders + waiter calls) and on a 15 s poll fallback. Clicking an
+ * occupied table opens its earliest open order; any other table
+ * opens the Tables page.
  */
 export default function LiveTablesCard({
   restaurantId,
@@ -234,7 +287,11 @@ export default function LiveTablesCard({
     Map<string, OpenTableOrderSummary>
   >(new Map())
   const [callingTables, setCallingTables] = useState<Set<string>>(new Set())
+  const [floorStatus, setFloorStatus] = useState<'loading' | 'ready' | 'failed'>(
+    'loading',
+  )
   const loadedOnce = useRef(false)
+  const chipEls = useRef<Map<string, HTMLElement | null>>(new Map())
 
   const refresh = useCallback(async () => {
     try {
@@ -311,6 +368,11 @@ export default function LiveTablesCard({
     navigate(navTo(open ? `/orders/${open.orderId}` : '/tables'))
   }
 
+  const handleSelectTable = (tableId: string) => {
+    const table = tables?.find((candidate) => candidate.id === tableId)
+    if (table) openTable(table)
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
@@ -339,70 +401,101 @@ export default function LiveTablesCard({
           </p>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-              {tables.map((table) => {
-                const state = stateOf(table)
-                const open = openByTable.get(table.id)
-                const calling = callingTables.has(table.id)
-                return (
-                  <button
-                    key={table.id}
-                    type="button"
-                    onClick={() => openTable(table)}
-                    className={`relative flex flex-col rounded-2xl border p-2 text-left transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                      calling
-                        ? 'border-amber-400 bg-amber-50/70 ring-1 ring-amber-300 dark:bg-amber-500/10'
-                        : CELL_STATE_CLASSES[state]
-                    }`}
-                  >
-                    <span className="absolute left-2 top-2 z-10 rounded-full border bg-background/90 px-2 py-0.5 text-xs font-bold shadow-sm">
-                      {table.name}
-                    </span>
-                    {calling && (
-                      <span className="absolute right-2 top-2 z-10 flex animate-bounce items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-bold text-white shadow">
-                        <Bell className="size-3" />
-                        {t('dashboard.liveTablesCalling')}
+            {floorStatus !== 'failed' ? (
+              <div className="relative">
+                <LiveTablesFloor3D
+                  tables={tables}
+                  openByTable={openByTable}
+                  callingTables={callingTables}
+                  chipEls={chipEls}
+                  onSelectTable={handleSelectTable}
+                  onReady={() => setFloorStatus('ready')}
+                  onError={() => setFloorStatus('failed')}
+                />
+                {floorStatus === 'loading' && (
+                  <div
+                    className="absolute inset-0 animate-pulse rounded-xl bg-muted"
+                    aria-hidden="true"
+                  />
+                )}
+                <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                  {tables.map((table) => {
+                    const state = stateOf(table)
+                    const open = openByTable.get(table.id)
+                    const calling = callingTables.has(table.id)
+                    return (
+                      <div key={table.id} className="contents">
+                        <span
+                          ref={(el) => {
+                            chipEls.current.set(table.id, el)
+                          }}
+                          className="absolute left-0 top-0 flex items-center gap-1 whitespace-nowrap rounded-full border bg-background/90 px-2 py-0.5 text-[11px] font-semibold opacity-0 shadow-sm will-change-transform"
+                        >
+                          <TableStateLine
+                            state={state}
+                            open={open}
+                            showFinancials={showFinancials}
+                            currency={currency}
+                            now={now}
+                          />
+                        </span>
+                        {calling && (
+                          <span
+                            ref={(el) => {
+                              chipEls.current.set(`${table.id}:bell`, el)
+                            }}
+                            className="absolute left-0 top-0 flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-bold text-white opacity-0 shadow will-change-transform"
+                          >
+                            <Bell className="size-3" />
+                            {t('dashboard.liveTablesCalling')}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                {tables.map((table) => {
+                  const state = stateOf(table)
+                  const open = openByTable.get(table.id)
+                  const calling = callingTables.has(table.id)
+                  return (
+                    <button
+                      key={table.id}
+                      type="button"
+                      onClick={() => openTable(table)}
+                      className={`relative flex flex-col rounded-2xl border p-2 text-left transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                        calling
+                          ? 'border-amber-400 bg-amber-50/70 ring-1 ring-amber-300 dark:bg-amber-500/10'
+                          : CELL_STATE_CLASSES[state]
+                      }`}
+                    >
+                      <span className="absolute left-2 top-2 z-10 rounded-full border bg-background/90 px-2 py-0.5 text-xs font-bold shadow-sm">
+                        {table.name}
                       </span>
-                    )}
-                    <TableScene state={state} />
-                    <span className="mt-1 flex items-center justify-center gap-1.5 text-xs font-semibold">
-                      {state === 'occupied' &&
-                        (open ? (
-                          <span className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
-                            <Clock className="size-3.5" />
-                            {formatDuration(elapsedMinutes(open.since, now))}
-                            {showFinancials &&
-                              ` · ${formatMoney(open.total, currency)}`}
-                            {open.count > 1 && ` (${open.count})`}
-                          </span>
-                        ) : (
-                          <span className="text-orange-600 dark:text-orange-400">
-                            {t('dashboard.liveTablesOccupied')}
-                          </span>
-                        ))}
-                      {state === 'free' && (
-                        <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                          <Check className="size-3.5" />
-                          {t('dashboard.liveTablesFree')}
+                      {calling && (
+                        <span className="absolute right-2 top-2 z-10 flex animate-bounce items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-bold text-white shadow">
+                          <Bell className="size-3" />
+                          {t('dashboard.liveTablesCalling')}
                         </span>
                       )}
-                      {state === 'cleaning' && (
-                        <span className="flex items-center gap-1 text-sky-600 dark:text-sky-400">
-                          <Sparkles className="size-3.5" />
-                          {t('dashboard.liveTablesCleaning')}
-                        </span>
-                      )}
-                      {state === 'reserved' && (
-                        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                          <Bookmark className="size-3.5" />
-                          {t('dashboard.liveTablesReserved')}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+                      <TableScene state={state} />
+                      <span className="mt-1 flex items-center justify-center gap-1.5 text-xs font-semibold">
+                        <TableStateLine
+                          state={state}
+                          open={open}
+                          showFinancials={showFinancials}
+                          currency={currency}
+                          now={now}
+                        />
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <span className="size-2 rounded-full bg-orange-500" />
