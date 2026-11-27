@@ -121,3 +121,49 @@ export async function fetchOpenOrderStarts(
   }
   return starts
 }
+
+/** Per-table rollup of the open (non-terminal) dine-in orders, for
+ * the Dashboard's Live Tables floor view: the earliest open order
+ * (the one a click opens), the summed running total, the "occupied
+ * since" timestamp and the open-order count. Tables with no open
+ * order are absent from the map. */
+export interface OpenTableOrderSummary {
+  orderId: string
+  total: number
+  since: string
+  count: number
+}
+
+export async function fetchOpenTableOrders(
+  restaurantId: string,
+): Promise<Map<string, OpenTableOrderSummary>> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id, table_id, total_amount, created_at')
+    .eq('restaurant_id', restaurantId)
+    .not('table_id', 'is', null)
+    .not('status', 'in', '("COMPLETED","CANCELLED","REFUNDED")')
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  const byTable = new Map<string, OpenTableOrderSummary>()
+  for (const row of (data ?? []) as {
+    id: string
+    table_id: string
+    total_amount: number
+    created_at: string
+  }[]) {
+    const existing = byTable.get(row.table_id)
+    if (existing) {
+      existing.total += Number(row.total_amount) || 0
+      existing.count += 1
+    } else {
+      byTable.set(row.table_id, {
+        orderId: row.id,
+        total: Number(row.total_amount) || 0,
+        since: row.created_at,
+        count: 1,
+      })
+    }
+  }
+  return byTable
+}

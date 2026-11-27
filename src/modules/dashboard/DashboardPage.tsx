@@ -80,6 +80,7 @@ import PaymentMixCard from './PaymentMixCard'
 import RecentOrdersCard from './RecentOrdersCard'
 import ShiftCard from './ShiftCard'
 import TopItemsCard from './TopItemsCard'
+import LiveTablesCard from './LiveTablesCard'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -662,6 +663,15 @@ export default function DashboardPage() {
           ))
         )}
       </div>
+
+      {restaurant && (
+        <LiveTablesCard
+          restaurantId={restaurant.id}
+          currency={currency}
+          showFinancials={showFinancials}
+          navTo={navTo}
+        />
+      )}
 
       {restaurant && (
         <OpsStrip
