@@ -431,6 +431,8 @@ export default function LiveTablesCard({
                           }}
                           className="absolute left-0 top-0 flex items-center gap-1 whitespace-nowrap rounded-full border bg-background/90 px-2 py-0.5 text-[11px] font-semibold opacity-0 shadow-sm will-change-transform"
                         >
+                          <span className="font-bold">{table.name}</span>
+                          <span aria-hidden="true">·</span>
                           <TableStateLine
                             state={state}
                             open={open}

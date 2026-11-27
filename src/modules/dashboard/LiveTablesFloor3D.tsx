@@ -226,8 +226,8 @@ export default function LiveTablesFloor3D({
           const camera = cameraRef.current
           const base = baseCamRef.current
           camera.position.set(
-            base.x + Math.sin(t * 0.25) * 0.55,
-            base.y + Math.cos(t * 0.19) * 0.22,
+            base.x + Math.sin(t * 0.25) * 0.9,
+            base.y + Math.cos(t * 0.19) * 0.3,
             base.z,
           )
           camera.lookAt(0, 0.1, 0)
@@ -236,8 +236,8 @@ export default function LiveTablesFloor3D({
             const phase = built.phase
             if (built.bell) {
               built.bell.position.y =
-                2.42 + Math.sin(t * 3.2 + phase) * 0.1
-              built.bell.rotation.z = Math.sin(t * 7 + phase) * 0.16
+                2.42 + Math.sin(t * 3.2 + phase) * 0.16
+              built.bell.rotation.z = Math.sin(t * 7 + phase) * 0.22
             }
             if (built.ring) {
               const pulse = 1 + Math.sin(t * 3.2 + phase) * 0.1
@@ -403,7 +403,7 @@ export default function LiveTablesFloor3D({
       const sprite = new THREE.Sprite(
         new THREE.SpriteMaterial({ map: texture, transparent: true }),
       )
-      sprite.scale.set(1.45, 0.63, 1)
+      sprite.scale.set(1.95, 0.85, 1)
       return sprite
     }
 
@@ -531,7 +531,7 @@ export default function LiveTablesFloor3D({
       group.add(built.bellAnchor)
 
       const label = makeLabel(visual.table.name)
-      label.position.y = 2.02
+      label.position.y = 2.12
       group.add(label)
 
       if (visual.state === 'occupied') {
