@@ -29,6 +29,18 @@ interface TableVisual {
   table: DiningTable
   state: FloorState
   calling: boolean
+  served: boolean
+}
+
+interface GuestAnim {
+  root: any
+  head: any
+  armR: any
+  armL: any
+  eatArm: any
+  restArm: any
+  eating: boolean
+  phase: number
 }
 
 interface BuiltTable {
@@ -36,7 +48,7 @@ interface BuiltTable {
   bell: any | null
   ring: any | null
   sparkles: any | null
-  guests: any[]
+  guests: GuestAnim[]
   mainAnchor: any
   bellAnchor: any
   phase: number
@@ -46,11 +58,13 @@ interface BuiltTable {
  * The Live Tables floor as a real animated 3D scene (three.js):
  * one diorama of the whole restaurant — wooden round tables with
  * chairs on a raised floor, soft shadows, a gently swaying camera.
- * Occupied tables seat two guests with plates; a table being cleaned
- * gets a spray bottle and orbiting sparkles; a reserved table gets a
- * little sign; a pending waiter call hangs a ringing golden bell
- * over the table with a pulsing ring on the floor. Table names ride
- * on sprites; the state chips are HTML elements whose screen
+ * Occupied tables seat two animated guests — they look around
+ * while they wait, and once the order is SERVED the plates arrive
+ * and they start eating (arm to mouth, nodding). A table being
+ * cleaned gets a spray bottle and orbiting sparkles; a reserved
+ * table gets a little sign; a pending waiter call hangs a ringing
+ * golden bell over the table with a pulsing ring on the floor. The
+ * state chips (table name + status) are HTML elements whose screen
  * positions this component projects every frame (the parent owns
  * the chip DOM nodes through `chipEls`). Clicking a table reports
  * its id through onSelectTable.
@@ -85,6 +99,7 @@ export default function LiveTablesFloor3D({
     y: 10,
     z: 12,
   })
+  const fitRef = useRef(1)
   const [sceneReady, setSceneReady] = useState(0)
   const selectRef = useRef(onSelectTable)
   selectRef.current = onSelectTable
@@ -104,10 +119,14 @@ export default function LiveTablesFloor3D({
           : table.status === 'reserved'
             ? 'reserved'
             : 'free'
-    return { table, state, calling }
+    const served = openByTable.get(table.id)?.served ?? false
+    return { table, state, calling, served }
   })
   const signature = visualsRef.current
-    .map((v) => `${v.table.id}:${v.state}:${v.calling ? 1 : 0}`)
+    .map(
+      (v) =>
+        `${v.table.id}:${v.state}:${v.calling ? 1 : 0}:${v.served ? 1 : 0}`,
+    )
     .join('|')
 
   // ---- Scene setup (once three.js arrives) ----
@@ -170,6 +189,9 @@ export default function LiveTablesFloor3D({
           renderer.setSize(width, height)
           camera.aspect = width / height
           camera.updateProjectionMatrix()
+          const aspect = width / height
+          fitRef.current =
+            aspect >= 1.25 ? 1 : aspect >= 0.95 ? 1.22 : aspect >= 0.7 ? 1.5 : 1.85
         }
         applySize()
         resizeObserver = new ResizeObserver(applySize)
@@ -225,10 +247,11 @@ export default function LiveTablesFloor3D({
           const t = clock.getElapsedTime()
           const camera = cameraRef.current
           const base = baseCamRef.current
+          const fit = fitRef.current
           camera.position.set(
-            base.x + Math.sin(t * 0.25) * 0.9,
-            base.y + Math.cos(t * 0.19) * 0.3,
-            base.z,
+            base.x * fit + Math.sin(t * 0.25) * 0.9,
+            (base.y + Math.cos(t * 0.19) * 0.3) * fit,
+            base.z * fit,
           )
           camera.lookAt(0, 0.1, 0)
 
@@ -250,8 +273,26 @@ export default function LiveTablesFloor3D({
               built.sparkles.position.y =
                 1.12 + Math.sin(t * 2.2 + phase) * 0.06
             }
-            for (const guest of built.guests) {
-              guest.position.y = Math.sin(t * 1.6 + phase) * 0.018
+            for (const g of built.guests) {
+              const p = g.phase
+              g.root.position.y = Math.sin(t * 1.6 + p) * 0.018
+              if (g.eating) {
+                // Eating: the eating arm rises to the mouth in a
+                // steady rhythm and the head nods along.
+                const bite = 0.5 + 0.5 * Math.sin(t * 2.2 + p)
+                g.eatArm.rotation.x = -0.55 - bite * 1.05
+                g.restArm.rotation.x =
+                  -0.55 + Math.sin(t * 1.1 + p) * 0.05
+                g.head.rotation.x = 0.08 + bite * 0.2
+                g.head.rotation.y = Math.sin(t * 0.5 + p) * 0.12
+              } else {
+                // Waiting: look around the room, arms resting with
+                // a slight impatient sway.
+                g.head.rotation.y = Math.sin(t * 0.35 + p * 1.7) * 0.55
+                g.head.rotation.x = 0.04 + Math.sin(t * 0.8 + p) * 0.05
+                g.armR.rotation.x = -0.55 + Math.sin(t * 1.2 + p) * 0.06
+                g.armL.rotation.x = -0.55 + Math.cos(t * 1.05 + p) * 0.06
+              }
             }
           }
 
@@ -372,39 +413,11 @@ export default function LiveTablesFloor3D({
       sun.shadow.camera.bottom = -extent
       sun.shadow.camera.updateProjectionMatrix()
     }
-    const dist = Math.max(floorW, floorD) * 1.02 + 4.5
+    const dist = Math.max(floorW, floorD) * 0.86 + 3.2
     baseCamRef.current = { x: 0, y: dist * 0.8, z: dist * 0.98 }
     if (cameraRef.current) {
       cameraRef.current.position.set(0, dist * 0.8, dist * 0.98)
       cameraRef.current.lookAt(0, 0.1, 0)
-    }
-
-    const makeLabel = (text: string) => {
-      const canvas = document.createElement('canvas')
-      canvas.width = 256
-      canvas.height = 112
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.beginPath()
-        ctx.roundRect(28, 18, 200, 76, 38)
-        ctx.fillStyle = 'rgba(255,255,255,0.94)'
-        ctx.fill()
-        ctx.lineWidth = 4
-        ctx.strokeStyle = '#d8c9a8'
-        ctx.stroke()
-        ctx.fillStyle = '#3f2d12'
-        ctx.font = '700 52px system-ui, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(text, 128, 58)
-      }
-      const texture = new THREE.CanvasTexture(canvas)
-      texture.colorSpace = THREE.SRGBColorSpace
-      const sprite = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: texture, transparent: true }),
-      )
-      sprite.scale.set(1.95, 0.85, 1)
-      return sprite
     }
 
     const makeChair = () => {
@@ -452,9 +465,13 @@ export default function LiveTablesFloor3D({
       torso.position.y = 0.86
       torso.rotation.x = 0.1
       guest.add(torso)
+      // Head on its own pivot at the neck so it can look around
+      // and nod while eating.
+      const headGroup = new THREE.Group()
+      headGroup.position.y = 1.13
       const head = new THREE.Mesh(new THREE.SphereGeometry(0.145, 20, 16), skin)
-      head.position.y = 1.28
-      guest.add(head)
+      head.position.y = 0.15
+      headGroup.add(head)
       const hairCap = new THREE.Mesh(
         new THREE.SphereGeometry(
           0.15,
@@ -467,9 +484,42 @@ export default function LiveTablesFloor3D({
         ),
         hair,
       )
-      hairCap.position.y = 1.3
-      guest.add(hairCap)
-      return guest
+      hairCap.position.y = 0.17
+      headGroup.add(hairCap)
+      guest.add(headGroup)
+      // Arms pivot at the shoulders; at rest they reach forward
+      // onto the table, and the eating arm rises to the mouth.
+      const makeArm = (side: 1 | -1) => {
+        const arm = new THREE.Group()
+        arm.position.set(0.24 * side, 1.04, 0.03)
+        const upper = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.05, 0.26, 4, 10),
+          shirt,
+        )
+        upper.position.y = -0.17
+        arm.add(upper)
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skin)
+        hand.position.y = -0.37
+        arm.add(hand)
+        arm.rotation.x = -0.55
+        arm.rotation.z = side * 0.12
+        guest.add(arm)
+        return arm
+      }
+      const armR = makeArm(1)
+      const armL = makeArm(-1)
+      // Alternate the eating hand between guests for variety.
+      const parts: GuestAnim = {
+        root: guest,
+        head: headGroup,
+        armR,
+        armL,
+        eatArm: index % 2 === 0 ? armR : armL,
+        restArm: index % 2 === 0 ? armL : armR,
+        eating: false,
+        phase: index * 1.93,
+      }
+      return parts
     }
 
     visuals.forEach((visual, index) => {
@@ -530,9 +580,6 @@ export default function LiveTablesFloor3D({
       built.bellAnchor.position.set(0, 2.98, 0)
       group.add(built.bellAnchor)
 
-      const label = makeLabel(visual.table.name)
-      label.position.y = 2.12
-      group.add(label)
 
       if (visual.state === 'occupied') {
         // Two guests on the two front chairs, backs to the camera,
@@ -541,37 +588,59 @@ export default function LiveTablesFloor3D({
           [index * 2, Math.PI / 4],
           [index * 2 + 1, -Math.PI / 4],
         ] as const) {
-          const guest = makeGuest(gi)
-          guest.position.set(Math.sin(angle) * 1.62, 0, Math.cos(angle) * 1.62)
-          guest.rotation.y = angle + Math.PI
-          group.add(guest)
-          built.guests.push(guest)
-        }
-        // Plates with food + a drink on the table.
-        for (const [px, pz, foodColor] of [
-          [-0.38, 0.28, '#e2703a'],
-          [0.4, -0.24, '#b5542d'],
-        ] as const) {
-          const plate = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.17, 0.17, 0.025, 20),
-            whiteMat,
+          const parts = makeGuest(gi)
+          parts.root.position.set(
+            Math.sin(angle) * 1.62,
+            0,
+            Math.cos(angle) * 1.62,
           )
-          plate.position.set(px, 0.84, pz)
-          group.add(plate)
-          const food = new THREE.Mesh(
-            new THREE.SphereGeometry(0.075, 12, 10),
-            mat(foodColor, { roughness: 0.7 }),
-          )
-          food.scale.y = 0.55
-          food.position.set(px, 0.87, pz)
-          group.add(food)
+          parts.root.rotation.y = angle + Math.PI
+          parts.eating = visual.served
+          group.add(parts.root)
+          built.guests.push(parts)
         }
-        const drink = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.05, 0.04, 0.16, 12),
-          mat('#f59e0b', { roughness: 0.35 }),
-        )
-        drink.position.set(0.12, 0.9, 0.42)
-        group.add(drink)
+        if (visual.served) {
+          // Food arrives only once the order is SERVED.
+          for (const [px, pz, foodColor] of [
+            [-0.38, 0.28, '#e2703a'],
+            [0.4, -0.24, '#b5542d'],
+          ] as const) {
+            const plate = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.17, 0.17, 0.025, 20),
+              whiteMat,
+            )
+            plate.position.set(px, 0.84, pz)
+            group.add(plate)
+            const food = new THREE.Mesh(
+              new THREE.SphereGeometry(0.075, 12, 10),
+              mat(foodColor, { roughness: 0.7 }),
+            )
+            food.scale.y = 0.55
+            food.position.set(px, 0.87, pz)
+            group.add(food)
+          }
+          const drink = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.05, 0.04, 0.16, 12),
+            mat('#f59e0b', { roughness: 0.35 }),
+          )
+          drink.position.set(0.12, 0.9, 0.42)
+          group.add(drink)
+        } else {
+          // Still waiting: menu cards stand on the empty table.
+          for (const [mx, mz, tilt] of [
+            [-0.3, 0.2, 0.3],
+            [0.34, -0.18, -0.4],
+          ] as const) {
+            const menu = new THREE.Mesh(
+              new THREE.BoxGeometry(0.26, 0.34, 0.02),
+              whiteMat,
+            )
+            menu.position.set(mx, 0.98, mz)
+            menu.rotation.x = -0.22
+            menu.rotation.y = tilt
+            group.add(menu)
+          }
+        }
       }
 
       if (visual.state === 'cleaning') {
@@ -677,7 +746,7 @@ export default function LiveTablesFloor3D({
   return (
     <div
       ref={containerRef}
-      className="h-[340px] w-full overflow-hidden rounded-xl md:h-[420px]"
+      className="h-[380px] w-full overflow-hidden rounded-xl md:h-[480px]"
       role="img"
       aria-label="3D live floor"
     />

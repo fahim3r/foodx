@@ -96,7 +96,7 @@ const SPARKLE_PATH =
  * Flat isometric scene for one table — the fallback view used when
  * the real 3D floor (three.js) cannot load or WebGL is unavailable.
  */
-function TableScene({ state }: { state: FloorState }) {
+function TableScene({ state, served }: { state: FloorState; served: boolean }) {
   const occupied = state === 'occupied'
   return (
     <svg
@@ -143,7 +143,9 @@ function TableScene({ state }: { state: FloorState }) {
 
       {occupied && (
         <>
-          {/* Plates + drink on the table */}
+          {served && (
+            <>
+          {/* Plates + drink on the table (only once served) */}
           <ellipse
             cx="94"
             cy="54"
@@ -174,6 +176,8 @@ function TableScene({ state }: { state: FloorState }) {
             strokeWidth="1.5"
             strokeLinecap="round"
           />
+            </>
+          )}
           {/* Two seated guests */}
           <path d="M24,78 Q24,50 39,48 Q54,50 54,78 Z" fill="#5b7fa6" />
           <circle cx="39" cy="38" r="8.5" fill="#eab892" />
@@ -483,7 +487,7 @@ export default function LiveTablesCard({
                           {t('dashboard.liveTablesCalling')}
                         </span>
                       )}
-                      <TableScene state={state} />
+                      <TableScene state={state} served={open?.served ?? false} />
                       <span className="mt-1 flex items-center justify-center gap-1.5 text-xs font-semibold">
                         <TableStateLine
                           state={state}

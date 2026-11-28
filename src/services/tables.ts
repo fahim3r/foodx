@@ -132,6 +132,9 @@ export interface OpenTableOrderSummary {
   total: number
   since: string
   count: number
+  /** True when any open order for the table has been SERVED —
+   * the Live Tables floor only puts food on the table then. */
+  served: boolean
 }
 
 export async function fetchOpenTableOrders(
@@ -139,7 +142,7 @@ export async function fetchOpenTableOrders(
 ): Promise<Map<string, OpenTableOrderSummary>> {
   const { data, error } = await supabase
     .from('orders')
-    .select('id, table_id, total_amount, created_at')
+    .select('id, table_id, total_amount, created_at, status')
     .eq('restaurant_id', restaurantId)
     .not('table_id', 'is', null)
     .not('status', 'in', '("COMPLETED","CANCELLED","REFUNDED")')
@@ -151,17 +154,20 @@ export async function fetchOpenTableOrders(
     table_id: string
     total_amount: number
     created_at: string
+    status: string
   }[]) {
     const existing = byTable.get(row.table_id)
     if (existing) {
       existing.total += Number(row.total_amount) || 0
       existing.count += 1
+      existing.served = existing.served || row.status === 'SERVED'
     } else {
       byTable.set(row.table_id, {
         orderId: row.id,
         total: Number(row.total_amount) || 0,
         since: row.created_at,
         count: 1,
+        served: row.status === 'SERVED',
       })
     }
   }
