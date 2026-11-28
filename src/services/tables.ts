@@ -135,6 +135,11 @@ export interface OpenTableOrderSummary {
   /** True when any open order for the table has been SERVED —
    * the Live Tables floor only puts food on the table then. */
   served: boolean
+  /** Status of the table's earliest open order (live pipeline). */
+  status: string
+  /** True when the earliest open order is fully paid (non-due
+   * payments cover its total) but not yet completed. */
+  paid: boolean
 }
 
 export async function fetchOpenTableOrders(
@@ -149,6 +154,7 @@ export async function fetchOpenTableOrders(
     .order('created_at', { ascending: true })
   if (error) throw error
   const byTable = new Map<string, OpenTableOrderSummary>()
+  const firstTotals = new Map<string, number>()
   for (const row of (data ?? []) as {
     id: string
     table_id: string
@@ -168,7 +174,35 @@ export async function fetchOpenTableOrders(
         since: row.created_at,
         count: 1,
         served: row.status === 'SERVED',
+        status: row.status,
+        paid: false,
       })
+      firstTotals.set(row.table_id, Number(row.total_amount) || 0)
+    }
+  }
+  // Payment state for each table's earliest open order: fully paid
+  // (ignoring 'due' rows) while the order is still open.
+  if (byTable.size > 0) {
+    const orderIds = [...byTable.values()].map((entry) => entry.orderId)
+    const { data: payments } = await supabase
+      .from('order_payments')
+      .select('order_id, method, amount')
+      .in('order_id', orderIds)
+    const paidByOrder = new Map<string, number>()
+    for (const payment of (payments ?? []) as {
+      order_id: string
+      method: string
+      amount: number
+    }[]) {
+      if (payment.method === 'due') continue
+      paidByOrder.set(
+        payment.order_id,
+        (paidByOrder.get(payment.order_id) ?? 0) + (Number(payment.amount) || 0),
+      )
+    }
+    for (const [tableId, entry] of byTable) {
+      const paidAmount = paidByOrder.get(entry.orderId) ?? 0
+      entry.paid = paidAmount >= (firstTotals.get(tableId) ?? 0) - 0.001
     }
   }
   return byTable

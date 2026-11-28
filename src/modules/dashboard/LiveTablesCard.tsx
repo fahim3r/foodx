@@ -35,6 +35,14 @@ function formatDuration(minutes: number): string {
   return rest > 0 ? `${hours}h ${rest}m` : `${hours}h`
 }
 
+const ORDER_STATUS_KEY: Record<string, string> = {
+  CONFIRMED: 'orders.statusConfirmed',
+  SENT_TO_KITCHEN: 'orders.statusSentToKitchen',
+  PREPARING: 'orders.statusPreparing',
+  READY: 'orders.statusReady',
+  SERVED: 'orders.statusServed',
+}
+
 /** The one-line state summary shown under a table (grid view) and in
  * the floating chip that tracks it in the 3D view. */
 function TableStateLine({
@@ -55,9 +63,15 @@ function TableStateLine({
     return open ? (
       <span className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
         <Clock className="size-3.5" />
-        {formatDuration(elapsedMinutes(open.since, now))}
+        {t(ORDER_STATUS_KEY[open.status] ?? 'orders.statusConfirmed')}
+        {` · ${formatDuration(elapsedMinutes(open.since, now))}`}
         {showFinancials && ` · ${formatMoney(open.total, currency)}`}
         {open.count > 1 && ` (${open.count})`}
+        {open.paid && (
+          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+            {` · ${t('pos.paid')}`}
+          </span>
+        )}
       </span>
     ) : (
       <span className="text-orange-600 dark:text-orange-400">

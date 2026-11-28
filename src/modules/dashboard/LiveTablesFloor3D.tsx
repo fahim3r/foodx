@@ -30,16 +30,21 @@ interface TableVisual {
   state: FloorState
   calling: boolean
   served: boolean
+  status: string
+  paid: boolean
 }
+
+type GuestMode = 'waiting' | 'ready' | 'eating' | 'done'
 
 interface GuestAnim {
   root: any
+  upper: any
   head: any
   armR: any
   armL: any
   eatArm: any
   restArm: any
-  eating: boolean
+  eatSide: number
   phase: number
 }
 
@@ -48,6 +53,7 @@ interface BuiltTable {
   bell: any | null
   ring: any | null
   sparkles: any | null
+  mode: GuestMode
   guests: GuestAnim[]
   mainAnchor: any
   bellAnchor: any
@@ -119,13 +125,21 @@ export default function LiveTablesFloor3D({
           : table.status === 'reserved'
             ? 'reserved'
             : 'free'
-    const served = openByTable.get(table.id)?.served ?? false
-    return { table, state, calling, served }
+    const open = openByTable.get(table.id)
+    const served = open?.served ?? false
+    return {
+      table,
+      state,
+      calling,
+      served,
+      status: open?.status ?? '',
+      paid: open?.paid ?? false,
+    }
   })
   const signature = visualsRef.current
     .map(
       (v) =>
-        `${v.table.id}:${v.state}:${v.calling ? 1 : 0}:${v.served ? 1 : 0}`,
+        `${v.table.id}:${v.state}:${v.calling ? 1 : 0}:${v.served ? 1 : 0}:${v.status}:${v.paid ? 1 : 0}`,
     )
     .join('|')
 
@@ -276,19 +290,41 @@ export default function LiveTablesFloor3D({
             for (const g of built.guests) {
               const p = g.phase
               g.root.position.y = Math.sin(t * 1.6 + p) * 0.018
-              if (g.eating) {
-                // Eating: the eating arm rises to the mouth in a
-                // steady rhythm and the head nods along.
-                const bite = 0.5 + 0.5 * Math.sin(t * 2.2 + p)
-                g.eatArm.rotation.x = -0.55 - bite * 1.05
+              if (built.mode === 'eating') {
+                // Served: lean in, eating arm rises to the mouth
+                // with the elbow out, head nods with each bite.
+                const bite = 0.5 + 0.5 * Math.sin(t * 2.8 + p)
+                g.upper.rotation.x = 0.1 + bite * 0.13
+                g.upper.rotation.y = Math.sin(t * 0.4 + p) * 0.06
+                g.eatArm.rotation.x = -0.55 - bite * 1.15
+                g.eatArm.rotation.z = g.eatSide * (0.12 + bite * 0.3)
                 g.restArm.rotation.x =
                   -0.55 + Math.sin(t * 1.1 + p) * 0.05
-                g.head.rotation.x = 0.08 + bite * 0.2
-                g.head.rotation.y = Math.sin(t * 0.5 + p) * 0.12
+                g.head.rotation.x = 0.08 + bite * 0.26
+                g.head.rotation.y = Math.sin(t * 0.5 + p) * 0.1
+              } else if (built.mode === 'ready') {
+                // Ready: both guests sit up and look toward the
+                // kitchen, expecting the food to arrive.
+                g.upper.rotation.y = -0.5 + Math.sin(t * 0.9 + p) * 0.07
+                g.upper.rotation.x = -0.02
+                g.head.rotation.y = -0.35 + Math.sin(t * 0.9 + p) * 0.08
+                g.head.rotation.x = -0.04
+                g.armR.rotation.x = -0.5 + Math.sin(t * 1.3 + p) * 0.04
+                g.armL.rotation.x = -0.5 + Math.cos(t * 1.2 + p) * 0.04
+              } else if (built.mode === 'done') {
+                // Paid: leaning back, relaxed, eating stopped.
+                g.upper.rotation.x = -0.11 + Math.sin(t * 0.7 + p) * 0.02
+                g.upper.rotation.y = Math.sin(t * 0.25 + p) * 0.1
+                g.head.rotation.x = -0.05
+                g.head.rotation.y = Math.sin(t * 0.3 + p) * 0.2
+                g.armR.rotation.x = -0.3
+                g.armL.rotation.x = -0.3
               } else {
-                // Waiting: look around the room, arms resting with
-                // a slight impatient sway.
-                g.head.rotation.y = Math.sin(t * 0.35 + p * 1.7) * 0.55
+                // Waiting: turn and look around the room, arms
+                // resting with a slight impatient sway.
+                g.upper.rotation.y = Math.sin(t * 0.3 + p * 1.7) * 0.3
+                g.upper.rotation.x = 0.03 + Math.sin(t * 0.5 + p) * 0.04
+                g.head.rotation.y = Math.sin(t * 0.35 + p * 1.7) * 0.5
                 g.head.rotation.x = 0.04 + Math.sin(t * 0.8 + p) * 0.05
                 g.armR.rotation.x = -0.55 + Math.sin(t * 1.2 + p) * 0.06
                 g.armL.rotation.x = -0.55 + Math.cos(t * 1.05 + p) * 0.06
@@ -458,17 +494,22 @@ export default function LiveTablesFloor3D({
       const hair = mat(HAIR_COLORS[index % HAIR_COLORS.length], {
         roughness: 0.95,
       })
+      // Upper body (torso, head, arms) rides on a hip pivot so
+      // the guest can turn, lean in to eat, or lean back.
+      const upper = new THREE.Group()
+      upper.position.y = 0.55
+      guest.add(upper)
       const torso = new THREE.Mesh(
         new THREE.CapsuleGeometry(0.17, 0.3, 6, 14),
         shirt,
       )
-      torso.position.y = 0.86
+      torso.position.y = 0.31
       torso.rotation.x = 0.1
-      guest.add(torso)
+      upper.add(torso)
       // Head on its own pivot at the neck so it can look around
       // and nod while eating.
       const headGroup = new THREE.Group()
-      headGroup.position.y = 1.13
+      headGroup.position.y = 0.58
       const head = new THREE.Mesh(new THREE.SphereGeometry(0.145, 20, 16), skin)
       head.position.y = 0.15
       headGroup.add(head)
@@ -486,24 +527,24 @@ export default function LiveTablesFloor3D({
       )
       hairCap.position.y = 0.17
       headGroup.add(hairCap)
-      guest.add(headGroup)
+      upper.add(headGroup)
       // Arms pivot at the shoulders; at rest they reach forward
       // onto the table, and the eating arm rises to the mouth.
       const makeArm = (side: 1 | -1) => {
         const arm = new THREE.Group()
-        arm.position.set(0.24 * side, 1.04, 0.03)
-        const upper = new THREE.Mesh(
-          new THREE.CapsuleGeometry(0.05, 0.26, 4, 10),
+        arm.position.set(0.24 * side, 0.49, 0.03)
+        const limb = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.06, 0.26, 4, 10),
           shirt,
         )
-        upper.position.y = -0.17
-        arm.add(upper)
-        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skin)
+        limb.position.y = -0.17
+        arm.add(limb)
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), skin)
         hand.position.y = -0.37
         arm.add(hand)
         arm.rotation.x = -0.55
         arm.rotation.z = side * 0.12
-        guest.add(arm)
+        upper.add(arm)
         return arm
       }
       const armR = makeArm(1)
@@ -511,12 +552,13 @@ export default function LiveTablesFloor3D({
       // Alternate the eating hand between guests for variety.
       const parts: GuestAnim = {
         root: guest,
+        upper,
         head: headGroup,
         armR,
         armL,
         eatArm: index % 2 === 0 ? armR : armL,
         restArm: index % 2 === 0 ? armL : armR,
-        eating: false,
+        eatSide: index % 2 === 0 ? 1 : -1,
         phase: index * 1.93,
       }
       return parts
@@ -570,6 +612,13 @@ export default function LiveTablesFloor3D({
         bell: null,
         ring: null,
         sparkles: null,
+        mode: visual.paid && visual.served
+          ? 'done'
+          : visual.served
+            ? 'eating'
+            : visual.status === 'READY'
+              ? 'ready'
+              : 'waiting',
         guests: [],
         mainAnchor: new THREE.Object3D(),
         bellAnchor: new THREE.Object3D(),
@@ -595,7 +644,6 @@ export default function LiveTablesFloor3D({
             Math.cos(angle) * 1.62,
           )
           parts.root.rotation.y = angle + Math.PI
-          parts.eating = visual.served
           group.add(parts.root)
           built.guests.push(parts)
         }
@@ -620,10 +668,10 @@ export default function LiveTablesFloor3D({
             group.add(food)
           }
           const drink = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.05, 0.04, 0.16, 12),
+            new THREE.CylinderGeometry(0.065, 0.055, 0.18, 12),
             mat('#f59e0b', { roughness: 0.35 }),
           )
-          drink.position.set(0.12, 0.9, 0.42)
+          drink.position.set(0.12, 0.91, 0.42)
           group.add(drink)
         } else {
           // Still waiting: menu cards stand on the empty table.
