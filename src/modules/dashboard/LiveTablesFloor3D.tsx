@@ -453,9 +453,9 @@ export default function LiveTablesFloor3D({
       sun.shadow.camera.updateProjectionMatrix()
     }
     const dist = Math.max(floorW, floorD) * 0.86 + 3.2
-    baseCamRef.current = { x: 0, y: dist * 0.8, z: dist * 0.98 }
+    baseCamRef.current = { x: 0, y: dist * 0.66, z: dist * 1.02 }
     if (cameraRef.current) {
-      cameraRef.current.position.set(0, dist * 0.8, dist * 0.98)
+      cameraRef.current.position.set(0, dist * 0.66, dist * 1.02)
       cameraRef.current.lookAt(0, 0.1, 0)
     }
 
@@ -556,7 +556,7 @@ export default function LiveTablesFloor3D({
       // motion easy to spot from across the room.
       const eatArmRef = index % 2 === 0 ? armR : armL
       const utensil = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.016, 0.016, 0.2, 8),
+        new THREE.CylinderGeometry(0.026, 0.026, 0.24, 8),
         whiteMat,
       )
       utensil.position.set(0, -0.44, 0.03)
@@ -646,11 +646,12 @@ export default function LiveTablesFloor3D({
 
 
       if (visual.state === 'occupied') {
-        // Two guests on the two front chairs, backs to the camera,
-        // leaning in toward the table.
+        // Two guests on the two far chairs, facing the camera —
+        // from the near chairs their backs and the chair backs
+        // would hide the arm animation completely.
         for (const [gi, angle] of [
-          [index * 2, Math.PI / 4],
-          [index * 2 + 1, -Math.PI / 4],
+          [index * 2, (Math.PI * 3) / 4],
+          [index * 2 + 1, (-Math.PI * 3) / 4],
         ] as const) {
           const parts = makeGuest(gi)
           parts.root.position.set(
