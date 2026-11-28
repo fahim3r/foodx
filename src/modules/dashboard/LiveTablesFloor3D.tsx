@@ -293,11 +293,14 @@ export default function LiveTablesFloor3D({
               if (built.mode === 'eating') {
                 // Served: lean in, eating arm rises to the mouth
                 // with the elbow out, head nods with each bite.
-                const bite = 0.5 + 0.5 * Math.sin(t * 2.8 + p)
-                g.upper.rotation.x = 0.1 + bite * 0.13
+                // The shaped cycle dwells at the top so the raised
+                // arm stays readable instead of flashing past.
+                const raw = 0.5 + 0.5 * Math.sin(t * 1.9 + p)
+                const bite = raw * raw * (3 - 2 * raw)
+                g.upper.rotation.x = 0.1 + bite * 0.15
                 g.upper.rotation.y = Math.sin(t * 0.4 + p) * 0.06
-                g.eatArm.rotation.x = -0.55 - bite * 1.15
-                g.eatArm.rotation.z = g.eatSide * (0.12 + bite * 0.3)
+                g.eatArm.rotation.x = -0.55 - bite * 1.35
+                g.eatArm.rotation.z = g.eatSide * (0.12 + bite * 0.34)
                 g.restArm.rotation.x =
                   -0.55 + Math.sin(t * 1.1 + p) * 0.05
                 g.head.rotation.x = 0.08 + bite * 0.26
@@ -305,9 +308,9 @@ export default function LiveTablesFloor3D({
               } else if (built.mode === 'ready') {
                 // Ready: both guests sit up and look toward the
                 // kitchen, expecting the food to arrive.
-                g.upper.rotation.y = -0.5 + Math.sin(t * 0.9 + p) * 0.07
+                g.upper.rotation.y = -0.68 + Math.sin(t * 0.9 + p) * 0.07
                 g.upper.rotation.x = -0.02
-                g.head.rotation.y = -0.35 + Math.sin(t * 0.9 + p) * 0.08
+                g.head.rotation.y = -0.5 + Math.sin(t * 0.9 + p) * 0.08
                 g.head.rotation.x = -0.04
                 g.armR.rotation.x = -0.5 + Math.sin(t * 1.3 + p) * 0.04
                 g.armL.rotation.x = -0.5 + Math.cos(t * 1.2 + p) * 0.04
@@ -549,6 +552,16 @@ export default function LiveTablesFloor3D({
       }
       const armR = makeArm(1)
       const armL = makeArm(-1)
+      // A bright utensil in the eating hand makes the eating
+      // motion easy to spot from across the room.
+      const eatArmRef = index % 2 === 0 ? armR : armL
+      const utensil = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.016, 0.016, 0.2, 8),
+        whiteMat,
+      )
+      utensil.position.set(0, -0.44, 0.03)
+      utensil.rotation.x = 0.7
+      eatArmRef.add(utensil)
       // Alternate the eating hand between guests for variety.
       const parts: GuestAnim = {
         root: guest,
@@ -624,7 +637,9 @@ export default function LiveTablesFloor3D({
         bellAnchor: new THREE.Object3D(),
         phase,
       }
-      built.mainAnchor.position.set(0, 1.52, 0)
+      // Neighbouring tables' chips stagger between two heights
+      // so a long status chip never collides with the next one.
+      built.mainAnchor.position.set(0, index % 2 === 0 ? 1.98 : 1.52, 0)
       group.add(built.mainAnchor)
       built.bellAnchor.position.set(0, 2.98, 0)
       group.add(built.bellAnchor)

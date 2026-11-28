@@ -36,11 +36,11 @@ function formatDuration(minutes: number): string {
 }
 
 const ORDER_STATUS_KEY: Record<string, string> = {
-  CONFIRMED: 'orders.statusConfirmed',
-  SENT_TO_KITCHEN: 'orders.statusSentToKitchen',
-  PREPARING: 'orders.statusPreparing',
-  READY: 'orders.statusReady',
-  SERVED: 'orders.statusServed',
+  CONFIRMED: 'dashboard.liveTablesStatusConfirmed',
+  SENT_TO_KITCHEN: 'dashboard.liveTablesStatusKitchen',
+  PREPARING: 'dashboard.liveTablesStatusPreparing',
+  READY: 'dashboard.liveTablesStatusReady',
+  SERVED: 'dashboard.liveTablesStatusServed',
 }
 
 /** The one-line state summary shown under a table (grid view) and in
@@ -63,7 +63,7 @@ function TableStateLine({
     return open ? (
       <span className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
         <Clock className="size-3.5" />
-        {t(ORDER_STATUS_KEY[open.status] ?? 'orders.statusConfirmed')}
+        {t(ORDER_STATUS_KEY[open.status] ?? 'dashboard.liveTablesStatusConfirmed')}
         {` · ${formatDuration(elapsedMinutes(open.since, now))}`}
         {showFinancials && ` · ${formatMoney(open.total, currency)}`}
         {open.count > 1 && ` (${open.count})`}
